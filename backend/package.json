@@ -1,0 +1,38 @@
+{
+  "name": "design-guardian-backend",
+  "version": "1.0.0",
+  "description": "Semantic Vector Versioning API for Design Teams",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "svg",
+    "versioning",
+    "design",
+    "diffing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "@hono/zod-validator": "^0.7.6",
+    "@supabase/supabase-js": "^2.90.1",
+    "dotenv": "^17.2.3",
+    "hono": "^4.11.4",
+    "openai": "^6.16.0",
+    "svg-path-properties": "^2.0.0",
+    "xml2js": "^0.6.2",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.8",
+    "@types/xml2js": "^0.4.14",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

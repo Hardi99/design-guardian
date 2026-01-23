@@ -1,0 +1,386 @@
+/* Google Fonts - Must be first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* ============================================
+   DESIGN GUARDIAN - Theme Configuration
+   Style inspiré de codelynx.dev avec Magenta
+   ============================================ */
+
+/* ============================================
+   CSS Variables - Dark Theme (Default)
+   ============================================ */
+:root {
+  /* Background Colors */
+  --background: #060912;
+  --foreground: #ffffff;
+
+  /* Card & Surfaces */
+  --card: #0d1117;
+  --card-foreground: #ffffff;
+  --popover: #0d1117;
+  --popover-foreground: #ffffff;
+
+  /* Primary - Magenta/Pink */
+  --primary: #ec4899;
+  --primary-foreground: #ffffff;
+  --primary-light: #f472b6;
+  --primary-lighter: #fbcfe8;
+  --primary-glow: rgba(236, 72, 153, 0.2);
+
+  /* Secondary */
+  --secondary: #1e2430;
+  --secondary-foreground: #ffffff;
+
+  /* Muted */
+  --muted: #1e2430;
+  --muted-foreground: #99a1ae;
+
+  /* Accent */
+  --accent: #2d1f3d;
+  --accent-foreground: #f472b6;
+
+  /* Destructive */
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  /* Border & Input */
+  --border: #232a36;
+  --input: #232a36;
+  --ring: #ec4899;
+
+  /* Radius */
+  --radius: 0.75rem;
+
+  /* Sidebar (for dashboard) */
+  --sidebar-background: #0a0d14;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ec4899;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2430;
+  --sidebar-accent-foreground: #f472b6;
+  --sidebar-border: #232a36;
+  --sidebar-ring: #ec4899;
+
+  /* Chart Colors */
+  --chart-1: #ec4899;
+  --chart-2: #f472b6;
+  --chart-3: #a855f7;
+  --chart-4: #8b5cf6;
+  --chart-5: #6366f1;
+}
+
+/* ============================================
+   Light Theme (Optional)
+   ============================================ */
+.light {
+  --background: #ffffff;
+  --foreground: #0d1117;
+
+  --card: #f8fafc;
+  --card-foreground: #0d1117;
+  --popover: #ffffff;
+  --popover-foreground: #0d1117;
+
+  --primary: #db2777;
+  --primary-foreground: #ffffff;
+  --primary-light: #ec4899;
+  --primary-lighter: #fbcfe8;
+  --primary-glow: rgba(219, 39, 119, 0.15);
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0d1117;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  --accent: #fdf2f8;
+  --accent-foreground: #db2777;
+
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #db2777;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   Background Patterns & Effects
+   ============================================ */
+
+/* Dot Grid Pattern */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Line Grid Pattern (diagonal) */
+.bg-line-pattern {
+  background-image: repeating-linear-gradient(
+    315deg,
+    var(--border) 0px,
+    var(--border) 1px,
+    transparent 0px,
+    transparent 50%
+  );
+  background-size: 10px 10px;
+  background-attachment: fixed;
+}
+
+/* Noise Texture Overlay */
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23a)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Gradient Fade to Background */
+.bg-fade-to-bottom {
+  background: linear-gradient(to bottom, transparent 0%, var(--background) 100%);
+}
+
+.bg-fade-to-top {
+  background: linear-gradient(to top, transparent 0%, var(--background) 100%);
+}
+
+/* Radial Glow Effect */
+.bg-glow {
+  background: radial-gradient(
+    ellipse 80% 50% at 50% -20%,
+    var(--primary-glow),
+    transparent
+  );
+}
+
+.bg-glow-center {
+  background: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    var(--primary-glow),
+    transparent
+  );
+}
+
+/* ============================================
+   Text Gradient Effects
+   ============================================ */
+.text-gradient {
+  background: linear-gradient(
+    to bottom,
+    var(--primary-light),
+    var(--primary-lighter)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-gradient-horizontal {
+  background: linear-gradient(
+    to right,
+    var(--primary),
+    var(--primary-lighter)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ============================================
+   Button Shine Animation
+   ============================================ */
+.btn-shine {
+  background: linear-gradient(
+    110deg,
+    var(--primary) 0%,
+    var(--primary) 40%,
+    var(--primary-light) 50%,
+    var(--primary) 60%,
+    var(--primary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shine 3s ease-in-out infinite;
+}
+
+@keyframes shine {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+/* ============================================
+   Light Beams Animation
+   ============================================ */
+.light-beam {
+  position: absolute;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--primary-glow),
+    transparent
+  );
+  border-radius: 50%;
+  filter: blur(1px);
+}
+
+@keyframes swing {
+  0%, 100% {
+    transform: rotate(-42deg) translateX(-5%);
+  }
+  50% {
+    transform: rotate(-42deg) translateX(5%);
+  }
+}
+
+.animate-swing {
+  animation: swing 8s ease-in-out infinite;
+}
+
+.animate-swing-slow {
+  animation: swing 15s ease-in-out infinite;
+}
+
+.animate-swing-fast {
+  animation: swing 5s ease-in-out infinite;
+}
+
+/* ============================================
+   Glow Border Effect
+   ============================================ */
+.glow-border {
+  position: relative;
+}
+
+.glow-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--primary),
+    transparent 40%,
+    transparent 60%,
+    var(--primary)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ============================================
+   Card Hover Effects
+   ============================================ */
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px var(--primary-glow),
+    0 20px 40px -20px var(--primary-glow);
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ============================================
+   Selection Styling
+   ============================================ */
+::selection {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* ============================================
+   Focus Styling
+   ============================================ */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Animate on scroll preparation */
+  .animate-on-scroll {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .animate-on-scroll.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
