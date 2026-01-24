@@ -2,12 +2,13 @@
 
 import { useState, useMemo } from 'react';
 import { SVGViewer } from './SVGViewer';
-import { Sparkles, GitCompare, Layers, AlertTriangle } from 'lucide-react';
+import { Sparkles, GitCompare, Layers } from 'lucide-react';
+import type { AnalysisResult, Change } from '@/lib/types';
 
 interface DiffVisualizerProps {
   svg1: string;
   svg2: string;
-  analysis?: any;
+  analysis?: AnalysisResult;
   aiSummary?: string;
 }
 
@@ -27,7 +28,7 @@ export function DiffVisualizer({ svg1, svg2, analysis, aiSummary }: DiffVisualiz
 
     // For each change, we try to highlight elements by injecting styles
     const changedElements = new Set(
-      analysis.changes.map((c: any) => c.element_id)
+      analysis.changes.map((c: Change) => c.element_id)
     );
 
     // Inject a style block into the SVGs to highlight changed elements
@@ -231,7 +232,7 @@ export function DiffVisualizer({ svg1, svg2, analysis, aiSummary }: DiffVisualiz
                 Changements détectés :
               </h4>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                {analysis.changes.map((change: any, index: number) => (
+                {analysis.changes.map((change: Change, index: number) => (
                   <div
                     key={index}
                     className={`p-3 rounded-lg border-l-4 bg-card/30 ${severityColor(change.severity)}`}
@@ -247,8 +248,9 @@ export function DiffVisualizer({ svg1, svg2, analysis, aiSummary }: DiffVisualiz
                     <div className="text-xs text-muted-foreground">
                       {change.type === 'geometry_modified' && 'Géométrie modifiée'}
                       {change.type === 'attribute_changed' && 'Attribut changé'}
-                      {change.type === 'element_added' && 'Élément ajouté'}
-                      {change.type === 'element_removed' && 'Élément supprimé'}
+                      {change.type === 'added' && 'Élément ajouté'}
+                      {change.type === 'removed' && 'Élément supprimé'}
+                      {change.type === 'transform_changed' && 'Transformation modifiée'}
                       {change.details?.property && `: ${change.details.property}`}
                       {change.details?.distance != null && ` (${Number(change.details.distance).toFixed(2)}px)`}
                       {change.details?.percentage != null && ` — ${Number(change.details.percentage).toFixed(1)}%`}

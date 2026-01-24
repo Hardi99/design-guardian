@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { apiClient, type Project, type Asset } from '@/lib/api/client';
+import { apiClient, type Project } from '@/lib/api/client';
 import Link from 'next/link';
-import { Plus, FolderKanban, Loader2, FileImage, Layers, Activity } from 'lucide-react';
+import { Plus, FolderKanban, Loader2, FileImage, Layers } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ProjectWithStats extends Project {
   assetsCount: number;
@@ -33,7 +37,6 @@ export default function DashboardPage() {
 
       const rawProjects = await apiClient.getProjects(user.id);
 
-      // Fetch assets count for each project
       const projectsWithStats = await Promise.all(
         rawProjects.map(async (project) => {
           try {
@@ -51,8 +54,8 @@ export default function DashboardPage() {
       );
 
       setProjects(projectsWithStats);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load projects');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load projects');
     } finally {
       setLoading(false);
     }
@@ -73,8 +76,8 @@ export default function DashboardPage() {
       await apiClient.createProject(newProjectName, user.id);
       setNewProjectName('');
       loadProjects();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create project');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setCreating(false);
     }
@@ -103,85 +106,89 @@ export default function DashboardPage() {
 
       {/* Global Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="rounded-xl border border-border bg-card/50 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <FolderKanban className="h-5 w-5 text-primary" />
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2.5">
+                <FolderKanban className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{projects.length}</p>
+                <p className="text-sm text-muted-foreground">Projets</p>
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold">{projects.length}</p>
-              <p className="text-sm text-muted-foreground">Projets</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2.5">
+                <FileImage className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {projects.reduce((sum, p) => sum + p.assetsCount, 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">Assets</p>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card/50 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <FileImage className="h-5 w-5 text-primary" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2.5">
+                <Layers className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {projects.reduce((sum, p) => sum + p.versionsCount, 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">Versions</p>
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {projects.reduce((sum, p) => sum + p.assetsCount, 0)}
-              </p>
-              <p className="text-sm text-muted-foreground">Assets</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card/50 p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <Layers className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {projects.reduce((sum, p) => sum + p.versionsCount, 0)}
-              </p>
-              <p className="text-sm text-muted-foreground">Versions</p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Create Project */}
-      <div className="mb-8 rounded-xl border border-border bg-card/50 p-6">
-        <h2 className="font-display text-lg font-semibold mb-4">
-          Nouveau Projet
-        </h2>
-        <form onSubmit={handleCreateProject} className="flex gap-3">
-          <input
-            type="text"
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-            placeholder="Nom du projet..."
-            className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground"
-          />
-          <button
-            type="submit"
-            disabled={creating || !newProjectName.trim()}
-            className="btn-shine inline-flex items-center gap-2 rounded-lg px-6 py-2.5 font-medium text-primary-foreground disabled:opacity-50 disabled:animate-none"
-          >
-            {creating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            {creating ? 'Création...' : 'Créer'}
-          </button>
-        </form>
-      </div>
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Nouveau Projet</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleCreateProject} className="flex gap-3">
+            <Input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Nom du projet..."
+              className="flex-1"
+            />
+            <Button
+              type="submit"
+              disabled={creating || !newProjectName.trim()}
+            >
+              {creating ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              {creating ? 'Création...' : 'Créer'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 p-4 rounded-lg border border-destructive/50 bg-destructive/10 text-destructive">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Projects List */}
       <div>
-        <h2 className="font-display text-lg font-semibold mb-4">
-          Vos Projets
-        </h2>
+        <h2 className="font-display text-lg font-semibold mb-4">Vos Projets</h2>
         {projects.length === 0 ? (
           <div className="text-center py-16 rounded-xl border border-dashed border-border">
             <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -192,33 +199,33 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (
-              <Link
-                key={project.id}
-                href={`/projects/${project.id}`}
-                className="card-hover rounded-xl border border-border bg-card/50 p-6 transition-all hover:border-primary/30"
-              >
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="rounded-lg bg-primary/10 p-2">
-                    <FolderKanban className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold mb-1">{project.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Créé le{' '}
-                      {new Date(project.created_at).toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground border-t border-border pt-3">
-                  <span className="flex items-center gap-1.5">
-                    <FileImage className="h-3.5 w-3.5" />
-                    {project.assetsCount} asset{project.assetsCount > 1 ? 's' : ''}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5" />
-                    {project.versionsCount} version{project.versionsCount > 1 ? 's' : ''}
-                  </span>
-                </div>
+              <Link key={project.id} href={`/projects/${project.id}`}>
+                <Card className="h-full card-hover transition-all hover:border-primary/30">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="rounded-lg bg-primary/10 p-2">
+                        <FolderKanban className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">{project.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Créé le{' '}
+                          {new Date(project.created_at).toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground border-t border-border pt-3">
+                      <span className="flex items-center gap-1.5">
+                        <FileImage className="h-3.5 w-3.5" />
+                        {project.assetsCount} asset{project.assetsCount > 1 ? 's' : ''}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5" />
+                        {project.versionsCount} version{project.versionsCount > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
               </Link>
             ))}
           </div>

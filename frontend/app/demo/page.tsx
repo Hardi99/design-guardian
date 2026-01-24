@@ -6,6 +6,7 @@ import { DiffVisualizer } from '@/components/DiffVisualizer';
 import { Header } from '@/components/ui/header';
 import { ArrowLeft, Search, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import type { AnalysisResult } from '@/lib/types';
 
 const sampleSVG1 = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
   <circle cx="100" cy="100" r="80" fill="#3b82f6" />
@@ -17,13 +18,13 @@ const sampleSVG2 = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/
   <rect x="50" y="50" width="100" height="100" fill="#10b981" opacity="0.7" />
 </svg>`;
 
-const sampleAnalysis = {
+const sampleAnalysis: AnalysisResult = {
   total_changes: 4,
   changes: [
     {
       element_id: 'circle_1',
       type: 'geometry_modified',
-      severity: 'moderate' as const,
+      severity: 'moderate',
       details: {
         property: 'radius',
         old_value: 80,
@@ -35,7 +36,7 @@ const sampleAnalysis = {
     {
       element_id: 'rect_1',
       type: 'geometry_modified',
-      severity: 'minor' as const,
+      severity: 'minor',
       details: {
         property: 'position',
         distance: 14.14,
@@ -45,7 +46,7 @@ const sampleAnalysis = {
     {
       element_id: 'rect_1',
       type: 'attribute_changed',
-      severity: 'minor' as const,
+      severity: 'minor',
       details: {
         property: 'opacity',
         old_value: 0.5,

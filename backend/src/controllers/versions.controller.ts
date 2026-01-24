@@ -7,7 +7,6 @@ import { OpenAIService } from '../services/openai.service.js';
 import type {
   VersionResponse,
   VersionsListResponse,
-  CompareVersionsResponse,
   ErrorResponse
 } from '../types/api.js';
 
