@@ -44,16 +44,16 @@ export function SVGViewer({ svgContent, label, className = '' }: SVGViewerProps)
   return (
     <div className={className}>
       {label && (
-        <div className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">
           {label}
         </div>
       )}
       <div
         ref={containerRef}
-        className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-white dark:bg-gray-950 flex items-center justify-center min-h-[200px]"
+        className="border border-border rounded-lg p-4 bg-background flex items-center justify-center min-h-[200px]"
       >
         {error && (
-          <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
+          <div className="text-red-400 text-sm">{error}</div>
         )}
       </div>
     </div>

@@ -22,6 +22,8 @@ export interface Version {
   version_number: number;
   analysis_json: any;
   ai_summary: string | null;
+  status: 'draft' | 'approved' | 'rejected';
+  approved_at: string | null;
   created_at: string;
 }
 
@@ -117,6 +119,17 @@ class APIClient {
     const res = await fetch(`${this.baseURL}/api/versions/compare/${v1Id}/${v2Id}`);
     if (!res.ok) throw new Error('Failed to compare versions');
     return await res.json();
+  }
+
+  async updateVersionStatus(versionId: string, status: 'draft' | 'approved' | 'rejected'): Promise<Version> {
+    const res = await fetch(`${this.baseURL}/api/versions/${versionId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error('Failed to update version status');
+    const data = await res.json();
+    return data.version;
   }
 }
 

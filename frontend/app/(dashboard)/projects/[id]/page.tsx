@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { apiClient, type Project, type Asset, type Version } from '@/lib/api/client';
 import { DiffVisualizer } from '@/components/DiffVisualizer';
@@ -12,7 +12,10 @@ import {
   FileImage,
   Loader2,
   Layers,
-  Trash2,
+  CloudUpload,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from 'lucide-react';
 
 export default function ProjectPage() {
@@ -26,10 +29,12 @@ export default function ProjectPage() {
   const [newAssetName, setNewAssetName] = useState('');
   const [creatingAsset, setCreatingAsset] = useState(false);
 
-  // Upload
+  // Upload & Drag and Drop
   const [uploadingAssetId, setUploadingAssetId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
 
   // Versions & comparison
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -81,18 +86,18 @@ export default function ProjectPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadingAssetId) return;
-
+  const uploadFile = useCallback(async (file: File, assetId: string) => {
+    if (!file.name.endsWith('.svg') && file.type !== 'image/svg+xml') {
+      setError('Seuls les fichiers SVG sont acceptés');
+      return;
+    }
     setUploading(true);
     setError('');
     try {
-      await apiClient.uploadVersion(uploadingAssetId, file);
+      await apiClient.uploadVersion(assetId, file);
       loadProject();
-      // If we're viewing this asset's versions, reload them
-      if (selectedAsset?.id === uploadingAssetId) {
-        loadVersions(uploadingAssetId);
+      if (selectedAsset?.id === assetId) {
+        loadVersions(assetId);
       }
     } catch (err: any) {
       setError(err.message || 'Erreur lors de l\'upload');
@@ -101,7 +106,50 @@ export default function ProjectPage() {
       setUploadingAssetId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  }, [selectedAsset]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingAssetId) return;
+    uploadFile(file, uploadingAssetId);
   };
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    if (selectedAsset) {
+      uploadFile(file, selectedAsset.id);
+    } else {
+      setError('Sélectionnez un asset avant de déposer un fichier');
+    }
+  }, [selectedAsset, uploadFile]);
 
   const loadVersions = async (assetId: string) => {
     const asset = assets.find((a) => a.id === assetId);
@@ -111,6 +159,17 @@ export default function ProjectPage() {
     try {
       const vers = await apiClient.getVersions(assetId);
       setVersions(vers);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleStatusChange = async (versionId: string, status: 'approved' | 'rejected' | 'draft') => {
+    try {
+      await apiClient.updateVersionStatus(versionId, status);
+      if (selectedAsset) {
+        loadVersions(selectedAsset.id);
+      }
     } catch (err: any) {
       setError(err.message);
     }
@@ -267,7 +326,28 @@ export default function ProjectPage() {
         </div>
 
         {/* Right: Versions & Comparison */}
-        <div className="lg:col-span-2">
+        <div
+          className="lg:col-span-2"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+              <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/10 p-16 text-center">
+                <CloudUpload className="h-16 w-16 text-primary mx-auto mb-4 animate-bounce" />
+                <p className="text-xl font-semibold text-primary">
+                  Déposez votre fichier SVG
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {selectedAsset ? `Upload vers ${selectedAsset.name}` : 'Sélectionnez un asset d\'abord'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {selectedAsset ? (
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -285,18 +365,17 @@ export default function ProjectPage() {
 
               {/* Versions list */}
               {versions.length === 0 ? (
-                <div className="text-center py-16 rounded-xl border border-dashed border-border">
-                  <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">
-                    Aucune version uploadée
+                <div
+                  className="text-center py-16 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer"
+                  onClick={() => handleUploadClick(selectedAsset.id)}
+                >
+                  <CloudUpload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-2">
+                    Glissez-déposez un SVG ici
                   </p>
-                  <button
-                    onClick={() => handleUploadClick(selectedAsset.id)}
-                    className="btn-shine inline-flex items-center gap-2 rounded-lg px-6 py-3 font-medium text-primary-foreground"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Uploader un SVG
-                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    ou cliquez pour parcourir
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -305,14 +384,39 @@ export default function ProjectPage() {
                     {versions.map((version, index) => (
                       <div
                         key={version.id}
-                        className="rounded-xl border border-border bg-card/50 p-4"
+                        className={`rounded-xl border p-4 ${
+                          version.status === 'approved'
+                            ? 'border-green-500/30 bg-green-500/5'
+                            : version.status === 'rejected'
+                            ? 'border-red-500/30 bg-red-500/5'
+                            : 'border-border bg-card/50'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex items-center gap-3">
                             <span className="font-medium">
-                              Version {version.version_number}
+                              v{version.version_number}
                             </span>
-                            <span className="text-sm text-muted-foreground ml-3">
+                            {/* Status badge */}
+                            {version.status === 'approved' && (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+                                <CheckCircle className="h-3 w-3" />
+                                Gold
+                              </span>
+                            )}
+                            {version.status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+                                <XCircle className="h-3 w-3" />
+                                Rejeté
+                              </span>
+                            )}
+                            {version.status === 'draft' && (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                                <Clock className="h-3 w-3" />
+                                Draft
+                              </span>
+                            )}
+                            <span className="text-sm text-muted-foreground">
                               {new Date(version.created_at).toLocaleString('fr-FR')}
                             </span>
                           </div>
@@ -327,12 +431,43 @@ export default function ProjectPage() {
                               ) : (
                                 <Layers className="h-3 w-3" />
                               )}
-                              Comparer avec v{versions[index + 1].version_number}
+                              Diff v{versions[index + 1].version_number}
                             </button>
                           )}
                         </div>
+
+                        {/* Approve/Reject buttons */}
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
+                          {version.status !== 'approved' && (
+                            <button
+                              onClick={() => handleStatusChange(version.id, 'approved')}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-green-400 border border-green-500/30 hover:bg-green-500/10 transition-colors"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              Approuver
+                            </button>
+                          )}
+                          {version.status !== 'rejected' && (
+                            <button
+                              onClick={() => handleStatusChange(version.id, 'rejected')}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Rejeter
+                            </button>
+                          )}
+                          {version.status !== 'draft' && (
+                            <button
+                              onClick={() => handleStatusChange(version.id, 'draft')}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Remettre en draft
+                            </button>
+                          )}
+                        </div>
+
                         {version.ai_summary && (
-                          <p className="mt-2 text-sm text-muted-foreground border-t border-border pt-2">
+                          <p className="mt-3 text-sm text-muted-foreground border-t border-border pt-2">
                             {version.ai_summary}
                           </p>
                         )}
@@ -358,13 +493,13 @@ export default function ProjectPage() {
               )}
             </div>
           ) : (
-            <div className="text-center py-24 rounded-xl border border-dashed border-border">
+            <div className="text-center py-24 rounded-xl border-2 border-dashed border-border">
               <FileImage className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-lg text-muted-foreground">
                 Sélectionnez un asset pour voir ses versions
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                Ou créez-en un nouveau pour commencer
+                Puis glissez-déposez un fichier SVG pour créer une version
               </p>
             </div>
           )}

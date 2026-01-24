@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { apiClient, type Project } from '@/lib/api/client';
+import { apiClient, type Project, type Asset } from '@/lib/api/client';
 import Link from 'next/link';
-import { Plus, FolderKanban, Loader2 } from 'lucide-react';
+import { Plus, FolderKanban, Loader2, FileImage, Layers, Activity } from 'lucide-react';
+
+interface ProjectWithStats extends Project {
+  assetsCount: number;
+  versionsCount: number;
+}
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
@@ -26,8 +31,26 @@ export default function DashboardPage() {
 
       if (!user) return;
 
-      const projects = await apiClient.getProjects(user.id);
-      setProjects(projects);
+      const rawProjects = await apiClient.getProjects(user.id);
+
+      // Fetch assets count for each project
+      const projectsWithStats = await Promise.all(
+        rawProjects.map(async (project) => {
+          try {
+            const assets = await apiClient.getAssets(project.id);
+            let versionsCount = 0;
+            for (const asset of assets) {
+              const versions = await apiClient.getVersions(asset.id);
+              versionsCount += versions.length;
+            }
+            return { ...project, assetsCount: assets.length, versionsCount };
+          } catch {
+            return { ...project, assetsCount: 0, versionsCount: 0 };
+          }
+        })
+      );
+
+      setProjects(projectsWithStats);
     } catch (err: any) {
       setError(err.message || 'Failed to load projects');
     } finally {
@@ -76,6 +99,47 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">
           Gérez vos assets design et suivez les changements
         </p>
+      </div>
+
+      {/* Global Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="rounded-xl border border-border bg-card/50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-primary/10 p-2.5">
+              <FolderKanban className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{projects.length}</p>
+              <p className="text-sm text-muted-foreground">Projets</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card/50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-primary/10 p-2.5">
+              <FileImage className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                {projects.reduce((sum, p) => sum + p.assetsCount, 0)}
+              </p>
+              <p className="text-sm text-muted-foreground">Assets</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card/50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-primary/10 p-2.5">
+              <Layers className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                {projects.reduce((sum, p) => sum + p.versionsCount, 0)}
+              </p>
+              <p className="text-sm text-muted-foreground">Versions</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Create Project */}
@@ -133,7 +197,7 @@ export default function DashboardPage() {
                 href={`/projects/${project.id}`}
                 className="card-hover rounded-xl border border-border bg-card/50 p-6 transition-all hover:border-primary/30"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 mb-4">
                   <div className="rounded-lg bg-primary/10 p-2">
                     <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
@@ -144,6 +208,16 @@ export default function DashboardPage() {
                       {new Date(project.created_at).toLocaleDateString('fr-FR')}
                     </p>
                   </div>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground border-t border-border pt-3">
+                  <span className="flex items-center gap-1.5">
+                    <FileImage className="h-3.5 w-3.5" />
+                    {project.assetsCount} asset{project.assetsCount > 1 ? 's' : ''}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Layers className="h-3.5 w-3.5" />
+                    {project.versionsCount} version{project.versionsCount > 1 ? 's' : ''}
+                  </span>
                 </div>
               </Link>
             ))}

@@ -216,6 +216,44 @@ versionsRouter.post('/upload', async (c) => {
 });
 
 /**
+ * PATCH /api/versions/:id/status
+ * Update version status (approve/reject)
+ */
+versionsRouter.patch('/:id/status', async (c) => {
+  try {
+    const supabase = getSupabaseClient();
+    const { id } = c.req.param();
+    const { status } = await c.req.json<{ status: string }>();
+
+    if (!['draft', 'approved', 'rejected'].includes(status)) {
+      return c.json<ErrorResponse>({ error: 'Invalid status. Must be draft, approved, or rejected' }, 400);
+    }
+
+    const updateData: Record<string, unknown> = { status };
+    if (status === 'approved') {
+      updateData.approved_at = new Date().toISOString();
+    } else {
+      updateData.approved_at = null;
+    }
+
+    const { data, error } = await supabase
+      .from('versions')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return c.json<ErrorResponse>({ error: 'Version not found', details: error?.message }, 404);
+    }
+
+    return c.json({ version: data });
+  } catch (error) {
+    return c.json<ErrorResponse>({ error: 'Internal server error' }, 500);
+  }
+});
+
+/**
  * GET /api/versions/compare/:v1Id/:v2Id
  * Compare two specific versions
  */
