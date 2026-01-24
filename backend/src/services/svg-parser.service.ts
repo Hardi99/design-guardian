@@ -12,6 +12,12 @@ import type {
   SVGMetadata
 } from '../types/svg.js';
 
+/** Represents a parsed XML node from xml2js */
+interface Xml2jsNode {
+  $?: Record<string, string>;
+  [key: string]: Xml2jsNode[] | Record<string, string> | undefined;
+}
+
 export class SVGParserService {
   /**
    * Parse SVG string into structured data
@@ -42,7 +48,7 @@ export class SVGParserService {
   /**
    * Extract SVG metadata
    */
-  private extractMetadata(svgRoot: any): SVGMetadata {
+  private extractMetadata(svgRoot: Xml2jsNode): SVGMetadata {
     const attrs = svgRoot.$ || {};
     return {
       width: attrs.width,
@@ -54,7 +60,7 @@ export class SVGParserService {
   /**
    * Extract viewBox attribute
    */
-  private extractViewBox(svgRoot: any): ViewBox | null {
+  private extractViewBox(svgRoot: Xml2jsNode): ViewBox | null {
     const viewBoxAttr = svgRoot.$?.viewBox;
     if (!viewBoxAttr) return null;
 
@@ -72,11 +78,11 @@ export class SVGParserService {
   /**
    * Extract and normalize all SVG elements
    */
-  private async extractElements(svgRoot: any): Promise<SVGElement[]> {
+  private async extractElements(svgRoot: Xml2jsNode): Promise<SVGElement[]> {
     const elements: SVGElement[] = [];
     let idCounter = 0;
 
-    const processElement = async (element: any, type: SVGElementType): Promise<void> => {
+    const processElement = async (element: Xml2jsNode, type: SVGElementType): Promise<void> => {
       const attrs = element.$ || {};
       const id = attrs.id || `element_${idCounter++}`;
 
@@ -95,24 +101,13 @@ export class SVGParserService {
     };
 
     // Process all supported element types
-    if (svgRoot.path) {
-      for (const path of svgRoot.path) {
-        await processElement(path, 'path');
-      }
-    }
-    if (svgRoot.rect) {
-      for (const rect of svgRoot.rect) {
-        await processElement(rect, 'rect');
-      }
-    }
-    if (svgRoot.circle) {
-      for (const circle of svgRoot.circle) {
-        await processElement(circle, 'circle');
-      }
-    }
-    if (svgRoot.ellipse) {
-      for (const ellipse of svgRoot.ellipse) {
-        await processElement(ellipse, 'ellipse');
+    const elementTypes: SVGElementType[] = ['path', 'rect', 'circle', 'ellipse'];
+    for (const type of elementTypes) {
+      const nodes = svgRoot[type] as Xml2jsNode[] | undefined;
+      if (nodes) {
+        for (const node of nodes) {
+          await processElement(node, type);
+        }
       }
     }
 

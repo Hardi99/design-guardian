@@ -1,3 +1,5 @@
+import type { AnalysisResult } from '@/lib/types';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 export interface Project {
@@ -20,11 +22,20 @@ export interface Version {
   asset_id: string;
   storage_path: string;
   version_number: number;
-  analysis_json: any;
+  analysis_json: AnalysisResult | null;
   ai_summary: string | null;
   status: 'draft' | 'approved' | 'rejected';
   approved_at: string | null;
   created_at: string;
+}
+
+interface CompareResponse {
+  v1: Version;
+  v2: Version;
+  svg1: string;
+  svg2: string;
+  analysis: AnalysisResult;
+  ai_summary: string;
 }
 
 class APIClient {
@@ -115,7 +126,7 @@ class APIClient {
     return data.version;
   }
 
-  async compareVersions(v1Id: string, v2Id: string): Promise<any> {
+  async compareVersions(v1Id: string, v2Id: string): Promise<CompareResponse> {
     const res = await fetch(`${this.baseURL}/api/versions/compare/${v1Id}/${v2Id}`);
     if (!res.ok) throw new Error('Failed to compare versions');
     return await res.json();
