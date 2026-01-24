@@ -245,15 +245,24 @@ body {
     transparent
   );
   border-radius: 50%;
-  filter: blur(1px);
+  filter: blur(2px);
+  opacity: 0.7;
 }
 
 @keyframes swing {
   0%, 100% {
-    transform: rotate(-42deg) translateX(-5%);
+    transform: rotate(-42deg) translateX(-18%);
+    opacity: 0.5;
+  }
+  25% {
+    opacity: 0.9;
   }
   50% {
-    transform: rotate(-42deg) translateX(5%);
+    transform: rotate(-40deg) translateX(18%);
+    opacity: 0.7;
+  }
+  75% {
+    opacity: 1;
   }
 }
 
