@@ -6,6 +6,7 @@ import { loadEnv, getEnv } from './config/env.js';
 import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
 import { versionsRouter } from './controllers/versions.controller.js';
+import { fontsRouter } from './controllers/fonts.controller.js';
 
 // Load environment variables
 try {
@@ -36,6 +37,7 @@ app.get('/', (c) => {
 app.route('/api/projects', projectsRouter);
 app.route('/api/assets', assetsRouter);
 app.route('/api/versions', versionsRouter);
+app.route('/api/fonts', fontsRouter);
 
 const env = getEnv();
 const port = Number(env.PORT);

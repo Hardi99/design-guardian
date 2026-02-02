@@ -23,7 +23,7 @@ export function useProject(projectId: string) {
     try {
       const [proj, assetsList, branchList] = await Promise.all([
         apiClient.getProject(projectId),
-        apiClient.getAssets(projectId, branchToUse),
+        apiClient.getAssets(projectId).catch(() => []), // Fallback sans filtre branch
         apiClient.getBranches(projectId),
       ]);
       setProject(proj);

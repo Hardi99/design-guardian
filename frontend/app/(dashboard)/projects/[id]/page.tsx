@@ -8,6 +8,7 @@ import { DiffVisualizer } from '@/components/DiffVisualizer';
 import { VersionCard } from '@/components/VersionCard';
 import { AssetCard } from '@/components/AssetCard';
 import { DropZone } from '@/components/DropZone';
+import { FontSpecimen } from '@/components/FontSpecimen';
 import Link from 'next/link';
 import { useState } from 'react';
 import { apiClient } from '@/lib/api/client';
@@ -51,6 +52,7 @@ export default function ProjectPage() {
   const [creatingAsset, setCreatingAsset] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [showNewBranch, setShowNewBranch] = useState(false);
+  const [selectedFontVersionId, setSelectedFontVersionId] = useState<string | null>(null);
 
   const onUploadComplete = useCallback(() => {
     loadProject();
@@ -117,7 +119,7 @@ export default function ProjectPage() {
       <input
         type="file"
         ref={fileInputRef}
-        accept=".svg,image/svg+xml"
+        accept=".svg,image/svg+xml,.otf,.ttf,.woff,.woff2"
         className="hidden"
         onChange={handleFileChange}
       />
@@ -275,7 +277,7 @@ export default function ProjectPage() {
                   onClick={() => handleUploadClick(selectedAsset.id)}
                 >
                   <CloudUpload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-2">Glissez-déposez un SVG ici</p>
+                  <p className="text-muted-foreground mb-2">Glissez-déposez un SVG ou une font ici</p>
                   <p className="text-sm text-muted-foreground">ou cliquez pour parcourir</p>
                 </div>
               ) : (
@@ -294,9 +296,16 @@ export default function ProjectPage() {
                           }
                         }}
                         onStatusChange={handleStatusChange}
+                        onViewFont={(vId) => setSelectedFontVersionId(vId === selectedFontVersionId ? null : vId)}
                       />
                     ))}
                   </div>
+
+                  {selectedFontVersionId && (
+                    <div className="mt-6">
+                      <FontSpecimen versionId={selectedFontVersionId} />
+                    </div>
+                  )}
 
                   {comparison && (
                     <div className="mt-8">

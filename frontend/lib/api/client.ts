@@ -39,6 +39,26 @@ interface CompareResponse {
   ai_summary: string;
 }
 
+export interface FontGlyph {
+  unicode: number;
+  svg: string;
+}
+
+interface FontUploadResponse {
+  version: Version;
+  font: {
+    name: string;
+    family: string;
+    style: string;
+    glyphCount: number;
+  };
+}
+
+interface FontGlyphsResponse {
+  version: Version;
+  glyphs: FontGlyph[];
+}
+
 class APIClient {
   private baseURL: string;
 
@@ -90,10 +110,14 @@ class APIClient {
   }
 
   async getBranches(projectId: string): Promise<string[]> {
-    const res = await fetch(`${this.baseURL}/api/assets/branches?project_id=${projectId}`);
-    if (!res.ok) throw new Error('Failed to fetch branches');
-    const data = await res.json();
-    return data.branches;
+    try {
+      const res = await fetch(`${this.baseURL}/api/assets/branches?project_id=${projectId}`);
+      if (!res.ok) return ['main'];
+      const data = await res.json();
+      return data.branches?.length ? data.branches : ['main'];
+    } catch {
+      return ['main'];
+    }
   }
 
   async getAsset(id: string): Promise<Asset> {
@@ -151,6 +175,26 @@ class APIClient {
     if (!res.ok) throw new Error('Failed to update version status');
     const data = await res.json();
     return data.version;
+  }
+
+  // Fonts
+  async uploadFont(assetId: string, file: File): Promise<FontUploadResponse> {
+    const formData = new FormData();
+    formData.append('asset_id', assetId);
+    formData.append('file', file);
+
+    const res = await fetch(`${this.baseURL}/api/fonts/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Failed to upload font');
+    return await res.json();
+  }
+
+  async getFontGlyphs(versionId: string): Promise<FontGlyphsResponse> {
+    const res = await fetch(`${this.baseURL}/api/fonts/${versionId}/glyphs`);
+    if (!res.ok) throw new Error('Failed to fetch glyphs');
+    return await res.json();
   }
 }
 
