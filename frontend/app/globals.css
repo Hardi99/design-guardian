@@ -246,23 +246,16 @@ body {
   );
   border-radius: 50%;
   filter: blur(2px);
-  opacity: 0.7;
+  opacity: 0.5;
+  will-change: transform;
 }
 
 @keyframes swing {
   0%, 100% {
-    transform: rotate(-42deg) translateX(-18%);
-    opacity: 0.5;
-  }
-  25% {
-    opacity: 0.9;
+    transform: rotate(-42deg) translateX(-15%);
   }
   50% {
-    transform: rotate(-40deg) translateX(18%);
-    opacity: 0.7;
-  }
-  75% {
-    opacity: 1;
+    transform: rotate(-40deg) translateX(15%);
   }
 }
 

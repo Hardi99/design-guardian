@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { SVGViewer } from './SVGViewer';
 import { Sparkles, GitCompare, Layers } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AnalysisResult, Change } from '@/lib/types';
 
 interface DiffVisualizerProps {
@@ -69,25 +70,13 @@ export function DiffVisualizer({ svg1, svg2, analysis, aiSummary }: DiffVisualiz
           <GitCompare className="h-5 w-5 text-primary" />
           Comparaison
         </h2>
-        <div className="flex gap-1 p-1 rounded-lg bg-card/50 border border-border">
-          {[
-            { key: 'side-by-side', label: 'Côte à côte' },
-            { key: 'overlay', label: 'Superposé' },
-            { key: 'diff', label: 'Diff visuel' },
-          ].map((mode) => (
-            <button
-              key={mode.key}
-              onClick={() => setViewMode(mode.key as typeof viewMode)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                viewMode === mode.key
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)}>
+          <TabsList>
+            <TabsTrigger value="side-by-side">Côte à côte</TabsTrigger>
+            <TabsTrigger value="overlay">Superposé</TabsTrigger>
+            <TabsTrigger value="diff">Diff visuel</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* AI Summary */}
