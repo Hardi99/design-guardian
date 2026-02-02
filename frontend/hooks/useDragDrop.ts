@@ -16,13 +16,21 @@ export function useDragDrop({ selectedAssetId, onUploadComplete, onError }: UseD
   const dragCounterRef = useRef(0);
 
   const uploadFile = useCallback(async (file: File, assetId: string) => {
-    if (!file.name.endsWith('.svg') && file.type !== 'image/svg+xml') {
-      onError('Seuls les fichiers SVG sont acceptés');
+    const isSVG = file.name.endsWith('.svg') || file.type === 'image/svg+xml';
+    const isFont = /\.(otf|ttf|woff|woff2)$/i.test(file.name);
+
+    if (!isSVG && !isFont) {
+      onError('Formats acceptés : SVG, OTF, TTF, WOFF');
       return;
     }
+
     setUploading(true);
     try {
-      await apiClient.uploadVersion(assetId, file);
+      if (isFont) {
+        await apiClient.uploadFont(assetId, file);
+      } else {
+        await apiClient.uploadVersion(assetId, file);
+      }
       onUploadComplete();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Erreur lors de l'upload");

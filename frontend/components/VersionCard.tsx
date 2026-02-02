@@ -4,7 +4,7 @@ import type { Version } from '@/lib/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Clock, Layers, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Layers, Loader2, Type } from 'lucide-react';
 
 interface VersionCardProps {
   version: Version;
@@ -13,6 +13,12 @@ interface VersionCardProps {
   comparing: boolean;
   onCompare: () => void;
   onStatusChange: (versionId: string, status: 'approved' | 'rejected' | 'draft') => void;
+  onViewFont?: (versionId: string) => void;
+}
+
+function isFont(version: Version): boolean {
+  const analysis = version.analysis_json as { type?: string } | null;
+  return analysis?.type === 'font';
 }
 
 const statusConfig = {
@@ -30,8 +36,10 @@ const statusConfig = {
   },
 } as const;
 
-export function VersionCard({ version, canCompare, compareLabel, comparing, onCompare, onStatusChange }: VersionCardProps) {
+export function VersionCard({ version, canCompare, compareLabel, comparing, onCompare, onStatusChange, onViewFont }: VersionCardProps) {
   const config = statusConfig[version.status] || statusConfig.draft;
+  const fontVersion = isFont(version);
+  const fontAnalysis = version.analysis_json as { font_name?: string; glyph_count?: number } | null;
 
   return (
     <Card className={config.cardClass}>
@@ -39,26 +47,44 @@ export function VersionCard({ version, canCompare, compareLabel, comparing, onCo
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="font-medium">v{version.version_number}</span>
+            {fontVersion && (
+              <Badge variant="outline" className="border-purple-500/50 text-purple-400 bg-purple-500/10">
+                <Type className="h-3 w-3 mr-1" />
+                {fontAnalysis?.glyph_count || 0} glyphes
+              </Badge>
+            )}
             {config.badge}
             <span className="text-sm text-muted-foreground">
               {new Date(version.created_at).toLocaleString('fr-FR')}
             </span>
           </div>
-          {canCompare && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onCompare}
-              disabled={comparing}
-            >
-              {comparing ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : (
-                <Layers className="h-3 w-3 mr-1" />
-              )}
-              {compareLabel}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {fontVersion && onViewFont && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onViewFont(version.id)}
+              >
+                <Type className="h-3 w-3 mr-1" />
+                Specimen
+              </Button>
+            )}
+            {canCompare && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCompare}
+                disabled={comparing}
+              >
+                {comparing ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <Layers className="h-3 w-3 mr-1" />
+                )}
+                {compareLabel}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
