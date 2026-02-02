@@ -22,6 +22,7 @@ import {
   FileImage,
   Loader2,
   CloudUpload,
+  GitBranch,
 } from 'lucide-react';
 
 export default function ProjectPage() {
@@ -29,6 +30,9 @@ export default function ProjectPage() {
   const {
     project,
     assets,
+    branches,
+    currentBranch,
+    switchBranch,
     loading,
     error,
     clearError,
@@ -45,6 +49,8 @@ export default function ProjectPage() {
 
   const [newAssetName, setNewAssetName] = useState('');
   const [creatingAsset, setCreatingAsset] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [showNewBranch, setShowNewBranch] = useState(false);
 
   const onUploadComplete = useCallback(() => {
     loadProject();
@@ -74,7 +80,7 @@ export default function ProjectPage() {
     if (!newAssetName.trim()) return;
     setCreatingAsset(true);
     try {
-      await apiClient.createAsset(id, newAssetName.trim());
+      await apiClient.createAsset(id, newAssetName.trim(), currentBranch);
       setNewAssetName('');
       loadProject();
     } catch (err: unknown) {
@@ -125,10 +131,52 @@ export default function ProjectPage() {
           <ArrowLeft className="h-4 w-4" />
           Retour au dashboard
         </Link>
-        <h1 className="font-display text-3xl font-bold mb-1">{project.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          Créé le {new Date(project.created_at).toLocaleDateString('fr-FR')}
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-3xl font-bold mb-1">{project.name}</h1>
+            <p className="text-sm text-muted-foreground">
+              Créé le {new Date(project.created_at).toLocaleDateString('fr-FR')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-muted-foreground" />
+            <select
+              value={currentBranch}
+              onChange={(e) => switchBranch(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {branches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            {showNewBranch ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newBranchName.trim() && !branches.includes(newBranchName.trim())) {
+                    switchBranch(newBranchName.trim());
+                    setNewBranchName('');
+                    setShowNewBranch(false);
+                  }
+                }}
+                className="flex gap-1"
+              >
+                <Input
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  placeholder="feature/..."
+                  className="h-9 w-40"
+                />
+                <Button type="submit" size="sm" variant="outline">OK</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setShowNewBranch(false)}>×</Button>
+              </form>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setShowNewBranch(true)}>
+                <Plus className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Error */}

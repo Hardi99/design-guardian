@@ -13,6 +13,40 @@ const assetsRouter = new Hono();
 assetsRouter.get('/', async (c) => {
   try {
     const supabase = getSupabaseClient();
+    const { project_id, branch } = c.req.query();
+
+    if (!project_id) {
+      return c.json<ErrorResponse>({ error: 'project_id query parameter required' }, 400);
+    }
+
+    let query = supabase
+      .from('assets')
+      .select('*')
+      .eq('project_id', project_id);
+
+    if (branch) {
+      query = query.eq('branch', branch);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      return c.json<ErrorResponse>({ error: 'Failed to fetch assets', details: error.message }, 500);
+    }
+
+    return c.json<AssetsListResponse>({ assets: data });
+  } catch (error) {
+    return c.json<ErrorResponse>({ error: 'Internal server error' }, 500);
+  }
+});
+
+/**
+ * GET /api/assets/branches
+ * List all branches for a project
+ */
+assetsRouter.get('/branches', async (c) => {
+  try {
+    const supabase = getSupabaseClient();
     const { project_id } = c.req.query();
 
     if (!project_id) {
@@ -21,15 +55,17 @@ assetsRouter.get('/', async (c) => {
 
     const { data, error } = await supabase
       .from('assets')
-      .select('*')
-      .eq('project_id', project_id)
-      .order('created_at', { ascending: false });
+      .select('branch')
+      .eq('project_id', project_id);
 
     if (error) {
-      return c.json<ErrorResponse>({ error: 'Failed to fetch assets', details: error.message }, 500);
+      return c.json<ErrorResponse>({ error: 'Failed to fetch branches', details: error.message }, 500);
     }
 
-    return c.json<AssetsListResponse>({ assets: data });
+    const branches = [...new Set(data.map(a => a.branch))].sort();
+    if (!branches.includes('main')) branches.unshift('main');
+
+    return c.json({ branches });
   } catch (error) {
     return c.json<ErrorResponse>({ error: 'Internal server error' }, 500);
   }
@@ -73,7 +109,8 @@ assetsRouter.post('/', zValidator('json', createAssetSchema), async (c) => {
       .from('assets')
       .insert({
         project_id: body.project_id,
-        name: body.name
+        name: body.name,
+        branch: body.branch || 'main'
       })
       .select()
       .single();

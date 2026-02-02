@@ -7,6 +7,8 @@ import type { AnalysisResult, ComparisonResult } from '@/lib/types';
 export function useProject(projectId: string) {
   const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [branches, setBranches] = useState<string[]>(['main']);
+  const [currentBranch, setCurrentBranch] = useState('main');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -16,20 +18,31 @@ export function useProject(projectId: string) {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [comparing, setComparing] = useState(false);
 
-  const loadProject = useCallback(async () => {
+  const loadProject = useCallback(async (branch?: string) => {
+    const branchToUse = branch ?? currentBranch;
     try {
-      const [proj, assetsList] = await Promise.all([
+      const [proj, assetsList, branchList] = await Promise.all([
         apiClient.getProject(projectId),
-        apiClient.getAssets(projectId),
+        apiClient.getAssets(projectId, branchToUse),
+        apiClient.getBranches(projectId),
       ]);
       setProject(proj);
       setAssets(assetsList);
+      setBranches(branchList);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, currentBranch]);
+
+  const switchBranch = useCallback((branch: string) => {
+    setCurrentBranch(branch);
+    setSelectedAsset(null);
+    setVersions([]);
+    setComparison(null);
+    loadProject(branch);
+  }, [loadProject]);
 
   useEffect(() => {
     loadProject();
@@ -81,6 +94,9 @@ export function useProject(projectId: string) {
   return {
     project,
     assets,
+    branches,
+    currentBranch,
+    switchBranch,
     loading,
     error,
     clearError,
