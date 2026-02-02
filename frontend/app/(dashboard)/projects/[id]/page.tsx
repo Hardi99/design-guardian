@@ -150,7 +150,7 @@ export default function ProjectPage() {
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-muted-foreground" />
             <Select value={currentBranch} onValueChange={switchBranch}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-auto min-w-[100px]">
                 <SelectValue placeholder="Branche" />
               </SelectTrigger>
               <SelectContent>
