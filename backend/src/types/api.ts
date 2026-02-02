@@ -25,6 +25,7 @@ export interface ProjectsListResponse {
 export const createAssetSchema = z.object({
   project_id: z.string().uuid(),
   name: z.string().min(1).max(100),
+  branch: z.string().min(1).max(100).default('main'),
 });
 
 export type CreateAssetRequest = z.infer<typeof createAssetSchema>;

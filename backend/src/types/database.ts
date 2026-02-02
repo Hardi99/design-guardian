@@ -17,6 +17,7 @@ export interface Asset {
   id: string;
   project_id: string;
   name: string;
+  branch: string;
   current_version_id: string | null;
   created_at: string;
 }

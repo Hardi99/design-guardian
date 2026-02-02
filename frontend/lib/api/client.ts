@@ -13,6 +13,7 @@ export interface Asset {
   id: string;
   project_id: string;
   name: string;
+  branch: string;
   current_version_id: string | null;
   created_at: string;
 }
@@ -79,11 +80,20 @@ class APIClient {
   }
 
   // Assets
-  async getAssets(projectId: string): Promise<Asset[]> {
-    const res = await fetch(`${this.baseURL}/api/assets?project_id=${projectId}`);
+  async getAssets(projectId: string, branch?: string): Promise<Asset[]> {
+    const params = new URLSearchParams({ project_id: projectId });
+    if (branch) params.append('branch', branch);
+    const res = await fetch(`${this.baseURL}/api/assets?${params}`);
     if (!res.ok) throw new Error('Failed to fetch assets');
     const data = await res.json();
     return data.assets;
+  }
+
+  async getBranches(projectId: string): Promise<string[]> {
+    const res = await fetch(`${this.baseURL}/api/assets/branches?project_id=${projectId}`);
+    if (!res.ok) throw new Error('Failed to fetch branches');
+    const data = await res.json();
+    return data.branches;
   }
 
   async getAsset(id: string): Promise<Asset> {
@@ -93,11 +103,11 @@ class APIClient {
     return data.asset;
   }
 
-  async createAsset(projectId: string, name: string): Promise<Asset> {
+  async createAsset(projectId: string, name: string, branch = 'main'): Promise<Asset> {
     const res = await fetch(`${this.baseURL}/api/assets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_id: projectId, name }),
+      body: JSON.stringify({ project_id: projectId, name, branch }),
     });
     if (!res.ok) throw new Error('Failed to create asset');
     const data = await res.json();
