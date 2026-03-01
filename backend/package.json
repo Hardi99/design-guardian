@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "deploy": "wrangler deploy",
+    "cf:dev": "wrangler dev src/worker.ts"
   },
   "keywords": [
     "svg",
@@ -39,6 +41,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wrangler": "^4.69.0"
   }
 }
