@@ -1,24 +1,16 @@
 /**
  * Cloudflare Workers entry point
- * Env vars are injected by wrangler (secrets + vars), not dotenv
+ * CF Workers bindings (secrets + vars) are NOT in process.env automatically —
+ * they come via the fetch handler's `env` parameter and must be copied manually.
  */
-import { z } from 'zod';
-import { createClient } from '@supabase/supabase-js';
 import { createApp } from './app.js';
-
-// Override supabase client initialization to use process.env directly
-// (wrangler populates process.env from secrets with nodejs_compat)
-const envSchema = z.object({
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_SERVICE_KEY: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1),
-});
-
-const parsed = envSchema.safeParse(process.env);
-if (!parsed.success) {
-  console.error('❌ Missing environment variables:', parsed.error.format());
-}
 
 const app = createApp();
 
-export default app;
+export default {
+  fetch(request: Request, env: Record<string, string>, ctx: ExecutionContext) {
+    // Expose CF Workers bindings as process.env so existing code works unchanged
+    Object.assign(process.env, env);
+    return app.fetch(request, env, ctx);
+  },
+};

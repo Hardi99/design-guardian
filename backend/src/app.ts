@@ -16,7 +16,7 @@ export function createApp() {
     c.json({ name: 'Design Guardian API', version: '1.0.0', status: 'running' })
   );
 
-  app.route('/api/projects', projectsRouter);
+app.route('/api/projects', projectsRouter);
   app.route('/api/assets', assetsRouter);
   app.route('/api/versions', versionsRouter);
   app.route('/api/fonts', fontsRouter);
