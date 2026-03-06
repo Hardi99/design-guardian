@@ -1,7 +1,12 @@
-import { config } from 'dotenv';
 import { z } from 'zod';
 
-config();
+// Load .env for local dev; in CF Workers, process.env is already populated by wrangler secrets
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('dotenv').config();
+} catch {
+  // dotenv not available or no .env file (expected in CF Workers)
+}
 
 const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
@@ -31,7 +36,7 @@ export function loadEnv(): Env {
 
 export function getEnv(): Env {
   if (!env) {
-    throw new Error('Environment not loaded. Call loadEnv() first.');
+    env = loadEnv();
   }
   return env;
 }

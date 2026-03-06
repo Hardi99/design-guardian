@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient, type Project, type Asset, type Version } from '@/lib/api/client';
 import type { AnalysisResult, ComparisonResult } from '@/lib/types';
 
@@ -9,6 +9,7 @@ export function useProject(projectId: string) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [branches, setBranches] = useState<string[]>(['main']);
   const [currentBranch, setCurrentBranch] = useState('main');
+  const currentBranchRef = useRef('main');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -19,11 +20,11 @@ export function useProject(projectId: string) {
   const [comparing, setComparing] = useState(false);
 
   const loadProject = useCallback(async (branch?: string) => {
-    const branchToUse = branch ?? currentBranch;
+    const branchToUse = branch ?? currentBranchRef.current;
     try {
       const [proj, assetsList, branchList] = await Promise.all([
         apiClient.getProject(projectId),
-        apiClient.getAssets(projectId).catch(() => []), // Fallback sans filtre branch
+        apiClient.getAssets(projectId, branchToUse).catch(() => []),
         apiClient.getBranches(projectId),
       ]);
       setProject(proj);
@@ -34,9 +35,10 @@ export function useProject(projectId: string) {
     } finally {
       setLoading(false);
     }
-  }, [projectId, currentBranch]);
+  }, [projectId]);
 
   const switchBranch = useCallback((branch: string) => {
+    currentBranchRef.current = branch;
     setCurrentBranch(branch);
     setSelectedAsset(null);
     setVersions([]);
