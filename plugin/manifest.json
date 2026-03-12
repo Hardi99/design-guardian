@@ -1,0 +1,16 @@
+{
+  "api": "1.0.0",
+  "editorType": [
+    "figma"
+  ],
+  "id": "design-guardian-dev",
+  "name": "Design Guardian",
+  "main": "build/main.js",
+  "ui": "build/ui.js",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://design-guardian.up.railway.app",
+      "http://localhost:3000"
+    ]
+  }
+}

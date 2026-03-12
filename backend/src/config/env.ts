@@ -1,12 +1,7 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
 
-// Load .env for local dev; in CF Workers, process.env is already populated by wrangler secrets
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('dotenv').config();
-} catch {
-  // dotenv not available or no .env file (expected in CF Workers)
-}
+dotenv.config();
 
 const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
@@ -25,7 +20,7 @@ export function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
-    console.error('❌ Invalid environment variables:');
+    console.error('Invalid environment variables:');
     console.error(parsed.error.format());
     throw new Error('Invalid environment variables');
   }

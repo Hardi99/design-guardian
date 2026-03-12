@@ -1,78 +1,96 @@
-// API request/response types
-
 import { z } from 'zod';
-import type { Project, Asset, Version, AnalysisResult } from './database.js';
+import type { Project, Asset, Version } from './database.js';
+import type { DeltaJSON } from './figma.js';
 
-// ============ Projects ============
+// ── Projects (web app) ────────────────────────────────────────────────────────
 
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  owner_id: z.string().uuid(),
+  description: z.string().max(500).optional(),
 });
-
 export type CreateProjectRequest = z.infer<typeof createProjectSchema>;
+export interface ProjectResponse       { project: Project }
+export interface ProjectsListResponse  { projects: Project[] }
 
-export interface ProjectResponse {
-  project: Project;
-}
-
-export interface ProjectsListResponse {
-  projects: Project[];
-}
-
-// ============ Assets ============
+// ── Assets (plugin) ───────────────────────────────────────────────────────────
 
 export const createAssetSchema = z.object({
-  project_id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  branch: z.string().min(1).max(100).default('main'),
+  description: z.string().max(500).optional(),
+  asset_type: z.enum(['logo', 'icon', 'packaging', 'illustration', 'ui', 'other']).default('other'),
 });
-
 export type CreateAssetRequest = z.infer<typeof createAssetSchema>;
+export interface AssetResponse      { asset: Asset }
+export interface AssetsListResponse { assets: Asset[] }
 
-export interface AssetResponse {
-  asset: Asset;
-}
+// ── Checkpoints (plugin) ──────────────────────────────────────────────────────
 
-export interface AssetsListResponse {
-  assets: Asset[];
-}
-
-// ============ Versions ============
-
-export const uploadVersionSchema = z.object({
-  asset_id: z.string().uuid(),
+const figmaColorSchema = z.object({
+  r: z.number().min(0).max(1),
+  g: z.number().min(0).max(1),
+  b: z.number().min(0).max(1),
+  a: z.number().min(0).max(1),
+});
+const figmaFillSchema = z.object({
+  type: z.string(),
+  color: figmaColorSchema.optional(),
+  opacity: z.number().optional(),
+  visible: z.boolean().optional(),
+});
+const figmaStrokeSchema = figmaFillSchema; // same shape
+const figmaVectorPathSchema = z.object({
+  windingRule: z.enum(['EVENODD', 'NONZERO']),
+  data: z.string(),
+});
+const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
+  z.object({
+    id: z.string(), name: z.string(), type: z.string(),
+    x: z.number(), y: z.number(), width: z.number(), height: z.number(),
+    opacity: z.number(),
+    fills: z.array(figmaFillSchema),
+    strokes: z.array(figmaStrokeSchema),
+    strokeWeight: z.number().optional(),
+    cornerRadius: z.number().optional(),
+    vectorPaths: z.array(figmaVectorPathSchema).optional(),
+    children: z.array(nodeSnapshotSchema).optional(),
+  })
+);
+const figmaSnapshotSchema = z.object({
+  figmaNodeId: z.string(), figmaNodeName: z.string(),
+  capturedAt: z.string(), root: nodeSnapshotSchema,
 });
 
-export type UploadVersionRequest = z.infer<typeof uploadVersionSchema>;
-
-export interface VersionResponse {
+export const createCheckpointSchema = z.object({
+  asset_id: z.string().uuid(),
+  branch_name: z.string().min(1).max(100).default('main'),
+  snapshot_json: figmaSnapshotSchema,
+  svg_base64: z.string().optional(),
+  figma_node_id: z.string().optional(),
+  author: z.object({
+    figma_id: z.string(),
+    name: z.string(),
+    avatar_url: z.string().optional(),
+  }),
+});
+export type CreateCheckpointRequest = z.infer<typeof createCheckpointSchema>;
+export interface CheckpointResponse {
   version: Version;
-  analysis: AnalysisResult | null;
+  analysis: DeltaJSON | null;
   ai_summary: string | null;
 }
 
-export interface VersionsListResponse {
+// ── Version tree (plugin) ─────────────────────────────────────────────────────
+
+export interface VersionTreeResponse {
   versions: Version[];
+  branches: string[];
 }
 
-export interface CompareVersionsResponse {
-  v1: Version;
-  v2: Version;
-  analysis: AnalysisResult;
-  ai_summary: string;
-}
+// ── Approve ───────────────────────────────────────────────────────────────────
 
-// ============ Error Responses ============
+export interface ApproveVersionResponse { version: Version }
 
-export interface ErrorResponse {
-  error: string;
-  details?: string;
-  code?: string;
-}
+// ── Generic ───────────────────────────────────────────────────────────────────
 
-// ============ Common ============
-
-export interface SuccessResponse {
-  message: string;
-}
+export interface ErrorResponse   { error: string; details?: string }
+export interface SuccessResponse { message: string }
