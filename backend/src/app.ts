@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { authRouter } from './controllers/auth.controller.js';
 import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
-import { versionsRouter } from './controllers/versions.controller.js';
-import { fontsRouter } from './controllers/fonts.controller.js';
+import { checkpointsRouter } from './controllers/checkpoints.controller.js';
+import { branchesRouter } from './controllers/branches.controller.js';
 
 export function createApp() {
   const app = new Hono();
@@ -13,13 +14,17 @@ export function createApp() {
   app.use('*', cors());
 
   app.get('/', (c) =>
-    c.json({ name: 'Design Guardian API', version: '1.0.0', status: 'running' })
+    c.json({ name: 'Design Guardian API', version: '2.0.0', status: 'running' }),
   );
 
-app.route('/api/projects', projectsRouter);
+  // Health check (no auth — used by Railway/Render uptime checks)
+  app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  app.route('/api/auth', authRouter);
+  app.route('/api/projects', projectsRouter);
   app.route('/api/assets', assetsRouter);
-  app.route('/api/versions', versionsRouter);
-  app.route('/api/fonts', fontsRouter);
+  app.route('/api/checkpoints', checkpointsRouter); // Main plugin action
+  app.route('/api/branches', branchesRouter);        // Tree + approve
 
   return app;
 }
