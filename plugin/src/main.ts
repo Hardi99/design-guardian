@@ -41,13 +41,17 @@ async function handleSnapshot(): Promise<void> {
   };
 
   let svgBase64 = '';
-  try {
-    const bytes = await node.exportAsync({ format: 'SVG' });
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    svgBase64 = btoa(binary);
-  } catch (e) {
-    send({ type: 'ERROR', message: `exportAsync: ${(e as Error).message}` });
+  if ('exportAsync' in node && typeof (node as { exportAsync?: unknown }).exportAsync === 'function') {
+    try {
+      const bytes = await (node as ExportMixin).exportAsync({ format: 'SVG' });
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      svgBase64 = btoa(binary);
+    } catch (e) {
+      console.error('[DG] exportAsync failed:', (e as Error).message);
+    }
+  } else {
+    console.warn('[DG] Node type', node.type, 'does not support exportAsync — no SVG preview');
   }
 
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64, nodeId: node.id });
