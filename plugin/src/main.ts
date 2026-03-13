@@ -41,17 +41,16 @@ async function handleSnapshot(): Promise<void> {
   };
 
   let svgBase64 = '';
-  if ('exportAsync' in node && typeof (node as { exportAsync?: unknown }).exportAsync === 'function') {
-    try {
-      const bytes = await (node as ExportMixin).exportAsync({ format: 'SVG' });
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      svgBase64 = btoa(binary);
-    } catch (e) {
-      console.error('[DG] exportAsync failed:', (e as Error).message);
-    }
-  } else {
-    console.warn('[DG] Node type', node.type, 'does not support exportAsync — no SVG preview');
+  try {
+    const exportable = node as unknown as { exportAsync(s: { format: 'SVG' }): Promise<Uint8Array> };
+    const bytes = await exportable.exportAsync({ format: 'SVG' });
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    svgBase64 = btoa(binary);
+    console.log('[DG] SVG export OK, length:', svgBase64.length);
+  } catch (e) {
+    console.error('[DG] exportAsync error:', (e as Error).message, '| node type:', node.type);
+    send({ type: 'ERROR', message: `exportAsync (${node.type}): ${(e as Error).message}` });
   }
 
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64, nodeId: node.id });
