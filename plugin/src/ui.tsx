@@ -79,7 +79,7 @@ function App() {
         }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot); setSvg(msg.svgBase64); setScreen('checkpoint'); break;
-        case 'ERROR':          console.error('[DG]', msg.message); break;
+        case 'ERROR':          alert(`[DG] ${msg.message}`); break;
       }
     };
     window.addEventListener('message', handler);
