@@ -40,17 +40,25 @@ async function handleSnapshot(): Promise<void> {
     root: extractSnapshot(node),
   };
 
+  console.log('[DG] figma.apiVersion:', figma.apiVersion);
+  // Re-fetch node via ID to get a clean (non-selection-proxy) reference
+  const exportNode = figma.getNodeById(node.id) as (SceneNode & ExportMixin) | null;
   let svgBase64 = '';
-  try {
-    const exportable = node as unknown as { exportAsync(s: { format: 'SVG' }): Promise<Uint8Array> };
-    const bytes = await exportable.exportAsync({ format: 'SVG' });
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    svgBase64 = btoa(binary);
-    console.log('[DG] SVG export OK, length:', svgBase64.length);
-  } catch (e) {
-    console.error('[DG] exportAsync error:', (e as Error).message, '| node type:', node.type);
-    send({ type: 'ERROR', message: `exportAsync (${node.type}): ${(e as Error).message}` });
+  if (exportNode && 'exportAsync' in exportNode) {
+    for (const fmt of ['SVG', 'PNG'] as const) {
+      try {
+        const bytes: Uint8Array = await exportNode.exportAsync({ format: fmt });
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        svgBase64 = btoa(binary);
+        console.log(`[DG] ${fmt} export OK, length:`, svgBase64.length);
+        break;
+      } catch (e) {
+        console.warn(`[DG] ${fmt} export failed:`, (e as Error).message, (e as Error).stack);
+      }
+    }
+  } else {
+    console.warn('[DG] Node has no exportAsync:', node.type);
   }
 
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64, nodeId: node.id });
