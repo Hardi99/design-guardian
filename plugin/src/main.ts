@@ -2,43 +2,31 @@
 // Accès exclusif à l'API Figma. Communication UI via postMessage uniquement.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { showUI } from '@create-figma-plugin/utilities';
-import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaSnapshot } from './types.js';
+import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaSnapshot } from './types';
 
-const STORAGE_KEY = 'api_key';
+figma.showUI(__html__, { width: 400, height: 600 });
 
-export default function () {
-  showUI({ width: 400, height: 600 });
+// Send Figma file identity — UI calls auto-init with this
+send({ type: 'FILE_INFO', fileKey: figma.fileKey ?? figma.root.id, fileName: figma.root.name });
 
-  // Identity from Figma — no separate login needed
-  const user = figma.currentUser;
-  if (user) {
-    send({ type: 'AUTHOR_INFO', author: {
-      figma_id: user.id ?? 'unknown',
-      name: user.name ?? 'Anonyme',
-      avatar_url: user.photoUrl ?? undefined,
-    }});
-  }
-
-  figma.clientStorage.getAsync(STORAGE_KEY).then((key) => {
-    send({ type: 'KEY_LOADED', key: (key as string | null) ?? null });
-  });
-
-  figma.ui.onmessage = async (raw: unknown) => {
-    const msg = raw as UIToMain;
-    switch (msg.type) {
-      case 'REQUEST_SNAPSHOT': await handleSnapshot(); break;
-      case 'SAVE_KEY':         await figma.clientStorage.setAsync(STORAGE_KEY, msg.key); break;
-      case 'LOAD_KEY': {
-        const key = await figma.clientStorage.getAsync(STORAGE_KEY);
-        send({ type: 'KEY_LOADED', key: (key as string | null) ?? null });
-        break;
-      }
-      case 'OPEN_EXTERNAL': figma.openExternal(msg.url); break;
-      case 'RESIZE':        figma.ui.resize(msg.width, msg.height); break;
-    }
-  };
+// Attribution — no login needed
+const user = figma.currentUser;
+if (user) {
+  send({ type: 'AUTHOR_INFO', author: {
+    figma_id: user.id ?? 'unknown',
+    name: user.name ?? 'Anonyme',
+    avatar_url: user.photoUrl ?? undefined,
+  }});
 }
+
+figma.ui.onmessage = async (raw: unknown) => {
+  const msg = raw as UIToMain;
+  switch (msg.type) {
+    case 'REQUEST_SNAPSHOT': await handleSnapshot(); break;
+    case 'OPEN_EXTERNAL':    figma.openExternal(msg.url); break;
+    case 'RESIZE':           figma.ui.resize(msg.width, msg.height); break;
+  }
+};
 
 async function handleSnapshot(): Promise<void> {
   const [node] = figma.currentPage.selection;

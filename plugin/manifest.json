@@ -5,12 +5,18 @@
   ],
   "id": "design-guardian-dev",
   "name": "Design Guardian",
-  "main": "build/main.js",
-  "ui": "build/ui.js",
+  "main": "dist/main.js",
+  "ui": "dist/index.html",
+  "permissions": [
+    "currentuser"
+  ],
   "networkAccess": {
     "allowedDomains": [
-      "https://design-guardian.up.railway.app",
-      "http://localhost:3000"
-    ]
+      "https://design-guardian.up.railway.app"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:3001"
+    ],
+    "reasoning": "Design Guardian sends design snapshots to its backend API to compute geometric diffs, generate AI patch notes, and store version history."
   }
 }
