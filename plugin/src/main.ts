@@ -43,7 +43,9 @@ async function handleSnapshot(): Promise<void> {
   let svgBase64 = '';
   try {
     const bytes = await node.exportAsync({ format: 'SVG' });
-    svgBase64 = btoa(String.fromCharCode(...bytes));
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    svgBase64 = btoa(binary);
   } catch { /* graceful degradation — diff still works */ }
 
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64, nodeId: node.id });

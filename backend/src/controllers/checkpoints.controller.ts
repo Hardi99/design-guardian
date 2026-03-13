@@ -59,8 +59,11 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     const path = `${projectId}/${body.asset_id}/${body.branch_name}/v${nextVersion}.svg`;
     const { error } = await supabase.storage
       .from('design-guardian')
-      .upload(path, Buffer.from(body.svg_base64, 'base64'), { contentType: 'image/svg+xml', upsert: false });
-    if (!error) storagePath = path;
+      .upload(path, Buffer.from(body.svg_base64, 'base64'), { contentType: 'image/svg+xml', upsert: true });
+    if (error) console.error('[SVG upload error]', error.message);
+    else storagePath = path;
+  } else {
+    console.warn('[SVG] no svg_base64 received for version', nextVersion);
   }
 
   // 5. Insert version
