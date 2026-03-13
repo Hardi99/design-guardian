@@ -2,37 +2,23 @@
   "name": "design-guardian-plugin",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "build-figma-plugin --typecheck",
-    "watch": "build-figma-plugin --typecheck --watch",
+    "build": "vite build && vite build --config vite.main.config.ts",
+    "dev": "vite build --watch & vite build --config vite.main.config.ts --watch",
     "typecheck": "tsc --noEmit"
   },
-  "figma-plugin": {
-    "name": "Design Guardian",
-    "id": "design-guardian-dev",
-    "api": "1.0.0",
-    "main": "src/main.ts",
-    "ui": "src/ui.tsx",
-    "editorType": [
-      "figma"
-    ],
-    "networkAccess": {
-      "allowedDomains": [
-        "https://design-guardian.up.railway.app",
-        "http://localhost:3000"
-      ]
-    }
-  },
   "dependencies": {
-    "@create-figma-plugin/utilities": "^3.0.0",
     "preact": "^10.24.0"
   },
   "devDependencies": {
-    "@create-figma-plugin/build": "^3.0.0",
     "@figma/plugin-typings": "^1.101.0",
+    "@preact/preset-vite": "^2.10.3",
+    "@tailwindcss/vite": "^4.2.1",
     "@types/node": "^22.0.0",
-    "autoprefixer": "^10.4.27",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vite": "^7.3.1",
+    "vite-plugin-singlefile": "^2.3.0"
   }
 }

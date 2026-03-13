@@ -12,6 +12,18 @@ export type CreateProjectRequest = z.infer<typeof createProjectSchema>;
 export interface ProjectResponse       { project: Project }
 export interface ProjectsListResponse  { projects: Project[] }
 
+// ── Auto-init (plugin — no auth, identified by Figma file key) ────────────────
+
+export const autoInitSchema = z.object({
+  figma_file_key: z.string().min(1),
+  figma_file_name: z.string().min(1).max(200),
+});
+export type AutoInitRequest = z.infer<typeof autoInitSchema>;
+export interface AutoInitResponse {
+  api_key: string;
+  project: { id: string; name: string; plan: string };
+}
+
 // ── Assets (plugin) ───────────────────────────────────────────────────────────
 
 export const createAssetSchema = z.object({

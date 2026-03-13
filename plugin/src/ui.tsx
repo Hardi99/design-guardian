@@ -16,7 +16,7 @@ interface Version {
   ai_summary: string | null; created_at: string;
   author_name: string | null; author_avatar_url: string | null;
 }
-type Screen = 'loading' | 'setup' | 'assets' | 'home' | 'checkpoint';
+type Screen = 'loading' | 'assets' | 'home' | 'checkpoint';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,100 +52,73 @@ function App() {
   const [branch, setBranch]     = useState('main');
   const [snapshot, setSnapshot] = useState<FigmaSnapshot | null>(null);
   const [svg, setSvg]           = useState('');
+  const [initErr, setInitErr]   = useState<string | null>(null);
 
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
+    const handler = async (e: MessageEvent) => {
       const msg = e.data.pluginMessage as MainToUI;
       if (!msg) return;
       switch (msg.type) {
-        case 'KEY_LOADED':     setApiKey(msg.key); setScreen(msg.key ? 'assets' : 'setup'); break;
+        case 'FILE_INFO': {
+          try {
+            const data = await fetch(`${API_BASE}/api/projects/auto-init`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: msg.fileName }),
+            }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string } };
+            setApiKey(data.api_key);
+            setScreen('assets');
+          } catch {
+            setInitErr('Impossible de joindre le serveur.');
+          }
+          break;
+        }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot); setSvg(msg.svgBase64); setScreen('checkpoint'); break;
         case 'ERROR':          console.error('[DG]', msg.message); break;
       }
     };
     window.addEventListener('message', handler);
-    send({ type: 'LOAD_KEY' });
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const saveKey = useCallback((key: string) => {
-    setApiKey(key); send({ type: 'SAVE_KEY', key }); setScreen('assets');
-  }, []);
+  if (screen === 'loading') return (
+    <div class="flex flex-col items-center justify-center h-screen bg-gray-950 text-white gap-3">
+      <Spinner />
+      {initErr
+        ? <p class="text-red-400 text-xs text-center px-6">{initErr}</p>
+        : <p class="text-gray-500 text-xs">Connexion au projet…</p>
+      }
+    </div>
+  );
 
-  const logout = useCallback(() => {
-    setApiKey(null); setAsset(null); send({ type: 'SAVE_KEY', key: '' }); setScreen('setup');
-  }, []);
+  if (screen === 'assets') return (
+    <AssetsScreen apiKey={apiKey!} onSelect={a => { setAsset(a); setScreen('home'); }} />
+  );
 
-  if (screen === 'loading')    return <Spinner full />;
-  if (screen === 'setup')      return <SetupScreen onSetup={saveKey} />;
-  if (screen === 'assets')     return <AssetsScreen apiKey={apiKey!} onSelect={a => { setAsset(a); setScreen('home'); }} onLogout={logout} />;
-  if (screen === 'home')       return (
+  if (screen === 'home') return (
     <HomeScreen apiKey={apiKey!} author={author} asset={asset!}
       branch={branch} onBranchChange={setBranch}
       onCapture={() => send({ type: 'REQUEST_SNAPSHOT' })}
-      onChangeAsset={() => setScreen('assets')} onLogout={logout}
+      onChangeAsset={() => setScreen('assets')}
     />
   );
+
   if (screen === 'checkpoint' && snapshot) return (
     <CheckpointScreen apiKey={apiKey!} author={author!} asset={asset!}
       branch={branch} snapshot={snapshot} svgBase64={svg}
       onBack={() => setScreen('home')} onSaved={() => setScreen('home')}
     />
   );
+
   return <Spinner full />;
-}
-
-// ─── Setup (enter project API key) ───────────────────────────────────────────
-
-function SetupScreen({ onSetup }: { onSetup: (key: string) => void }) {
-  const [key, setKey]     = useState('');
-  const [loading, setLoading] = useState(false);
-  const [err, setErr]     = useState<string | null>(null);
-
-  const submit = useCallback(async () => {
-    if (!key.trim()) return;
-    setLoading(true); setErr(null);
-    try {
-      await api(key.trim(), '/api/auth/verify');
-      onSetup(key.trim());
-    } catch (e) { setErr((e as Error).message); }
-    finally { setLoading(false); }
-  }, [key, onSetup]);
-
-  return (
-    <div class="flex flex-col h-screen bg-gray-950 text-white p-6">
-      <Logo />
-      <div class="flex-1 flex flex-col justify-center gap-5">
-        <div>
-          <h1 class="text-lg font-semibold mb-1">Connecter un projet</h1>
-          <p class="text-gray-400 text-xs leading-relaxed">
-            Crée ton projet sur <span class="text-purple-400">design-guardian.app</span> puis colle la clé API ci-dessous. Ton identité Figma est utilisée automatiquement.
-          </p>
-        </div>
-        <button class="btn-secondary text-sm" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.app' })}>
-          Ouvrir design-guardian.app →
-        </button>
-        <div class="flex flex-col gap-1.5">
-          <label class="text-xs text-gray-500 uppercase tracking-wide">Clé API du projet</label>
-          <input class="input" type="password" placeholder="Colle ta clé ici..."
-            value={key} onInput={e => setKey((e.target as HTMLInputElement).value)}
-            onKeyDown={e => e.key === 'Enter' && submit()} />
-          {err && <p class="text-red-400 text-xs">{err}</p>}
-        </div>
-        <button class="btn-primary" onClick={submit} disabled={loading || !key.trim()}>
-          {loading ? 'Vérification...' : 'Connecter'}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
 const ASSET_TYPES = ['ui', 'logo', 'icon', 'packaging', 'illustration', 'other'] as const;
 
-function AssetsScreen({ apiKey, onSelect, onLogout }: { apiKey: string; onSelect: (a: Asset) => void; onLogout: () => void }) {
+function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asset) => void }) {
   const [assets, setAssets]   = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
@@ -174,7 +147,7 @@ function AssetsScreen({ apiKey, onSelect, onLogout }: { apiKey: string; onSelect
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
-      <Topbar label="Choisir un asset" onLogout={onLogout} />
+      <Topbar label="Choisir un asset" />
       <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {loading && <Spinner />}
         {err && <p class="text-red-400 text-xs">{err}</p>}
@@ -187,15 +160,16 @@ function AssetsScreen({ apiKey, onSelect, onLogout }: { apiKey: string; onSelect
         {!loading && (
           <div class="mt-2 flex flex-col gap-2">
             <p class="text-xs text-gray-500 uppercase tracking-wide">Nouvel asset</p>
-            <input class="input" placeholder="Nom de l'asset..." value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
+            <input class="input" placeholder="Nom de l'asset…" value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
             <div class="flex gap-1 flex-wrap">
               {ASSET_TYPES.map(t => (
                 <button key={t} class={`px-2.5 py-1 rounded text-xs transition-colors ${newType === t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setNewType(t)}>{t}</button>
               ))}
             </div>
             <button class="btn-primary" onClick={create} disabled={saving || !newName.trim()}>
-              {saving ? 'Création...' : 'Lier cet élément Figma comme asset'}
+              {saving ? 'Création…' : 'Créer l\'asset'}
             </button>
+            {err && <p class="text-red-400 text-xs">{err}</p>}
           </div>
         )}
       </div>
@@ -208,10 +182,10 @@ function AssetsScreen({ apiKey, onSelect, onLogout }: { apiKey: string; onSelect
 interface HomeProps {
   apiKey: string; author: PluginAuthor | null; asset: Asset;
   branch: string; onBranchChange: (b: string) => void;
-  onCapture: () => void; onChangeAsset: () => void; onLogout: () => void;
+  onCapture: () => void; onChangeAsset: () => void;
 }
 
-function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, onChangeAsset, onLogout }: HomeProps) {
+function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, onChangeAsset }: HomeProps) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [branches, setBranches] = useState<string[]>(['main']);
   const [loading, setLoading]   = useState(true);
@@ -230,7 +204,6 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
-      {/* Topbar */}
       <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 gap-2">
         <button class="flex items-center gap-2 min-w-0" onClick={onChangeAsset} title="Changer d'asset">
           <Logo small />
@@ -239,10 +212,8 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
             {author && <p class="text-xs text-gray-500 truncate">{author.name}</p>}
           </div>
         </button>
-        <button class="text-xs text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0" onClick={onLogout}>Déco</button>
       </div>
 
-      {/* Branch tabs */}
       <div class="flex items-center gap-1.5 px-4 py-2 border-b border-gray-800 overflow-x-auto">
         {branches.map(b => (
           <button key={b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => onBranchChange(b)}>{b}</button>
@@ -261,7 +232,6 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
         />
       </div>
 
-      {/* Timeline */}
       <div class="flex-1 overflow-y-auto">
         {loading && <Spinner />}
         {err && <p class="text-red-400 text-xs p-4">{err}</p>}
@@ -377,7 +347,7 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, 
       </div>
       <div class="p-4 border-t border-gray-800">
         <button class="btn-primary w-full" onClick={save} disabled={loading}>
-          {loading ? 'Sauvegarde...' : 'Save Checkpoint'}
+          {loading ? 'Sauvegarde…' : 'Save Checkpoint'}
         </button>
       </div>
     </div>
@@ -395,12 +365,11 @@ function Logo({ small = false }: { small?: boolean }) {
   );
 }
 
-function Topbar({ label, onBack, onLogout }: { label: string; onBack?: () => void; onLogout?: () => void }) {
+function Topbar({ label, onBack }: { label: string; onBack?: () => void }) {
   return (
     <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-800">
-      {onBack   && <button class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>}
+      {onBack && <button class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>}
       <span class="font-medium text-sm flex-1 truncate">{label}</span>
-      {onLogout && <button class="text-xs text-gray-600 hover:text-gray-300" onClick={onLogout}>Déco</button>}
     </div>
   );
 }
@@ -412,4 +381,4 @@ function Spinner({ full = false }: { full?: boolean }) {
     : <div class="flex justify-center py-6">{inner}</div>;
 }
 
-render(h(App, null), document.getElementById('app')!);
+render(h(App, null), document.body);

@@ -2,11 +2,42 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient } from '../config/supabase.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { createProjectSchema } from '../types/api.js';
-import type { ProjectResponse, ProjectsListResponse, ErrorResponse } from '../types/api.js';
+import { createProjectSchema, autoInitSchema } from '../types/api.js';
+import type { ProjectResponse, ProjectsListResponse, AutoInitResponse, ErrorResponse } from '../types/api.js';
 import type { AppEnv } from '../types/hono.js';
 
 const projectsRouter = new Hono<AppEnv>();
+
+// ── Auto-init (no auth — Figma file key is the identifier) ───────────────────
+projectsRouter.post('/auto-init', zValidator('json', autoInitSchema), async (c) => {
+  const { figma_file_key, figma_file_name } = c.req.valid('json');
+  const db = getSupabaseClient();
+
+  const { data: existing } = await db
+    .from('projects')
+    .select('id, name, plan, api_key')
+    .eq('figma_file_key', figma_file_key)
+    .maybeSingle();
+
+  if (existing) {
+    return c.json<AutoInitResponse>({
+      api_key: existing.api_key,
+      project: { id: existing.id, name: existing.name, plan: existing.plan },
+    });
+  }
+
+  const { data: created, error } = await db
+    .from('projects')
+    .insert({ figma_file_key, name: figma_file_name })
+    .select('id, name, plan, api_key')
+    .single();
+
+  if (error || !created) return c.json<ErrorResponse>({ error: 'Failed to create project', details: error?.message }, 500);
+  return c.json<AutoInitResponse>({
+    api_key: created.api_key,
+    project: { id: created.id, name: created.name, plan: created.plan },
+  }, 201);
+});
 
 projectsRouter.get('/', authMiddleware, async (c) => {
   const { data, error } = await getSupabaseClient()

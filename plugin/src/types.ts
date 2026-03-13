@@ -31,12 +31,10 @@ export interface PluginAuthor {
 export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; svgBase64: string; nodeId: string }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
-  | { type: 'KEY_LOADED'; key: string | null }
+  | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'ERROR'; message: string };
 
 export type UIToMain =
   | { type: 'REQUEST_SNAPSHOT' }
-  | { type: 'SAVE_KEY'; key: string }
-  | { type: 'LOAD_KEY' }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'RESIZE'; width: number; height: number };
