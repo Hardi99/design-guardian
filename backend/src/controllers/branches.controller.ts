@@ -38,6 +38,50 @@ branchesRouter.get('/tree', pluginMiddleware, async (c) => {
 });
 
 /**
+ * GET /api/branches/versions/:id
+ * Returns a single version with snapshot + analysis + signed SVG URLs (current + parent)
+ */
+branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
+  const supabase = getSupabaseClient();
+
+  const { data: version, error } = await supabase
+    .from('versions')
+    .select('*, assets!inner(project_id)')
+    .eq('id', c.req.param('id'))
+    .single();
+
+  if (error || !version) return c.json<ErrorResponse>({ error: 'Version not found' }, 404);
+  if ((version.assets as { project_id: string }).project_id !== c.get('projectId'))
+    return c.json<ErrorResponse>({ error: 'Forbidden' }, 403);
+
+  const { assets: _assets, ...versionData } = version;
+
+  // Signed SVG URLs (1h expiry)
+  const signedUrl = async (path: string | null) => {
+    if (!path) return null;
+    const { data } = await supabase.storage.from('design-guardian').createSignedUrl(path, 3600);
+    return data?.signedUrl ?? null;
+  };
+
+  let prevVersion = null;
+  if (versionData.parent_id) {
+    const { data: prev } = await supabase
+      .from('versions')
+      .select('id, version_number, branch_name, status, author_name, created_at, storage_path, analysis_json, snapshot_json')
+      .eq('id', versionData.parent_id)
+      .single();
+    prevVersion = prev;
+  }
+
+  const [svgUrl, prevSvgUrl] = await Promise.all([
+    signedUrl(versionData.storage_path),
+    signedUrl(prevVersion?.storage_path ?? null),
+  ]);
+
+  return c.json({ version: versionData, prev_version: prevVersion, svg_url: svgUrl, prev_svg_url: prevSvgUrl });
+});
+
+/**
  * PUT /api/branches/versions/:id/status
  * Update version status: draft | review | approved
  */
