@@ -11,12 +11,15 @@ const API_BASE = 'https://design-guardian.up.railway.app';
 
 interface Asset { id: string; name: string; asset_type: string }
 interface Version {
-  id: string; version_number: number; branch_name: string;
+  id: string; version_number: number; branch_name: string; parent_id: string | null;
   status: 'draft' | 'review' | 'approved';
   ai_summary: string | null; created_at: string;
   author_name: string | null; author_avatar_url: string | null;
 }
-type Screen = 'loading' | 'assets' | 'home' | 'checkpoint';
+interface PropertyChange { property: string; oldValue: unknown; newValue: unknown; delta?: string }
+interface NodeDelta { nodeId: string; nodeName: string; nodeType: string; changes: PropertyChange[] }
+interface DeltaJSON { modified: NodeDelta[]; added: NodeDelta[]; removed: NodeDelta[]; totalChanges: number }
+type Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,8 +29,8 @@ async function api<T>(key: string, path: string, opts?: RequestInit): Promise<T>
     headers: { 'X-API-Key': key, 'Content-Type': 'application/json', ...(opts?.headers ?? {}) },
   });
   if (!res.ok) {
-    const { error } = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error: string };
-    throw new Error(error);
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error: string; details?: string };
+    throw new Error(body.details ? `${body.error}: ${body.details}` : body.error);
   }
   return res.json() as Promise<T>;
 }
@@ -49,6 +52,7 @@ function App() {
   const [apiKey, setApiKey]     = useState<string | null>(null);
   const [author, setAuthor]     = useState<PluginAuthor | null>(null);
   const [asset, setAsset]       = useState<Asset | null>(null);
+  const [diffVersion, setDiffVersion] = useState<Version | null>(null);
   const [branch, setBranch]     = useState('main');
   const [snapshot, setSnapshot] = useState<FigmaSnapshot | null>(null);
   const [svg, setSvg]           = useState('');
@@ -101,6 +105,13 @@ function App() {
       branch={branch} onBranchChange={setBranch}
       onCapture={() => send({ type: 'REQUEST_SNAPSHOT' })}
       onChangeAsset={() => setScreen('assets')}
+      onOpenDiff={v => { setDiffVersion(v); setScreen('diff'); }}
+    />
+  );
+
+  if (screen === 'diff' && diffVersion) return (
+    <DiffScreen apiKey={apiKey!} version={diffVersion}
+      onBack={() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }}
     />
   );
 
@@ -182,10 +193,10 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
 interface HomeProps {
   apiKey: string; author: PluginAuthor | null; asset: Asset;
   branch: string; onBranchChange: (b: string) => void;
-  onCapture: () => void; onChangeAsset: () => void;
+  onCapture: () => void; onChangeAsset: () => void; onOpenDiff: (v: Version) => void;
 }
 
-function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, onChangeAsset }: HomeProps) {
+function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, onChangeAsset, onOpenDiff }: HomeProps) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [branches, setBranches] = useState<string[]>(['main']);
   const [loading, setLoading]   = useState(true);
@@ -244,7 +255,7 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
         {visible.length > 0 && (
           <div class="relative px-4 py-3">
             <div class="absolute left-7 top-0 bottom-0 w-px bg-gray-800" />
-            {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} />)}
+            {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} onClick={() => onOpenDiff(v)} />)}
           </div>
         )}
       </div>
@@ -256,10 +267,10 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
   );
 }
 
-function VersionRow({ v }: { v: Version }) {
+function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
   const dot = { approved: 'bg-green-500', review: 'bg-amber-500', draft: 'bg-gray-600' }[v.status];
   return (
-    <div class="flex items-start gap-3 py-3">
+    <div class={`flex items-start gap-3 py-3 ${onClick ? 'cursor-pointer hover:bg-gray-900/50 rounded-lg px-1 -mx-1 transition-colors' : ''}`} onClick={onClick}>
       <div class="relative z-10 flex-shrink-0 mt-1.5">
         <div class={`w-2.5 h-2.5 rounded-full border-2 border-gray-950 ${dot}`} />
       </div>
@@ -350,6 +361,151 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, 
           {loading ? 'Sauvegarde…' : 'Save Checkpoint'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Diff Viewer ──────────────────────────────────────────────────────────────
+
+interface DiffData {
+  version: Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null };
+  prev_version: (Version & { snapshot_json: unknown }) | null;
+  svg_url: string | null;
+  prev_svg_url: string | null;
+}
+
+function DiffScreen({ apiKey, version, onBack }: { apiKey: string; version: Version; onBack: () => void }) {
+  const [data, setData]         = useState<DiffData | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [err, setErr]           = useState<string | null>(null);
+  const [mode, setMode]         = useState<'split' | 'overlay'>('split');
+  const [opacity, setOpacity]   = useState(0.5);
+
+  useEffect(() => {
+    send({ type: 'RESIZE', width: 820, height: 640 });
+    api<DiffData>(apiKey, `/api/branches/versions/${version.id}`)
+      .then(setData)
+      .catch(e => setErr((e as Error).message))
+      .finally(() => setLoading(false));
+  }, [apiKey, version.id]);
+
+  const delta = data?.version.analysis_json;
+  const hasPrev = !!data?.prev_version;
+
+  return (
+    <div class="flex flex-col h-screen bg-gray-950 text-white">
+      {/* Header */}
+      <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-800 flex-shrink-0">
+        <button class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>
+        <span class="font-medium text-sm flex-1">
+          v{version.version_number}
+          <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
+        </span>
+        {version.author_name && <span class="text-xs text-gray-500">{version.author_name}</span>}
+        {hasPrev && (
+          <div class="flex gap-1">
+            <button class={`px-2.5 py-1 rounded text-xs transition-colors ${mode === 'split' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('split')}>Split</button>
+            <button class={`px-2.5 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('overlay')}>Overlay</button>
+          </div>
+        )}
+      </div>
+
+      {loading && <Spinner full />}
+      {err    && <p class="text-red-400 text-xs p-4">{err}</p>}
+
+      {data && (
+        <div class="flex flex-1 overflow-hidden">
+          {/* Visual panel */}
+          <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden">
+            {!hasPrev ? (
+              <div class="flex-1 flex flex-col items-center justify-center gap-2 p-4">
+                {data.svg_url
+                  ? <img src={data.svg_url} alt="v1" class="max-h-full max-w-full object-contain" />
+                  : <p class="text-gray-500 text-xs">Première version — pas de diff disponible</p>
+                }
+              </div>
+            ) : mode === 'split' ? (
+              <div class="flex flex-1 overflow-hidden">
+                <div class="flex-1 flex flex-col items-center justify-center border-r border-gray-800 p-3 gap-2 overflow-hidden">
+                  <p class="text-xs text-gray-600 font-mono">v{data.prev_version!.version_number} — avant</p>
+                  {data.prev_svg_url
+                    ? <img src={data.prev_svg_url} alt="avant" class="max-h-full max-w-full object-contain" />
+                    : <p class="text-gray-600 text-xs">Pas de visuel</p>
+                  }
+                </div>
+                <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
+                  <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
+                  {data.svg_url
+                    ? <img src={data.svg_url} alt="après" class="max-h-full max-w-full object-contain" />
+                    : <p class="text-gray-600 text-xs">Pas de visuel</p>
+                  }
+                </div>
+              </div>
+            ) : (
+              <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
+                {data.svg_url     && <img src={data.svg_url}      alt="après" class="absolute inset-0 w-full h-full object-contain p-4" style={{ opacity: 1 }} />}
+                {data.prev_svg_url && <img src={data.prev_svg_url} alt="avant" class="absolute inset-0 w-full h-full object-contain p-4" style={{ opacity: 1 - opacity }} />}
+                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
+                  <span class="text-xs text-gray-500">avant</span>
+                  <input type="range" min={0} max={1} step={0.01} value={opacity}
+                    onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                    class="w-24 accent-purple-500" />
+                  <span class="text-xs text-gray-500">après</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Smart Data panel */}
+          <div class="w-72 flex flex-col overflow-y-auto">
+            <div class="px-4 py-3 border-b border-gray-800">
+              <p class="text-xs font-semibold text-gray-300">Smart Data</p>
+              {delta && <p class="text-xs text-gray-600 mt-0.5">{delta.totalChanges} modification(s)</p>}
+            </div>
+
+            {!delta && <p class="text-xs text-gray-600 p-4">Première version — aucune diff.</p>}
+
+            {delta && delta.totalChanges === 0 && (
+              <p class="text-xs text-gray-500 p-4">Aucune modification détectée.</p>
+            )}
+
+            {delta && [...delta.modified, ...delta.added, ...delta.removed].map(node => (
+              <div key={node.nodeId} class="px-4 py-3 border-b border-gray-800/50">
+                <p class="text-xs font-medium text-gray-200 mb-2 truncate" title={node.nodeName}>
+                  {node.nodeName}
+                  <span class="text-gray-600 font-mono ml-1 text-[10px]">{node.nodeType}</span>
+                </p>
+                {node.changes.map((ch, i) => (
+                  <div key={i} class="flex items-start gap-2 py-0.5">
+                    <span class="text-[10px] font-mono text-gray-500 w-24 flex-shrink-0 truncate" title={ch.property}>{ch.property}</span>
+                    <span class="text-[10px] text-purple-400 font-mono leading-tight">
+                      {ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {delta && delta.added.length > 0 && (
+              <div class="px-4 py-2">
+                <p class="text-[10px] text-green-500 font-semibold uppercase tracking-wide">{delta.added.length} ajout(s)</p>
+              </div>
+            )}
+            {delta && delta.removed.length > 0 && (
+              <div class="px-4 py-2">
+                <p class="text-[10px] text-red-400 font-semibold uppercase tracking-wide">{delta.removed.length} suppression(s)</p>
+              </div>
+            )}
+
+            {version.ai_summary && (
+              <div class="px-4 py-3 mt-auto border-t border-gray-800">
+                <p class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">IA</p>
+                <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
