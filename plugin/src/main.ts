@@ -46,7 +46,9 @@ async function handleSnapshot(): Promise<void> {
     let binary = '';
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
     svgBase64 = btoa(binary);
-  } catch { /* graceful degradation — diff still works */ }
+  } catch (e) {
+    send({ type: 'ERROR', message: `exportAsync: ${(e as Error).message}` });
+  }
 
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64, nodeId: node.id });
 }
