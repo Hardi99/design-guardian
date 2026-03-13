@@ -8,8 +8,7 @@
   "main": "dist/main.js",
   "ui": "dist/index.html",
   "permissions": [
-    "currentuser",
-    "exportData"
+    "currentuser"
   ],
   "networkAccess": {
     "allowedDomains": [
