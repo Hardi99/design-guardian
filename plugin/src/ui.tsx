@@ -20,6 +20,7 @@ interface PropertyChange { property: string; oldValue: unknown; newValue: unknow
 interface NodeDelta { nodeId: string; nodeName: string; nodeType: string; changes: PropertyChange[] }
 interface DeltaJSON { modified: NodeDelta[]; added: NodeDelta[]; removed: NodeDelta[]; totalChanges: number }
 type Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff';
+type Plan = 'free' | 'pro' | 'team';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ function timeAgo(iso: string): string {
 function App() {
   const [screen, setScreen]     = useState<Screen>('loading');
   const [apiKey, setApiKey]     = useState<string | null>(null);
+  const [plan, setPlan]         = useState<Plan>('free');
   const [author, setAuthor]     = useState<PluginAuthor | null>(null);
   const [asset, setAsset]       = useState<Asset | null>(null);
   const [diffVersion, setDiffVersion] = useState<Version | null>(null);
@@ -71,6 +73,7 @@ function App() {
               body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: msg.fileName }),
             }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string } };
             setApiKey(data.api_key);
+            setPlan((data.project.plan as Plan) ?? 'free');
             setScreen('assets');
           } catch {
             setInitErr('Impossible de joindre le serveur.');
@@ -101,7 +104,7 @@ function App() {
   );
 
   if (screen === 'home') return (
-    <HomeScreen apiKey={apiKey!} author={author} asset={asset!}
+    <HomeScreen apiKey={apiKey!} author={author} asset={asset!} plan={plan}
       branch={branch} onBranchChange={setBranch}
       onCapture={() => send({ type: 'REQUEST_SNAPSHOT' })}
       onChangeAsset={() => setScreen('assets')}
@@ -110,8 +113,9 @@ function App() {
   );
 
   if (screen === 'diff' && diffVersion) return (
-    <DiffScreen apiKey={apiKey!} version={diffVersion}
+    <DiffScreen apiKey={apiKey!} version={diffVersion} author={author} asset={asset!} branch={branch} plan={plan}
       onBack={() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }}
+      onRestored={() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }}
     />
   );
 
@@ -191,12 +195,12 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
 // ─── Home (Timeline) ──────────────────────────────────────────────────────────
 
 interface HomeProps {
-  apiKey: string; author: PluginAuthor | null; asset: Asset;
+  apiKey: string; author: PluginAuthor | null; asset: Asset; plan: Plan;
   branch: string; onBranchChange: (b: string) => void;
   onCapture: () => void; onChangeAsset: () => void; onOpenDiff: (v: Version) => void;
 }
 
-function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, onChangeAsset, onOpenDiff }: HomeProps) {
+function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCapture, onChangeAsset, onOpenDiff }: HomeProps) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [branches, setBranches] = useState<string[]>(['main']);
   const [loading, setLoading]   = useState(true);
@@ -223,6 +227,11 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
             {author && <p class="text-xs text-gray-500 truncate">{author.name}</p>}
           </div>
         </button>
+        <span class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 ${
+          plan === 'team' ? 'bg-purple-500/20 text-purple-400' :
+          plan === 'pro'  ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-gray-800 text-gray-500'
+        }`}>{plan}</span>
       </div>
 
       <div class="flex items-center gap-1.5 px-4 py-2 border-b border-gray-800 overflow-x-auto">
@@ -260,8 +269,13 @@ function HomeScreen({ apiKey, author, asset, branch, onBranchChange, onCapture, 
         )}
       </div>
 
-      <div class="p-4 border-t border-gray-800">
-        <button class="btn-primary w-full" onClick={onCapture}>Capturer un checkpoint</button>
+      <div class="p-4 border-t border-gray-800 flex flex-col gap-2">
+        {plan === 'free' && versions.length >= 10 && (
+          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer">Passer à Pro</span></p>
+        )}
+        <button class="btn-primary w-full" onClick={onCapture} disabled={plan === 'free' && versions.length >= 10}>
+          Capturer un checkpoint
+        </button>
       </div>
     </div>
   );
@@ -374,12 +388,21 @@ interface DiffData {
   prev_svg_url: string | null;
 }
 
-function DiffScreen({ apiKey, version, onBack }: { apiKey: string; version: Version; onBack: () => void }) {
-  const [data, setData]         = useState<DiffData | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [err, setErr]           = useState<string | null>(null);
-  const [mode, setMode]         = useState<'split' | 'overlay'>('split');
-  const [opacity, setOpacity]   = useState(0.5);
+interface DiffScreenProps {
+  apiKey: string; version: Version; author: PluginAuthor | null;
+  asset: Asset; branch: string; plan: Plan;
+  onBack: () => void; onRestored: () => void;
+}
+
+function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRestored }: DiffScreenProps) {
+  const [data, setData]           = useState<DiffData | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [err, setErr]             = useState<string | null>(null);
+  const [mode, setMode]           = useState<'split' | 'overlay'>('split');
+  const [opacity, setOpacity]     = useState(0.5);
+  const [status, setStatus]       = useState(version.status);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
@@ -389,23 +412,72 @@ function DiffScreen({ apiKey, version, onBack }: { apiKey: string; version: Vers
       .finally(() => setLoading(false));
   }, [apiKey, version.id]);
 
+  const cycleStatus = useCallback(async () => {
+    const next: Version['status'] = status === 'draft' ? 'review' : status === 'review' ? 'approved' : 'draft';
+    setStatusBusy(true);
+    try {
+      await api(apiKey, `/api/branches/versions/${version.id}/status`, {
+        method: 'PUT', body: JSON.stringify({ status: next }),
+      });
+      setStatus(next);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setStatusBusy(false); }
+  }, [apiKey, version.id, status]);
+
+  const restore = useCallback(async () => {
+    if (!data || !author) return;
+    setRestoring(true);
+    try {
+      await api(apiKey, '/api/checkpoints', {
+        method: 'POST',
+        body: JSON.stringify({
+          asset_id: asset.id,
+          branch_name: branch,
+          figma_node_id: (data.version.snapshot_json as FigmaSnapshot)?.figmaNodeId ?? null,
+          snapshot_json: data.version.snapshot_json,
+          svg_base64: undefined,
+          author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
+        }),
+      });
+      onRestored();
+    } catch (e) { setErr((e as Error).message); setRestoring(false); }
+  }, [apiKey, data, author, asset.id, branch, onRestored]);
+
   const delta = data?.version.analysis_json;
   const hasPrev = !!data?.prev_version;
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       {/* Header */}
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-800 flex-shrink-0">
-        <button class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>
-        <span class="font-medium text-sm flex-1">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-800 flex-shrink-0">
+        <button class="text-gray-500 hover:text-white text-sm flex-shrink-0" onClick={onBack}>←</button>
+        <span class="font-medium text-sm flex-1 truncate">
           v{version.version_number}
           <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
         </span>
-        {version.author_name && <span class="text-xs text-gray-500">{version.author_name}</span>}
+        {/* Status toggle */}
+        <button
+          onClick={cycleStatus} disabled={statusBusy}
+          class={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 transition-colors ${
+            status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
+            status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :
+                                    'bg-gray-800 text-gray-500 hover:bg-gray-700'
+          }`}
+        >
+          {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
+        </button>
+        {/* Restore */}
+        {data && (
+          <button onClick={restore} disabled={restoring}
+            class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
+            title="Créer un nouveau checkpoint depuis cette version">
+            {restoring ? '…' : '↩ Restore'}
+          </button>
+        )}
         {hasPrev && (
-          <div class="flex gap-1">
-            <button class={`px-2.5 py-1 rounded text-xs transition-colors ${mode === 'split' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('split')}>Split</button>
-            <button class={`px-2.5 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('overlay')}>Overlay</button>
+          <div class="flex gap-1 flex-shrink-0">
+            <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'split' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('split')}>Split</button>
+            <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('overlay')}>Overlay</button>
           </div>
         )}
       </div>
