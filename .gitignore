@@ -26,3 +26,11 @@ nul
 # Logs
 *.log
 npm-debug.log*
+
+# Images
+*.png
+
+PROSPECT.md
+DB_BILAN.md
+QUESTIONS.md
+CLAUDE.md
