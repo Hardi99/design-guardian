@@ -161,7 +161,3 @@ Le plugin est déployé en production et doit rester stable face aux évolutions
 - **Gestion des incidents** : retry x2 sur `exportAsync`, fallback SVG depuis `snapshot_json`, patch note "en attente" si OpenAI indisponible
 
 ---
-
-## Auteur
-
-**Hardi** — [GitHub](https://github.com/Hardi99)
