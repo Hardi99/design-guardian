@@ -91,9 +91,10 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
 
 export function generateSvgFromSnapshot(snapshot: FigmaSnapshot): string {
   const root = snapshot.root;
-  const w = r2(root.width);
-  const h = r2(root.height);
-  // Render root at (0,0) by passing its own position as parent reference
-  const content = renderNode(root, root.x, root.y);
+  const pad  = r2((root.strokeWeight ?? 0) / 2);
+  const w    = r2(root.width  + pad * 2);
+  const h    = r2(root.height + pad * 2);
+  // Render root at (0,0) with padding so strokes aren't clipped
+  const content = renderNode(root, r2(root.x - pad), r2(root.y - pad));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">\n${content}\n</svg>`;
 }
