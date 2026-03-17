@@ -41,7 +41,7 @@ async function handleSnapshot(): Promise<void> {
   };
 
   // SVG is reconstructed server-side from snapshot_json — no exportAsync needed
-  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, svgBase64: '', nodeId: node.id });
+  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id });
 }
 
 // ─── Snapshot extraction (native Figma properties — source of truth for diff) ─

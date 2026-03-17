@@ -76,7 +76,6 @@ export const createCheckpointSchema = z.object({
   asset_id: z.string().uuid(),
   branch_name: z.string().min(1).max(100).default('main'),
   snapshot_json: figmaSnapshotSchema,
-  svg_base64: z.string().optional(),
   figma_node_id: z.string().optional(),
   author: z.object({
     figma_id: z.string(),
