@@ -9,7 +9,6 @@ import { createCheckpointSchema } from '../types/api.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
-import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
 
 const checkpointsRouter = new Hono<ProjectEnv>();
 const diffService = new DiffService();
@@ -54,32 +53,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       : 'Aucune modification détectée.';
   }
 
-  // 4. Store SVG in Supabase Storage (display only, non-blocking)
-  let storagePath: string | null = null;
-  const svgBase64: string | null = body.svg_base64
-    ? body.svg_base64
-    : (() => {
-        try {
-          const svgString = generateSvgFromSnapshot(body.snapshot_json as FigmaSnapshot);
-          return Buffer.from(svgString).toString('base64');
-        } catch (err) {
-          console.warn('[SVG fallback generation failed]', err);
-          return null;
-        }
-      })();
-
-  if (svgBase64) {
-    const path = `${projectId}/${body.asset_id}/${body.branch_name}/v${nextVersion}.svg`;
-    const { error } = await supabase.storage
-      .from('design-guardian')
-      .upload(path, Buffer.from(svgBase64, 'base64'), { contentType: 'image/svg+xml', upsert: true });
-    if (error) console.error('[SVG upload error]', error.message);
-    else storagePath = path;
-  } else {
-    console.warn('[SVG] no svg available for version', nextVersion);
-  }
-
-  // 5. Insert version
+  // 4. Insert version
   const { data: version, error: versionError } = await supabase
     .from('versions')
     .insert({
@@ -92,7 +66,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       author_avatar_url: body.author.avatar_url ?? null,
       figma_node_id: body.figma_node_id ?? null,
       snapshot_json: body.snapshot_json,
-      storage_path: storagePath,
+      storage_path: null,
       analysis_json: analysisJson,
       ai_summary: aiSummary,
     })

@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import { getSupabaseClient } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
+import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
+import type { FigmaSnapshot } from '../types/figma.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
 
@@ -56,29 +58,28 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
   const { assets: _assets, ...versionData } = version;
 
-  // Signed SVG URLs (1h expiry)
-  const signedUrl = async (path: string | null) => {
-    if (!path) return null;
-    const { data } = await supabase.storage.from('design-guardian').createSignedUrl(path, 3600);
-    return data?.signedUrl ?? null;
+  // Generate SVG inline from snapshot_json — no storage needed
+  const toSvgB64 = (snapshot: unknown): string | null => {
+    try {
+      const svg = generateSvgFromSnapshot(snapshot as FigmaSnapshot);
+      return Buffer.from(svg).toString('base64');
+    } catch { return null; }
   };
 
   let prevVersion = null;
   if (versionData.parent_id) {
     const { data: prev } = await supabase
       .from('versions')
-      .select('id, version_number, branch_name, status, author_name, created_at, storage_path, analysis_json, snapshot_json')
+      .select('id, version_number, branch_name, status, author_name, created_at, analysis_json, snapshot_json')
       .eq('id', versionData.parent_id)
       .single();
     prevVersion = prev;
   }
 
-  const [svgUrl, prevSvgUrl] = await Promise.all([
-    signedUrl(versionData.storage_path),
-    signedUrl(prevVersion?.storage_path ?? null),
-  ]);
+  const svgB64     = toSvgB64(versionData.snapshot_json);
+  const prevSvgB64 = prevVersion ? toSvgB64(prevVersion.snapshot_json) : null;
 
-  return c.json({ version: versionData, prev_version: prevVersion, svg_url: svgUrl, prev_svg_url: prevSvgUrl });
+  return c.json({ version: versionData, prev_version: prevVersion, svg_b64: svgB64, prev_svg_b64: prevSvgB64 });
 });
 
 /**
