@@ -57,7 +57,6 @@ function App() {
   const [diffVersion, setDiffVersion] = useState<Version | null>(null);
   const [branch, setBranch]     = useState('main');
   const [snapshot, setSnapshot] = useState<FigmaSnapshot | null>(null);
-  const [svg, setSvg]           = useState('');
   const [initErr, setInitErr]   = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,7 +80,7 @@ function App() {
           break;
         }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
-        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot); setSvg(msg.svgBase64); setScreen('checkpoint'); break;
+        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot); setScreen('checkpoint'); break;
         case 'ERROR':          alert(`[DG] ${msg.message}`); break;
       }
     };
@@ -121,7 +120,7 @@ function App() {
 
   if (screen === 'checkpoint' && snapshot) return (
     <CheckpointScreen apiKey={apiKey!} author={author!} asset={asset!}
-      branch={branch} snapshot={snapshot} svgBase64={svg}
+      branch={branch} snapshot={snapshot}
       onBack={() => setScreen('home')} onSaved={() => setScreen('home')}
     />
   );
@@ -306,11 +305,11 @@ function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
 
 interface CpProps {
   apiKey: string; author: PluginAuthor; asset: Asset; branch: string;
-  snapshot: FigmaSnapshot; svgBase64: string;
+  snapshot: FigmaSnapshot;
   onBack: () => void; onSaved: () => void;
 }
 
-function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, onBack, onSaved }: CpProps) {
+function CheckpointScreen({ apiKey, author, asset, branch, snapshot, onBack, onSaved }: CpProps) {
   const [branchName, setBranchName] = useState(branch);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved]     = useState<{ summary: string | null; changes: number } | null>(null);
@@ -327,7 +326,6 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, 
             branch_name: branchName.trim() || 'main',
             figma_node_id: snapshot.figmaNodeId,
             snapshot_json: snapshot,
-            svg_base64: svgBase64 || undefined,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
           }),
         }
@@ -335,7 +333,7 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, 
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0 });
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
-  }, [apiKey, asset.id, branchName, snapshot, svgBase64, author]);
+  }, [apiKey, asset.id, branchName, snapshot, author]);
 
   if (saved) return (
     <div class="flex flex-col h-screen bg-gray-950 text-white p-6">
@@ -359,11 +357,6 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, svgBase64, 
           <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
           <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
         </div>
-        {svgBase64 && (
-          <div class="bg-gray-900 rounded-lg border border-gray-800 p-3 flex justify-center" style={{ minHeight: '90px' }}>
-            <img src={`data:image/svg+xml;base64,${svgBase64}`} alt="" class="max-h-24 max-w-full object-contain" />
-          </div>
-        )}
         <div>
           <label class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>
           <input class="input mt-1" placeholder="main" value={branchName} onInput={e => setBranchName((e.target as HTMLInputElement).value)} />
@@ -435,7 +428,6 @@ function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRe
           branch_name: branch,
           figma_node_id: (data.version.snapshot_json as FigmaSnapshot)?.figmaNodeId ?? null,
           snapshot_json: data.version.snapshot_json,
-          svg_base64: undefined,
           author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
         }),
       });

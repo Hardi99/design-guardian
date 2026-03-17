@@ -29,7 +29,7 @@ export interface PluginAuthor {
 // ─── Messages main.ts ↔ ui.tsx ───────────────────────────────────────────────
 
 export type MainToUI =
-  | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; svgBase64: string; nodeId: string }
+  | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'ERROR'; message: string };

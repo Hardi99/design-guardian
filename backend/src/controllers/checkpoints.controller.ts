@@ -66,7 +66,6 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       author_avatar_url: body.author.avatar_url ?? null,
       figma_node_id: body.figma_node_id ?? null,
       snapshot_json: body.snapshot_json,
-      storage_path: null,
       analysis_json: analysisJson,
       ai_summary: aiSummary,
     })
