@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getSupabaseClient } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
-import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
+import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -41,7 +41,7 @@ branchesRouter.get('/tree', pluginMiddleware, async (c) => {
 
 /**
  * GET /api/branches/versions/:id
- * Returns a single version with snapshot + analysis + signed SVG URLs (current + parent)
+ * Returns a single version with snapshot + analysis + inline SVGs (full frame + per-node diffs)
  */
 branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   const supabase = getSupabaseClient();
@@ -58,11 +58,17 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
   const { assets: _assets, ...versionData } = version;
 
-  // Generate SVG inline from snapshot_json — no storage needed
-  const toSvgB64 = (snapshot: unknown): string | null => {
+  const toFullSvgB64 = (snapshot: unknown): string | null => {
     try {
-      const svg = generateSvgFromSnapshot(snapshot as FigmaSnapshot);
-      return Buffer.from(svg).toString('base64');
+      return Buffer.from(generateSvgFromSnapshot(snapshot as FigmaSnapshot)).toString('base64');
+    } catch { return null; }
+  };
+
+  const toNodeSvgB64 = (snapshot: FigmaSnapshot, nodeId: string): string | null => {
+    try {
+      const node = findNodeById(snapshot.root, nodeId);
+      if (!node) return null;
+      return Buffer.from(generateSvgFromNode(node)).toString('base64');
     } catch { return null; }
   };
 
@@ -76,10 +82,48 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     prevVersion = prev;
   }
 
-  const svgB64     = toSvgB64(versionData.snapshot_json);
-  const prevSvgB64 = prevVersion ? toSvgB64(prevVersion.snapshot_json) : null;
+  const svgB64     = toFullSvgB64(versionData.snapshot_json);
+  const prevSvgB64 = prevVersion ? toFullSvgB64(prevVersion.snapshot_json) : null;
 
-  return c.json({ version: versionData, prev_version: prevVersion, svg_b64: svgB64, prev_svg_b64: prevSvgB64 });
+  // Build per-node mini SVGs for the node-diff view
+  const delta = versionData.analysis_json as { modified: Array<{ nodeId: string; nodeName: string; nodeType: string; changes: unknown[] }>; added: Array<{ nodeId: string; nodeName: string; nodeType: string }>; removed: Array<{ nodeId: string; nodeName: string; nodeType: string }> } | null;
+  const currentSnap = versionData.snapshot_json as FigmaSnapshot;
+  const prevSnap = prevVersion?.snapshot_json as FigmaSnapshot | undefined;
+
+  const nodeDiffs: Array<{
+    nodeId: string; nodeName: string; nodeType: string;
+    changes: unknown[]; kind: 'modified' | 'added' | 'removed';
+    before_svg_b64: string | null; after_svg_b64: string | null;
+  }> = [];
+
+  if (delta) {
+    for (const nd of delta.modified) {
+      nodeDiffs.push({
+        nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
+        changes: nd.changes, kind: 'modified',
+        before_svg_b64: prevSnap ? toNodeSvgB64(prevSnap, nd.nodeId) : null,
+        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId),
+      });
+    }
+    for (const nd of delta.added) {
+      nodeDiffs.push({
+        nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
+        changes: [], kind: 'added',
+        before_svg_b64: null,
+        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId),
+      });
+    }
+    for (const nd of delta.removed) {
+      nodeDiffs.push({
+        nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
+        changes: [], kind: 'removed',
+        before_svg_b64: prevSnap ? toNodeSvgB64(prevSnap, nd.nodeId) : null,
+        after_svg_b64:  null,
+      });
+    }
+  }
+
+  return c.json({ version: versionData, prev_version: prevVersion, svg_b64: svgB64, prev_svg_b64: prevSvgB64, node_diffs: nodeDiffs });
 });
 
 /**

@@ -374,11 +374,20 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, onBack, onS
 
 // ─── Diff Viewer ──────────────────────────────────────────────────────────────
 
+interface NodeDiffVisual {
+  nodeId: string; nodeName: string; nodeType: string;
+  changes: PropertyChange[];
+  kind: 'modified' | 'added' | 'removed';
+  before_svg_b64: string | null;
+  after_svg_b64: string | null;
+}
+
 interface DiffData {
   version: Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null };
   prev_version: (Version & { snapshot_json: unknown }) | null;
   svg_b64: string | null;
   prev_svg_b64: string | null;
+  node_diffs: NodeDiffVisual[];
 }
 
 interface DiffScreenProps {
@@ -387,7 +396,7 @@ interface DiffScreenProps {
   onBack: () => void; onRestored: () => void;
 }
 
-function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRestored }: DiffScreenProps) {
+function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored }: DiffScreenProps) {
   const [data, setData]           = useState<DiffData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [err, setErr]             = useState<string | null>(null);
@@ -396,6 +405,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRe
   const [status, setStatus]       = useState(version.status);
   const [statusBusy, setStatusBusy] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [view, setView] = useState<'nodes' | 'frame'>('nodes');
 
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
@@ -468,6 +478,12 @@ function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRe
         )}
         {hasPrev && (
           <div class="flex gap-1 flex-shrink-0">
+            <button class={`px-2 py-1 rounded text-xs transition-colors ${view === 'nodes' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setView('nodes')}>Nodes</button>
+            <button class={`px-2 py-1 rounded text-xs transition-colors ${view === 'frame' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setView('frame')}>Frame</button>
+          </div>
+        )}
+        {hasPrev && view === 'frame' && (
+          <div class="flex gap-1 flex-shrink-0">
             <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'split' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('split')}>Split</button>
             <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('overlay')}>Overlay</button>
           </div>
@@ -487,6 +503,15 @@ function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRe
                   ? <img src={`data:image/svg+xml;base64,${data.svg_b64}`} alt="v1" class="max-h-full max-w-full object-contain" />
                   : <p class="text-gray-500 text-xs">Première version — pas de diff disponible</p>
                 }
+              </div>
+            ) : view === 'nodes' ? (
+              <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+                {data.node_diffs.length === 0 && (
+                  <div class="flex items-center justify-center h-full">
+                    <p class="text-gray-500 text-xs">Aucune modification visuelle détectée.</p>
+                  </div>
+                )}
+                {data.node_diffs.map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} />)}
               </div>
             ) : mode === 'split' ? (
               <div class="flex flex-1 overflow-hidden">
@@ -575,6 +600,47 @@ function DiffScreen({ apiKey, version, author, asset, branch, plan, onBack, onRe
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
+
+function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
+  const kindColor = nd.kind === 'added' ? 'text-green-400 bg-green-500/10' : nd.kind === 'removed' ? 'text-red-400 bg-red-500/10' : 'text-purple-400 bg-purple-500/10';
+  const kindLabel = nd.kind === 'added' ? '+ ajout' : nd.kind === 'removed' ? '− supprimé' : '~ modifié';
+
+  return (
+    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-800">
+        <span class="text-xs font-medium text-gray-200 truncate flex-1" title={nd.nodeName}>{nd.nodeName}</span>
+        <span class="text-[10px] text-gray-600 font-mono">{nd.nodeType}</span>
+        <span class={`text-[10px] px-1.5 py-0.5 rounded font-mono ${kindColor}`}>{kindLabel}</span>
+      </div>
+      <div class="flex">
+        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 border-r border-gray-800 min-h-[80px]">
+          {nd.before_svg_b64
+            ? <img src={`data:image/svg+xml;base64,${nd.before_svg_b64}`} alt="avant" class="max-w-full max-h-20 object-contain" />
+            : <span class="text-gray-700 text-xs">—</span>
+          }
+          <span class="text-[10px] text-gray-600">avant</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 min-h-[80px]">
+          {nd.after_svg_b64
+            ? <img src={`data:image/svg+xml;base64,${nd.after_svg_b64}`} alt="après" class="max-w-full max-h-20 object-contain" />
+            : <span class="text-gray-700 text-xs">—</span>
+          }
+          <span class="text-[10px] text-gray-600">après</span>
+        </div>
+      </div>
+      {nd.changes.length > 0 && (
+        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-0.5">
+          {nd.changes.map((ch, i) => (
+            <div key={i} class="flex items-start gap-2">
+              <span class="text-[10px] font-mono text-gray-500 w-20 flex-shrink-0 truncate">{ch.property}</span>
+              <span class="text-[10px] text-purple-400 font-mono leading-tight">{ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Logo({ small = false }: { small?: boolean }) {
   return (

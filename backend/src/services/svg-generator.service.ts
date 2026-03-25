@@ -98,3 +98,20 @@ export function generateSvgFromSnapshot(snapshot: FigmaSnapshot): string {
   const content = renderNode(root, r2(root.x - pad), r2(root.y - pad));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">\n${content}\n</svg>`;
 }
+
+export function findNodeById(root: NodeSnapshot, id: string): NodeSnapshot | null {
+  if (root.id === id) return root;
+  for (const child of root.children ?? []) {
+    const found = findNodeById(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function generateSvgFromNode(node: NodeSnapshot): string {
+  const pad  = r2((node.strokeWeight ?? 0) / 2);
+  const w    = r2(node.width  + pad * 2);
+  const h    = r2(node.height + pad * 2);
+  const content = renderNode(node, r2(node.x - pad), r2(node.y - pad));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">\n${content}\n</svg>`;
+}
