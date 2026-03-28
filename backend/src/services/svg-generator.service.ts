@@ -173,13 +173,16 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
       .map((child) => renderNode(child, node.x, node.y))
       .filter(s => s !== '')
       .join('\n');
-    const bg = fill || gradFill
-      ? `<rect x="0" y="0" width="${r2(node.width)}" height="${r2(node.height)}" ${fillStr}${strokeAttrs}${filterAttr}/>`
-      : '';
-    const rx = node.cornerRadius ? ` rx="${r2(node.cornerRadius)}"` : '';
-    const bgWithRadius = bg.replace('/>', `${rx}/>`);
+    const rx = node.cornerRadius ? ` rx="${r2(node.cornerRadius)}" ry="${r2(node.cornerRadius)}"` : '';
+    let bg: string;
+    if (fill || gradFill) {
+      bg = `<rect x="0" y="0" width="${r2(node.width)}" height="${r2(node.height)}" ${fillStr}${rx}${strokeAttrs}${filterAttr}/>`;
+    } else {
+      // No fill — draw a subtle outline so the frame boundary stays visible
+      bg = `<rect x="0" y="0" width="${r2(node.width)}" height="${r2(node.height)}" fill="#ffffff"${rx}${strokeAttrs}/>`;
+    }
     const translate = relX !== 0 || relY !== 0 ? ` transform="translate(${relX},${relY})"` : '';
-    return `<g${translate}${opacity}>\n${bgWithRadius}\n${children}\n</g>`;
+    return `<g${translate}${opacity}>\n${bg}\n${children}\n</g>`;
   }
 
   if (['VECTOR', 'STAR', 'POLYGON', 'LINE', 'BOOLEAN_OPERATION'].includes(type)) {
