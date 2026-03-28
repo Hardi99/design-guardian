@@ -156,7 +156,7 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
       return `<rect x="${relX}" y="${relY}" width="${r2(node.width)}" height="${r2(Math.max(node.height, node.fontSize ?? 14))}" fill="#888888" fill-opacity="0.25" rx="2"/>`;
     }
     const fs = node.fontSize ?? 14;
-    const ff = node.fontFamily ? ` font-family="${node.fontFamily}"` : '';
+    const ff = node.fontFamily ? ` font-family="${escapeXml(node.fontFamily)}"` : '';
     // Avoid invisible white text: force dark fill when fill is very light or absent
     const isLightFill = fill && parseInt(fill.hex.slice(1), 16) > 0xCCCCCC;
     const textFill = (!fill || isLightFill) ? { hex: '#222222', opacity: 1 } : fill;
@@ -199,7 +199,12 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
 }
 
 function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/[^\x00-\x7E]/g, c => `&#x${c.codePointAt(0)!.toString(16).toUpperCase()};`);
 }
 
 export function generateSvgFromSnapshot(snapshot: FigmaSnapshot): string {
