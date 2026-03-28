@@ -150,16 +150,22 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
   }
 
   if (type === 'TEXT') {
-    const textFill = fill ?? { hex: '#333333', opacity: 1 };
-    const textFillStr = gradFill ?? fillAttrs(textFill);
+    const chars = node.characters ?? '';
+    // No content (old snapshot or empty node) → placeholder rect
+    if (!chars.trim()) {
+      return `<rect x="${relX}" y="${relY}" width="${r2(node.width)}" height="${r2(Math.max(node.height, node.fontSize ?? 14))}" fill="#888888" fill-opacity="0.25" rx="2"/>`;
+    }
     const fs = node.fontSize ?? 14;
     const ff = node.fontFamily ? ` font-family="${node.fontFamily}"` : '';
-    const chars = node.characters ?? '';
-    // Clip long text to width approximation
+    // Avoid invisible white text: force dark fill when fill is very light or absent
+    const isLightFill = fill && parseInt(fill.hex.slice(1), 16) > 0xCCCCCC;
+    const textFill = (!fill || isLightFill) ? { hex: '#222222', opacity: 1 } : fill;
+    const textFillStr = gradFill ?? fillAttrs(textFill);
+    // Clip long text to width
     const maxChars = Math.max(5, Math.floor(node.width / (fs * 0.55)));
     const displayText = chars.length > maxChars ? chars.slice(0, maxChars) + '…' : chars;
     const textRotAttr = rot !== 0 ? ` transform="rotate(${rot} ${r2(relX + node.width / 2)} ${r2(relY + node.height / 2)})"` : '';
-    return `<text x="${relX}" y="${r2(relY + fs)}" font-size="${fs}"${ff} ${textFillStr}${opacity}${textRotAttr}>${escapeXml(displayText)}</text>`;
+    return `<text x="${relX}" y="${r2(relY + fs * 0.85)}" font-size="${fs}"${ff} ${textFillStr}${opacity}${textRotAttr}>${escapeXml(displayText)}</text>`;
   }
 
   if (['FRAME', 'GROUP', 'COMPONENT', 'INSTANCE', 'COMPONENT_SET'].includes(type)) {
