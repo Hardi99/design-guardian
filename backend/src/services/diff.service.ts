@@ -141,6 +141,42 @@ export class DiffService {
       }
     }
 
+    // Visibility change
+    if (v1.visible !== undefined && v2.visible !== undefined && v1.visible !== v2.visible) {
+      changes.push({
+        property: 'visible',
+        oldValue: v1.visible,
+        newValue: v2.visible,
+        delta: v2.visible ? 'hidden → visible' : 'visible → hidden',
+      });
+    }
+
+    // Rotation
+    if (v1.rotation !== undefined && v2.rotation !== undefined) {
+      this.compareNumeric(changes, 'rotation', v1.rotation, v2.rotation, '°');
+    }
+
+    // Text content
+    if (v1.characters !== undefined && v2.characters !== undefined && v1.characters !== v2.characters) {
+      changes.push({ property: 'characters', oldValue: v1.characters, newValue: v2.characters, delta: 'Texte modifié' });
+    }
+
+    // Font size
+    if (v1.fontSize !== undefined && v2.fontSize !== undefined) {
+      this.compareNumeric(changes, 'fontSize', v1.fontSize, v2.fontSize, 'px');
+    }
+
+    // Effects (count change as proxy)
+    const v1FxCount = (v1.effects ?? []).filter(e => e.visible).length;
+    const v2FxCount = (v2.effects ?? []).filter(e => e.visible).length;
+    if (v1FxCount !== v2FxCount) {
+      changes.push({
+        property: 'effects',
+        oldValue: `${v1FxCount} effet(s)`,
+        newValue: `${v2FxCount} effet(s)`,
+      });
+    }
+
     return changes;
   }
 

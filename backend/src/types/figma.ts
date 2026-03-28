@@ -8,11 +8,18 @@ export interface FigmaColor {
   a: number; // 0-1
 }
 
+export interface FigmaGradientStop {
+  position: number; // 0-1
+  color: FigmaColor;
+}
+
 export interface FigmaFill {
   type: 'SOLID' | 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND' | 'IMAGE' | 'PATTERN';
   color?: FigmaColor;
   opacity?: number;
   visible?: boolean;
+  gradientStops?: FigmaGradientStop[];
+  gradientAngle?: number; // simplified 0-360°
 }
 
 export interface FigmaStroke {
@@ -27,22 +34,37 @@ export interface FigmaVectorPath {
   data: string; // SVG path data string
 }
 
+export interface FigmaEffect {
+  type: 'DROP_SHADOW' | 'INNER_SHADOW' | 'LAYER_BLUR' | 'BACKGROUND_BLUR';
+  visible: boolean;
+  radius: number;
+  color?: FigmaColor;
+  offset?: { x: number; y: number };
+}
+
 // Snapshot of a single Figma node, extracted in main.ts via native Figma API
 export interface NodeSnapshot {
   id: string;
   name: string;
-  type: string; // 'RECTANGLE', 'ELLIPSE', 'VECTOR', 'FRAME', 'GROUP', 'TEXT', etc.
-  // Absolute position — already resolved by Figma (no transform matrix needed)
+  type: string;
+  // Absolute position
   x: number;
   y: number;
   width: number;
   height: number;
   // Visual properties
   opacity: number;
+  visible?: boolean;
+  rotation?: number;
   fills: FigmaFill[];
   strokes: FigmaStroke[];
   strokeWeight?: number;
   cornerRadius?: number;
+  effects?: FigmaEffect[];
+  // TEXT-specific
+  characters?: string;
+  fontSize?: number;
+  fontFamily?: string;
   // For VECTOR nodes
   vectorPaths?: FigmaVectorPath[];
   // Recursive children
@@ -51,9 +73,9 @@ export interface NodeSnapshot {
 
 // The full snapshot payload sent from the Figma plugin
 export interface FigmaSnapshot {
-  figmaNodeId: string;    // node.id in Figma
-  figmaNodeName: string;  // node.name in Figma
-  capturedAt: string;     // ISO timestamp
+  figmaNodeId: string;
+  figmaNodeName: string;
+  capturedAt: string;
   root: NodeSnapshot;
 }
 
@@ -62,7 +84,7 @@ export interface PropertyChange {
   property: string;
   oldValue: unknown;
   newValue: unknown;
-  delta?: string; // Human-readable: "+2.5px", "#CCCCCC -> #555555", "0 -> 8px"
+  delta?: string;
 }
 
 // Changes for a single node
