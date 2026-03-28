@@ -174,7 +174,8 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
       .filter(s => s !== '')
       .join('\n');
     const rx = node.cornerRadius ? ` rx="${r2(node.cornerRadius)}" ry="${r2(node.cornerRadius)}"` : '';
-    const bg = fill || gradFill
+    const renderBg = (fill || gradFill) && !['INSTANCE', 'COMPONENT'].includes(type);
+    const bg = renderBg
       ? `<rect x="0" y="0" width="${r2(node.width)}" height="${r2(node.height)}" ${fillStr}${rx}${strokeAttrs}${filterAttr}/>`
       : '';
     const translate = relX !== 0 || relY !== 0 ? ` transform="translate(${relX},${relY})"` : '';
