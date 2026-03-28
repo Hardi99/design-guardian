@@ -498,11 +498,18 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
           {/* Visual panel */}
           <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden">
             {!hasPrev ? (
-              <div class="flex-1 flex flex-col items-center justify-center gap-2 p-4">
-                {data.svg_b64
-                  ? <img src={`data:image/svg+xml;base64,${data.svg_b64}`} alt="v1" class="max-h-full max-w-full object-contain" />
-                  : <p class="text-gray-500 text-xs">Première version — pas de diff disponible</p>
-                }
+              <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
+                <div class="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+                  <span class="text-2xl">📸</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <p class="text-sm font-medium text-gray-200">Checkpoint initial</p>
+                  <p class="text-xs text-gray-500">Le diff visuel apparaîtra à partir de la v2</p>
+                </div>
+                <div class="flex flex-col gap-1.5 text-xs text-gray-600">
+                  <span>{timeAgo(version.created_at)}</span>
+                  {version.author_name && <span>par {version.author_name}</span>}
+                </div>
               </div>
             ) : view === 'nodes' ? (
               <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
