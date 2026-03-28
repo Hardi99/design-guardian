@@ -79,11 +79,12 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
-    characters:   safeStr('characters' in node ? (node as { characters: string | symbol }).characters : undefined),
-    fontSize:     safeNum('fontSize'   in node ? (node as { fontSize: number | symbol }).fontSize    : undefined),
-    fontFamily:   'fontName' in node && typeof (node as { fontName: unknown }).fontName === 'object' && (node as { fontName: unknown }).fontName !== null
-                    ? ((node as { fontName: { family: string } }).fontName.family)
-                    : undefined,
+    characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,
+    fontSize:     node.type === 'TEXT' ? safeNum((node as unknown as TextNode).fontSize as number | symbol) : undefined,
+    fontFamily:   node.type === 'TEXT' ? (() => {
+                    const fn = (node as unknown as TextNode).fontName;
+                    return typeof fn === 'object' && fn !== null && !Array.isArray(fn) ? (fn as FontName).family : undefined;
+                  })() : undefined,
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
 }
