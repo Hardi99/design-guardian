@@ -1,7 +1,7 @@
 // ─── UI THREAD — Preact + HTTP. Aucun accès API Figma ici. ───────────────────
 
 import { render, h } from 'preact';
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo } from 'preact/hooks';
 import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor } from './types.js';
 import './ui.css';
 
@@ -525,22 +525,22 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
                 <div class="flex-1 flex flex-col items-center justify-center border-r border-gray-800 p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{data.prev_version!.version_number} — avant</p>
                   {data.prev_svg_b64
-                    ? <img src={`data:image/svg+xml;base64,${data.prev_svg_b64}`} alt="avant" class="max-h-full max-w-full object-contain" />
+                    ? <SvgFrame b64={data.prev_svg_b64} style="flex-1 min-h-0 overflow-hidden" />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
                 <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
                   {data.svg_b64
-                    ? <img src={`data:image/svg+xml;base64,${data.svg_b64}`} alt="après" class="max-h-full max-w-full object-contain" />
+                    ? <SvgFrame b64={data.svg_b64} style="flex-1 min-h-0 overflow-hidden" />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
               </div>
             ) : (
               <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
-                {data.svg_b64      && <img src={`data:image/svg+xml;base64,${data.svg_b64}`}      alt="après" class="absolute inset-0 w-full h-full object-contain p-4" style={{ opacity: 1 }} />}
-                {data.prev_svg_b64 && <img src={`data:image/svg+xml;base64,${data.prev_svg_b64}`} alt="avant" class="absolute inset-0 w-full h-full object-contain p-4" style={{ opacity: 1 - opacity }} />}
+                {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity: 1 }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
+                {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
                 <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
                   <span class="text-xs text-gray-500">avant</span>
                   <input type="range" min={0} max={1} step={0.01} value={opacity}
@@ -607,6 +607,22 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
+
+// Inline SVG renderer — avoids data URI size limits in Figma's webview
+function SvgFrame({ b64, style }: { b64: string; style?: string }) {
+  const html = useMemo(() => {
+    try {
+      const svg = atob(b64);
+      // Strip fixed width/height so CSS controls sizing; keep viewBox for aspect ratio
+      return svg
+        .replace(/\s+width="[^"]*"/, '')
+        .replace(/\s+height="[^"]*"/, '')
+        .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
+    } catch { return ''; }
+  }, [b64]);
+  if (!html) return <p class="text-gray-600 text-xs">Erreur SVG</p>;
+  return <div class={style ?? 'w-full h-full'} dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
   const kindColor = nd.kind === 'added' ? 'text-green-400 bg-green-500/10' : nd.kind === 'removed' ? 'text-red-400 bg-red-500/10' : 'text-purple-400 bg-purple-500/10';
