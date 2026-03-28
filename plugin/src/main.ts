@@ -46,6 +46,11 @@ async function handleSnapshot(): Promise<void> {
 
 // ─── Snapshot extraction (native Figma properties — source of truth for diff) ─
 
+// figma.mixed is a Symbol — not serializable via postMessage. Return undefined instead.
+function safeNum(v: unknown): number | undefined {
+  return typeof v === 'symbol' ? undefined : (v as number);
+}
+
 function extractSnapshot(node: SceneNode): NodeSnapshot {
   const snap: NodeSnapshot = {
     id: node.id, name: node.name, type: node.type,
@@ -56,8 +61,8 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     opacity: 'opacity' in node ? (node as { opacity: number }).opacity : 1,
     fills:   extractFills(node),
     strokes: extractStrokes(node),
-    strokeWeight:  'strokeWeight'  in node ? (node as { strokeWeight: number }).strokeWeight   : undefined,
-    cornerRadius:  'cornerRadius'  in node ? (node as { cornerRadius: number | symbol }).cornerRadius as number : undefined,
+    strokeWeight: safeNum('strokeWeight' in node ? (node as { strokeWeight: number | symbol }).strokeWeight : undefined),
+    cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
     vectorPaths: extractVectorPaths(node),
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
