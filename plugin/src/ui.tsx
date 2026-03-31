@@ -79,9 +79,11 @@ function App() {
           }
           break;
         }
-        case 'AUTHOR_INFO':    setAuthor(msg.author); break;
-        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot); setScreen('checkpoint'); break;
-        case 'ERROR':          alert(`[DG] ${msg.message}`); break;
+        case 'AUTHOR_INFO':      setAuthor(msg.author); break;
+        case 'SNAPSHOT_READY':   setSnapshot(msg.snapshot); setScreen('checkpoint'); break;
+        case 'BRANCH_CREATED':   break; // Figma page created — UI already updated optimistically
+        case 'BRANCH_SWITCHED':  break; // Figma page switched — no UI change needed
+        case 'ERROR':            alert(`[DG] ${msg.message}`); break;
       }
     };
     window.addEventListener('message', handler);
@@ -226,16 +228,20 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
             {author && <p class="text-xs text-gray-500 truncate">{author.name}</p>}
           </div>
         </button>
-        <span class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 ${
-          plan === 'team' ? 'bg-purple-500/20 text-purple-400' :
-          plan === 'pro'  ? 'bg-blue-500/20 text-blue-400' :
-                            'bg-gray-800 text-gray-500'
-        }`}>{plan}</span>
+        <span
+          class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 cursor-pointer ${
+            plan === 'team' ? 'bg-purple-500/20 text-purple-400' :
+            plan === 'pro'  ? 'bg-blue-500/20 text-blue-400' :
+                              'bg-gray-800 text-gray-500'
+          }`}
+          title={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
+          onClick={() => plan === 'free' && send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.up.railway.app/pricing' })}
+        >{plan.toUpperCase()}</span>
       </div>
 
       <div class="flex items-center gap-1.5 px-4 py-2 border-b border-gray-800 overflow-x-auto">
         {branches.map(b => (
-          <button key={b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => onBranchChange(b)}>{b}</button>
+          <button key={b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => { onBranchChange(b); send({ type: 'SWITCH_BRANCH', branchName: b }); }}>{b}</button>
         ))}
         <input
           class="bg-transparent border border-dashed border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-500 placeholder-gray-700 focus:outline-none focus:border-purple-500 w-24"
@@ -245,7 +251,9 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
             if (e.key === 'Enter' && newBranch.trim()) {
               const b = newBranch.trim();
               if (!branches.includes(b)) setBranches(prev => [...prev, b]);
-              onBranchChange(b); setNewBranch('');
+              onBranchChange(b);
+              send({ type: 'CREATE_BRANCH', branchName: b });
+              setNewBranch('');
             }
           }}
         />
@@ -270,7 +278,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
 
       <div class="p-4 border-t border-gray-800 flex flex-col gap-2">
         {plan === 'free' && versions.length >= 10 && (
-          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer">Passer à Pro</span></p>
+          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.up.railway.app/pricing' })}>Passer à Pro</span></p>
         )}
         <button class="btn-primary w-full" onClick={onCapture} disabled={plan === 'free' && versions.length >= 10}>
           Capturer un checkpoint
@@ -290,7 +298,7 @@ function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span class="text-xs font-mono text-gray-400">v{v.version_number}</span>
-          {v.status === 'approved' && <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded">✦ Gold</span>}
+          {v.status === 'approved' && <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded" title="Gold — Version validée, référence officielle du projet.">✦ Gold</span>}
           {v.status === 'review'   && <span class="px-1.5 py-0.5 bg-amber-500/10  text-amber-400  text-xs rounded">Review</span>}
           <span class="text-xs text-gray-600 ml-auto">{timeAgo(v.created_at)}</span>
         </div>
@@ -460,6 +468,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         {/* Status toggle */}
         <button
           onClick={cycleStatus} disabled={statusBusy}
+          title={status === 'approved' ? 'Gold — Version validée, référence officielle du projet. Cliquer pour repasser en Draft.' : status === 'review' ? 'En review — En attente de validation. Cliquer pour passer en Gold.' : 'Draft — Version en cours. Cliquer pour soumettre en Review.'}
           class={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 transition-colors ${
             status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
             status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :

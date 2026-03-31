@@ -59,9 +59,13 @@ export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
+  | { type: 'BRANCH_CREATED'; branchName: string }
+  | { type: 'BRANCH_SWITCHED'; branchName: string }
   | { type: 'ERROR'; message: string };
 
 export type UIToMain =
   | { type: 'REQUEST_SNAPSHOT' }
   | { type: 'OPEN_EXTERNAL'; url: string }
-  | { type: 'RESIZE'; width: number; height: number };
+  | { type: 'RESIZE'; width: number; height: number }
+  | { type: 'CREATE_BRANCH'; branchName: string }
+  | { type: 'SWITCH_BRANCH'; branchName: string };
