@@ -109,6 +109,35 @@ Fin des crashes silencieux sur les nodes avec propriétés mixtes (composants, f
 
 ---
 
+## 5. Branches = labels uniquement → Isolation réelle via pages Figma
+
+**Problème**
+Le système de branches initial n'était qu'un filtre de label sur les checkpoints. Toutes les branches partageaient le même canvas Figma : switcher de branche n'avait aucun effet visuel sur le design. Concrètement, travailler sur `feat/onboarding` écrasait silencieusement le travail sur `main` — un seul design pour toutes les branches.
+
+C'est le problème fondamental que les branches Git résolvent pour le code : isolation complète entre les versions de travail.
+
+**Fix**
+Chaque branche Design Guardian crée désormais une vraie page Figma nommée `dg/{branchName}` :
+- `CREATE_BRANCH` : `figma.createPage()` + clone de la sélection courante + `figma.currentPage = newPage`
+- `SWITCH_BRANCH` : `figma.currentPage = page` vers la page correspondante
+- `main` pointe toujours vers la première page non-préfixée `dg/`
+
+```typescript
+const newPage = figma.createPage();
+newPage.name = `dg/${branchName}`;
+for (const node of figma.currentPage.selection) {
+  newPage.appendChild(node.clone());
+}
+figma.currentPage = newPage;
+```
+
+**Résultat débloqué**
+Isolation design réelle : un designer peut travailler sur `feat/dark-mode` sans toucher `main`. Switcher de branche navigue physiquement vers la page Figma correspondante. C'est l'équivalent de `git checkout` pour le design.
+
+**Commit** `9f6da16 feat: branch isolation via Figma pages`
+
+---
+
 ## Synthèse
 
 | Fix | Bloquait quoi | Racine |
@@ -117,6 +146,7 @@ Fin des crashes silencieux sur les nodes avec propriétés mixtes (composants, f
 | Zod schema incomplet | Textes jamais capturés, diff partiel | Backend validation |
 | data URI size limit | Frame view inutilisable | Frontend rendering |
 | `figma.mixed` Symbol | Crash sur nodes complexes | API Figma edge case |
+| Branches = labels sans isolation | Toutes les branches écrasaient le même canvas | Architecture |
 
 ---
 
