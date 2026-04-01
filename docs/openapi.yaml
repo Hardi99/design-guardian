@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: Design Guardian API
+  description: |
+    Backend du plugin Figma Design Guardian.
+    Deux modes d'authentification :
+    - **X-API-Key** : routes plugin (assets, checkpoints, branches)
+    - **Bearer JWT** : routes web app (projects)
+  version: 1.0.0
+  contact:
+    name: Design Guardian
+
+servers:
+  - url: https://design-guardian.up.railway.app
+    description: Production (Railway)
+  - url: http://localhost:3001
+    description: Local
+
+# ─── Security schemes ─────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:       { type: string, format: uuid }
+        name:     { type: string }
+        plan:     { type: string, enum: [free, pro, team] }
+        api_key:  { type: string }
+
+    Asset:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        name:       { type: string }
+        asset_type: { type: string, enum: [ui, logo, icon, packaging, illustration, other] }
+        project_id: { type: string, format: uuid }
+
+    Version:
+      type: object
+      properties:
+        id:               { type: string, format: uuid }
+        version_number:   { type: integer }
+        branch_name:      { type: string }
+        status:           { type: string, enum: [draft, review, approved] }
+        ai_summary:       { type: string, nullable: true }
+        author_name:      { type: string, nullable: true }
+        author_avatar_url:{ type: string, nullable: true }
+        parent_id:        { type: string, format: uuid, nullable: true }
+        created_at:       { type: string, format: date-time }
+
+    DeltaJSON:
+      type: object
+      properties:
+        totalChanges: { type: integer }
+        modified:
+          type: array
+          items: { $ref: '#/components/schemas/NodeDelta' }
+        added:
+          type: array
+          items: { $ref: '#/components/schemas/NodeDelta' }
+        removed:
+          type: array
+          items: { $ref: '#/components/schemas/NodeDelta' }
+        metadata:
+          type: object
+          properties:
+            epsilon:         { type: number }
+            processingTimeMs:{ type: integer }
+            v1CapturedAt:    { type: string, format: date-time }
+            v2CapturedAt:    { type: string, format: date-time }
+
+    NodeDelta:
+      type: object
+      properties:
+        nodeId:   { type: string }
+        nodeName: { type: string }
+        nodeType: { type: string }
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              property:  { type: string }
+              oldValue:  {}
+              newValue:  {}
+              delta:     { type: string, nullable: true }
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+
+paths:
+
+  /health:
+    get:
+      summary: Health check
+      description: Endpoint de supervision. Retourné par Railway pour les uptime checks.
+      tags: [System]
+      responses:
+        '200':
+          description: Service opérationnel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:     { type: string, example: ok }
+                  version:    { type: string, example: 1.0.0 }
+                  uptime_ms:  { type: integer }
+                  timestamp:  { type: string, format: date-time }
+
+  /api/projects/auto-init:
+    post:
+      summary: Auto-initialiser un projet depuis un fichier Figma
+      description: |
+        Appelé au lancement du plugin. Crée le projet si inexistant (idempotent sur `figma_file_key`).
+        Retourne l'`api_key` à utiliser pour toutes les requêtes plugin suivantes.
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [figma_file_key, figma_file_name]
+              properties:
+                figma_file_key:  { type: string, example: "aBcDeFgHiJkL" }
+                figma_file_name: { type: string, example: "Design System v2" }
+      responses:
+        '200':
+          description: Projet trouvé ou créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key: { type: string }
+                  project: { $ref: '#/components/schemas/Project' }
+
+  /api/projects:
+    get:
+      summary: Lister les projets de l'utilisateur connecté
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Liste des projets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: '#/components/schemas/Project' }
+        '401':
+          description: Token JWT manquant ou invalide
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/assets:
+    get:
+      summary: Lister les assets du projet
+      tags: [Assets]
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Liste des assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items: { $ref: '#/components/schemas/Asset' }
+        '401':
+          description: X-API-Key manquante ou invalide
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+    post:
+      summary: Créer un asset
+      tags: [Assets]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, asset_type]
+              properties:
+                name:       { type: string, example: "Logo principal" }
+                asset_type: { type: string, enum: [ui, logo, icon, packaging, illustration, other] }
+      responses:
+        '201':
+          description: Asset créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asset: { $ref: '#/components/schemas/Asset' }
+
+  /api/checkpoints:
+    post:
+      summary: Créer un checkpoint (snapshot + diff + AI summary)
+      description: |
+        Action principale du plugin. Reçoit le snapshot des propriétés natives Figma,
+        calcule le diff avec la version précédente sur la même branche,
+        génère un patch note via GPT-4o-mini, et persiste la version.
+      tags: [Checkpoints]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id, branch_name, snapshot_json, author]
+              properties:
+                asset_id:      { type: string, format: uuid }
+                branch_name:   { type: string, example: "main" }
+                figma_node_id: { type: string, nullable: true }
+                snapshot_json:
+                  type: object
+                  description: Snapshot des propriétés natives Figma (FigmaSnapshot)
+                author:
+                  type: object
+                  required: [figma_id, name]
+                  properties:
+                    figma_id:   { type: string }
+                    name:       { type: string }
+                    avatar_url: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Checkpoint sauvegardé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:    { $ref: '#/components/schemas/Version' }
+                  analysis:   { $ref: '#/components/schemas/DeltaJSON' }
+                  ai_summary: { type: string, nullable: true }
+        '404':
+          description: Asset introuvable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/branches/tree:
+    get:
+      summary: Arbre de versions d'un asset
+      description: Retourne toutes les versions aplaties triées par date, avec la liste des branches.
+      tags: [Branches]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: asset_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Versions et branches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Version' }
+                  branches:
+                    type: array
+                    items: { type: string }
+                    example: ["main", "feat/dark-mode"]
+
+  /api/branches/versions/{id}:
+    get:
+      summary: Détail d'une version avec SVGs inline
+      description: |
+        Retourne la version + version précédente + SVGs Base64 générés côté serveur
+        (frame complet, version précédente, diffs par nœud).
+      tags: [Branches]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Version complète avec SVGs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    allOf:
+                      - { $ref: '#/components/schemas/Version' }
+                      - type: object
+                        properties:
+                          snapshot_json: { type: object }
+                          analysis_json: { $ref: '#/components/schemas/DeltaJSON' }
+                  prev_version:
+                    nullable: true
+                    allOf:
+                      - { $ref: '#/components/schemas/Version' }
+                  svg_b64:      { type: string, nullable: true, description: "SVG Base64 de la version courante" }
+                  prev_svg_b64: { type: string, nullable: true, description: "SVG Base64 de la version précédente" }
+                  node_diffs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        nodeId:        { type: string }
+                        nodeName:      { type: string }
+                        kind:          { type: string, enum: [modified, added, removed] }
+                        before_svg_b64:{ type: string, nullable: true }
+                        after_svg_b64: { type: string, nullable: true }
+
+  /api/branches/versions/{id}/status:
+    put:
+      summary: Mettre à jour le statut d'une version
+      description: Cycle Draft → Review → Approved (Gold). Enregistre `approved_by` et `approved_at` à l'approbation.
+      tags: [Branches]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, review, approved] }
+      responses:
+        '200':
+          description: Statut mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { $ref: '#/components/schemas/Version' }
