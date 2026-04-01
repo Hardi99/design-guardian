@@ -133,27 +133,29 @@ describe('OpenAIService – prompt content', () => {
     const delta = makeDelta({ totalChanges: 3, modified: [makeModifiedNode('Header')] });
     await svc.generatePatchNote(delta, 'Thomas');
 
-    const callArgs = mockCreate.mock.calls[0][0];
-    const userMsg = callArgs.messages.find((m: { role: string }) => m.role === 'user').content as string;
+    const callArgs = mockCreate.mock.lastCall![0];
+    const userMsg = (callArgs.messages as Array<{ role: string; content: string }>).find(m => m.role === 'user')!.content;
     expect(userMsg).toContain('Thomas');
     expect(userMsg).toContain('3');
     expect(userMsg).toContain('Header');
   });
 
   it('uses temperature 0.2, max_tokens 250, model gpt-4o-mini', async () => {
+    mockCreate.mockClear();
     const svc = new OpenAIService('test-key');
     await svc.generatePatchNote(makeDelta({ totalChanges: 1, modified: [makeModifiedNode()] }), 'X');
-    const callArgs = mockCreate.mock.calls[0][0];
+    const callArgs = mockCreate.mock.lastCall![0];
     expect(callArgs.temperature).toBe(0.2);
     expect(callArgs.max_tokens).toBe(250);
     expect(callArgs.model).toBe('gpt-4o-mini');
   });
 
   it('system prompt is in French and design-oriented', async () => {
+    mockCreate.mockClear();
     const svc = new OpenAIService('test-key');
     await svc.generatePatchNote(makeDelta({ totalChanges: 1, modified: [makeModifiedNode()] }), 'X');
-    const callArgs = mockCreate.mock.calls[0][0];
-    const sysMsg = callArgs.messages.find((m: { role: string }) => m.role === 'system').content as string;
+    const callArgs = mockCreate.mock.lastCall![0];
+    const sysMsg = (callArgs.messages as Array<{ role: string; content: string }>).find(m => m.role === 'system')!.content;
     expect(sysMsg).toContain('Figma');
     expect(sysMsg).toContain('français');
   });
