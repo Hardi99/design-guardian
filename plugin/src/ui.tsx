@@ -235,7 +235,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
                               'bg-gray-800 text-gray-500'
           }`}
           title={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
-          onClick={() => plan === 'free' && send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.up.railway.app/pricing' })}
+          onClick={() => plan === 'free' && send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}
         >{plan.toUpperCase()}</span>
       </div>
 
@@ -278,7 +278,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
 
       <div class="p-4 border-t border-gray-800 flex flex-col gap-2">
         {plan === 'free' && versions.length >= 10 && (
-          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.up.railway.app/pricing' })}>Passer à Pro</span></p>
+          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}>Passer à Pro</span></p>
         )}
         <button class="btn-primary w-full" onClick={onCapture} disabled={plan === 'free' && versions.length >= 10}>
           Capturer un checkpoint
