@@ -99,9 +99,23 @@ npm run build
 ```bash
 cd backend
 npm install
-cp .env.example .env   # renseigner SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENAI_API_KEY
-npm run dev
+cp .env.example .env
+npm run dev          # tsx watch — port 3001
+npm run test:run     # 63 tests unitaires (Vitest)
+npm run test:coverage # rapport de couverture HTML dans coverage/
+npm run build        # compile vers dist/
 ```
+
+**Variables d'environnement** (`.env`) :
+
+| Variable | Obligatoire | Description |
+|----------|-------------|-------------|
+| `SUPABASE_URL` | ✅ | URL du projet Supabase |
+| `SUPABASE_ANON_KEY` | ✅ | Clé publique (vérification JWT utilisateur) |
+| `SUPABASE_SERVICE_KEY` | ✅ | Clé admin (toutes les opérations BDD) |
+| `OPENAI_API_KEY` | ✅ | Clé GPT-4o-mini pour les patch notes |
+| `PORT` | ➖ | Port serveur (défaut : `3001`) |
+| `NODE_ENV` | ➖ | `development` / `production` / `test` |
 
 ### Base de données
 

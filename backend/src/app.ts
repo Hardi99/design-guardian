@@ -17,8 +17,14 @@ export function createApp() {
     c.json({ name: 'Design Guardian API', version: '2.0.0', status: 'running' }),
   );
 
-  // Health check (no auth — used by Railway/Render uptime checks)
-  app.get('/health', (c) => c.json({ status: 'ok' }));
+  // Health check (no auth — used by Railway uptime checks)
+  const startTime = Date.now();
+  app.get('/health', (c) => c.json({
+    status: 'ok',
+    version: '1.0.0',
+    uptime_ms: Date.now() - startTime,
+    timestamp: new Date().toISOString(),
+  }));
 
   app.route('/api/auth', authRouter);
   app.route('/api/projects', projectsRouter);
