@@ -1,0 +1,81 @@
+{
+  "title": "Design Guardian — API",
+  "uid": "dg-api",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requêtes / seconde",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "rate(http_requests_total{app=\"design-guardian\"}[1m])",
+        "legendFormat": "{{method}} {{route}} {{status}}"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Latence p95 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, rate(http_request_duration_ms_bucket{app=\"design-guardian\"}[5m]))",
+        "legendFormat": "p95 {{route}}"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Checkpoints créés (total)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "checkpoints_created_total{app=\"design-guardian\"}",
+        "legendFormat": "Checkpoints"
+      }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 4,
+      "title": "AI Patch Notes générés",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "ai_summaries_generated_total{app=\"design-guardian\",status=\"success\"}",
+        "legendFormat": "AI summaries"
+      }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 5,
+      "title": "Connexions actives",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "active_connections{app=\"design-guardian\"}",
+        "legendFormat": "Connexions"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Taux d'erreurs HTTP 5xx",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 6 },
+      "targets": [{
+        "expr": "rate(http_requests_total{app=\"design-guardian\",status=~\"5..\"}[5m])",
+        "legendFormat": "5xx {{route}}"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

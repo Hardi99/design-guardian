@@ -5,6 +5,7 @@ import { getEnv } from '../config/env.js';
 import { DiffService } from '../services/diff.service.js';
 import { OpenAIService } from '../services/openai.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
+import { checkpointsCreatedTotal, aiSummariesGeneratedTotal } from '../services/metrics.service.js';
 import { createCheckpointSchema } from '../types/api.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot } from '../types/figma.js';
@@ -48,9 +49,12 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   if (prev?.snapshot_json) {
     const delta = diffService.compareSnapshots(prev.snapshot_json as FigmaSnapshot, body.snapshot_json as FigmaSnapshot);
     analysisJson = delta;
-    aiSummary = delta.totalChanges > 0
-      ? await getOpenAI().generatePatchNote(delta, body.author.name)
-      : 'Aucune modification détectée.';
+    if (delta.totalChanges > 0) {
+      aiSummary = await getOpenAI().generatePatchNote(delta, body.author.name);
+      aiSummariesGeneratedTotal.inc({ status: 'success' });
+    } else {
+      aiSummary = 'Aucune modification détectée.';
+    }
   }
 
   // 4. Insert version
@@ -76,6 +80,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     return c.json<ErrorResponse>({ error: 'Failed to save checkpoint', details: versionError?.message }, 500);
   }
 
+  checkpointsCreatedTotal.inc();
   return c.json<CheckpointResponse>({ version, analysis: analysisJson, ai_summary: aiSummary }, 201);
 });
 
