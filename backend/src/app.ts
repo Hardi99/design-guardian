@@ -7,7 +7,7 @@ import { assetsRouter } from './controllers/assets.controller.js';
 import { checkpointsRouter } from './controllers/checkpoints.controller.js';
 import { branchesRouter } from './controllers/branches.controller.js';
 import { metricsMiddleware } from './middleware/metrics.middleware.js';
-import { registry } from './services/metrics.service.js';
+import { renderMetrics } from './services/metrics.service.js';
 
 const startTime = Date.now();
 
@@ -30,10 +30,10 @@ export function createApp() {
     timestamp: new Date().toISOString(),
   }));
 
-  // Prometheus metrics (no auth — scrapped by Prometheus server)
-  app.get('/metrics', async (c) => {
-    c.header('Content-Type', registry.contentType);
-    return c.text(await registry.metrics());
+  // Prometheus metrics (no auth — scraped by Prometheus server)
+  app.get('/metrics', (c) => {
+    c.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return c.text(renderMetrics());
   });
 
   app.route('/api/auth', authRouter);

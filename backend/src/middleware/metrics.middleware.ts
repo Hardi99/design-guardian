@@ -1,22 +1,17 @@
 import type { Context, Next } from 'hono';
-import { httpRequestsTotal, httpRequestDuration, activeConnections } from '../services/metrics.service.js';
+import { incCounter, observeHistogram, incGauge, decGauge } from '../services/metrics.service.js';
 
-/**
- * Middleware Prometheus — instrumente chaque requête HTTP :
- * compteur total, histogram de durée, gauge de connexions actives.
- */
 export async function metricsMiddleware(c: Context, next: Next): Promise<void> {
   const start = Date.now();
-  activeConnections.inc();
+  incGauge('active_connections');
 
   await next();
 
-  const duration = Date.now() - start;
   const route  = new URL(c.req.url).pathname;
   const method = c.req.method;
   const status = String(c.res.status);
 
-  httpRequestsTotal.inc({ method, route, status });
-  httpRequestDuration.observe({ method, route, status }, duration);
-  activeConnections.dec();
+  incCounter('http_requests_total', { method, route, status });
+  observeHistogram('http_request_duration_ms', Date.now() - start, { method, route });
+  decGauge('active_connections');
 }
