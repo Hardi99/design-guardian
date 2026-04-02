@@ -1,0 +1,12 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="24" fill="#0f0f0f"/>
+  <!-- Shield -->
+  <path d="M64 20 L92 32 L92 58 C92 76 79 90 64 96 C49 90 36 76 36 58 L36 32 Z"
+        fill="none" stroke="#7c3aed" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Inner shield fill subtle -->
+  <path d="M64 20 L92 32 L92 58 C92 76 79 90 64 96 C49 90 36 76 36 58 L36 32 Z"
+        fill="#7c3aed" fill-opacity="0.12"/>
+  <!-- Checkmark / diff lines -->
+  <line x1="50" y1="57" x2="58" y2="65" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="58" y1="65" x2="74" y2="49" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
