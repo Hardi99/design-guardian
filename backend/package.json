@@ -21,6 +21,9 @@
   ],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@hono/zod-validator": "^0.7.6",
