@@ -27,7 +27,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@hono/zod-validator": "^0.7.6",
-    "@supabase/supabase-js": "^2.90.1",
+    "@supabase/supabase-js": "^2.101.1",
     "dotenv": "^17.2.3",
     "hono": "^4.11.4",
     "openai": "^6.16.0",
