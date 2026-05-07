@@ -23,6 +23,8 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'REQUEST_SNAPSHOT': await handleSnapshot(); break;
     case 'OPEN_EXTERNAL':    figma.openExternal(msg.url); break;
     case 'RESIZE':           figma.ui.resize(msg.width, msg.height); break;
+    case 'CREATE_BRANCH':    await handleCreateBranch(msg.branchName); break;
+    case 'SWITCH_BRANCH':    handleSwitchBranch(msg.branchName); break;
   }
 };
 
@@ -79,11 +81,12 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
-    characters:   safeStr('characters' in node ? (node as { characters: string | symbol }).characters : undefined),
-    fontSize:     safeNum('fontSize'   in node ? (node as { fontSize: number | symbol }).fontSize    : undefined),
-    fontFamily:   'fontName' in node && typeof (node as { fontName: unknown }).fontName === 'object' && (node as { fontName: unknown }).fontName !== null
-                    ? ((node as { fontName: { family: string } }).fontName.family)
-                    : undefined,
+    characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,
+    fontSize:     node.type === 'TEXT' ? safeNum((node as unknown as TextNode).fontSize as number | symbol) : undefined,
+    fontFamily:   node.type === 'TEXT' ? (() => {
+                    const fn = (node as unknown as TextNode).fontName;
+                    return typeof fn === 'object' && fn !== null && !Array.isArray(fn) ? (fn as FontName).family : undefined;
+                  })() : undefined,
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
 }
@@ -148,6 +151,39 @@ function extractEffects(node: SceneNode): FigmaEffect[] | undefined {
     }
   }
   return result.length > 0 ? result : undefined;
+}
+
+async function handleCreateBranch(branchName: string): Promise<void> {
+  if (figma.currentPage.selection.length === 0) {
+    send({ type: 'ERROR', message: 'Sélectionne au moins un frame pour créer la branche.' });
+    return;
+  }
+  const pageName = `dg/${branchName}`;
+  const existing = figma.root.children.find(p => p.name === pageName) as PageNode | undefined;
+  if (existing) {
+    figma.currentPage = existing;
+    send({ type: 'BRANCH_CREATED', branchName });
+    return;
+  }
+  const newPage = figma.createPage();
+  newPage.name = pageName;
+  for (const node of figma.currentPage.selection) {
+    newPage.appendChild(node.clone());
+  }
+  figma.currentPage = newPage;
+  send({ type: 'BRANCH_CREATED', branchName });
+}
+
+function handleSwitchBranch(branchName: string): void {
+  const page = branchName === 'main'
+    ? figma.root.children.find(p => !p.name.startsWith('dg/')) as PageNode | undefined
+    : figma.root.children.find(p => p.name === `dg/${branchName}`) as PageNode | undefined;
+  if (page) {
+    figma.currentPage = page;
+    send({ type: 'BRANCH_SWITCHED', branchName });
+  } else {
+    send({ type: 'ERROR', message: branchName === 'main' ? 'Page principale introuvable.' : `Branche "${branchName}" introuvable. Crée-la d'abord depuis le champ de branche.` });
+  }
 }
 
 function send(msg: MainToUI): void { figma.ui.postMessage(msg); }

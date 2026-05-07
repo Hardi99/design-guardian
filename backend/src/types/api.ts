@@ -48,21 +48,44 @@ const figmaFillSchema = z.object({
   color: figmaColorSchema.optional(),
   opacity: z.number().optional(),
   visible: z.boolean().optional(),
+  gradientStops: z.array(z.object({
+    position: z.number(),
+    color: figmaColorSchema,
+  })).optional(),
+  gradientAngle: z.number().optional(),
 });
-const figmaStrokeSchema = figmaFillSchema; // same shape
+const figmaStrokeSchema = z.object({
+  type: z.string(),
+  color: figmaColorSchema.optional(),
+  opacity: z.number().optional(),
+  visible: z.boolean().optional(),
+});
 const figmaVectorPathSchema = z.object({
   windingRule: z.enum(['EVENODD', 'NONZERO']),
   data: z.string(),
+});
+const figmaEffectSchema = z.object({
+  type: z.enum(['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR']),
+  visible: z.boolean(),
+  radius: z.number(),
+  color: figmaColorSchema.optional(),
+  offset: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
   z.object({
     id: z.string(), name: z.string(), type: z.string(),
     x: z.number(), y: z.number(), width: z.number(), height: z.number(),
     opacity: z.number(),
+    visible: z.boolean().optional(),
+    rotation: z.number().optional(),
     fills: z.array(figmaFillSchema),
     strokes: z.array(figmaStrokeSchema),
     strokeWeight: z.number().optional(),
     cornerRadius: z.number().optional(),
+    effects: z.array(figmaEffectSchema).optional(),
+    characters: z.string().optional(),
+    fontSize: z.number().optional(),
+    fontFamily: z.string().optional(),
     vectorPaths: z.array(figmaVectorPathSchema).optional(),
     children: z.array(nodeSnapshotSchema).optional(),
   })

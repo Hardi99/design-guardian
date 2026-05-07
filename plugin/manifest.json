@@ -3,8 +3,9 @@
   "editorType": [
     "figma"
   ],
-  "id": "design-guardian-dev",
+  "id": "1621623685015334277",
   "name": "Design Guardian",
+  "documentAccess": "dynamic-page",
   "main": "dist/main.js",
   "ui": "dist/index.html",
   "permissions": [

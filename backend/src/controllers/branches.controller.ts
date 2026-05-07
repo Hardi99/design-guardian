@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getSupabaseClient } from '../config/supabase.js';
+import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
@@ -8,6 +8,35 @@ import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot } from '../types/figma.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
+
+const SNAPSHOTS_BUCKET = 'snapshots';
+
+/**
+ * Résout le snapshot d'une version.
+ * - Si storage_path est défini → télécharge depuis Supabase Storage (versions post-migration 008)
+ * - Sinon → utilise snapshot_json directement (versions antérieures à la migration)
+ */
+async function resolveSnapshot(version: {
+  snapshot_json: FigmaSnapshot | null;
+  storage_path: string | null;
+}): Promise<FigmaSnapshot | null> {
+  if (version.storage_path) {
+    const { data, error } = await getSupabaseStorage()
+      .from(SNAPSHOTS_BUCKET)
+      .download(version.storage_path);
+
+    if (error || !data) return null;
+
+    try {
+      return JSON.parse(await data.text()) as FigmaSnapshot;
+    } catch {
+      return null;
+    }
+  }
+
+  // Fallback : anciennes versions stockées en DB avant migration 008
+  return version.snapshot_json ?? null;
+}
 
 /**
  * GET /api/branches/tree?asset_id=...
@@ -19,7 +48,6 @@ branchesRouter.get('/tree', pluginMiddleware, async (c) => {
 
   const supabase = getSupabaseClient();
 
-  // Verify asset belongs to this project
   const { data: asset } = await supabase
     .from('assets').select('id').eq('id', asset_id).eq('project_id', c.get('projectId')).single();
   if (!asset) return c.json<ErrorResponse>({ error: 'Asset not found' }, 404);
@@ -58,13 +86,15 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
   const { assets: _assets, ...versionData } = version;
 
-  const toFullSvgB64 = (snapshot: unknown): string | null => {
+  const toFullSvgB64 = (snapshot: FigmaSnapshot | null): string | null => {
+    if (!snapshot) return null;
     try {
-      return Buffer.from(generateSvgFromSnapshot(snapshot as FigmaSnapshot)).toString('base64');
+      return Buffer.from(generateSvgFromSnapshot(snapshot)).toString('base64');
     } catch { return null; }
   };
 
-  const toNodeSvgB64 = (snapshot: FigmaSnapshot, nodeId: string): string | null => {
+  const toNodeSvgB64 = (snapshot: FigmaSnapshot | null, nodeId: string): string | null => {
+    if (!snapshot) return null;
     try {
       const node = findNodeById(snapshot.root, nodeId);
       if (!node) return null;
@@ -72,23 +102,35 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     } catch { return null; }
   };
 
+  // Fetch parent version — storage_path + snapshot_json pour compatibilité
   let prevVersion = null;
+  let prevSnap: FigmaSnapshot | null = null;
+
   if (versionData.parent_id) {
     const { data: prev } = await supabase
       .from('versions')
-      .select('id, version_number, branch_name, status, author_name, created_at, analysis_json, snapshot_json')
+      .select('id, version_number, branch_name, status, author_name, created_at, analysis_json, snapshot_json, storage_path')
       .eq('id', versionData.parent_id)
       .single();
-    prevVersion = prev;
+
+    if (prev) {
+      prevVersion = prev;
+      prevSnap = await resolveSnapshot(prev);
+    }
   }
 
-  const svgB64     = toFullSvgB64(versionData.snapshot_json);
-  const prevSvgB64 = prevVersion ? toFullSvgB64(prevVersion.snapshot_json) : null;
+  // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
+  const currentSnap = await resolveSnapshot(versionData);
 
-  // Build per-node mini SVGs for the node-diff view
-  const delta = versionData.analysis_json as { modified: Array<{ nodeId: string; nodeName: string; nodeType: string; changes: unknown[] }>; added: Array<{ nodeId: string; nodeName: string; nodeType: string }>; removed: Array<{ nodeId: string; nodeName: string; nodeType: string }> } | null;
-  const currentSnap = versionData.snapshot_json as FigmaSnapshot;
-  const prevSnap = prevVersion?.snapshot_json as FigmaSnapshot | undefined;
+  const svgB64     = toFullSvgB64(currentSnap);
+  const prevSvgB64 = toFullSvgB64(prevSnap);
+
+  // Mini SVGs par nœud pour la vue node-diff
+  const delta = versionData.analysis_json as {
+    modified: Array<{ nodeId: string; nodeName: string; nodeType: string; changes: unknown[] }>;
+    added:    Array<{ nodeId: string; nodeName: string; nodeType: string }>;
+    removed:  Array<{ nodeId: string; nodeName: string; nodeType: string }>;
+  } | null;
 
   const nodeDiffs: Array<{
     nodeId: string; nodeName: string; nodeType: string;
@@ -101,7 +143,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
-        before_svg_b64: prevSnap ? toNodeSvgB64(prevSnap, nd.nodeId) : null,
+        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId),
         after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId),
       });
     }
@@ -117,7 +159,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed',
-        before_svg_b64: prevSnap ? toNodeSvgB64(prevSnap, nd.nodeId) : null,
+        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId),
         after_svg_b64:  null,
       });
     }
