@@ -40,8 +40,8 @@ export interface Version {
   author_name: string | null;       // from figma.currentUser.name
   author_avatar_url: string | null; // from figma.currentUser.photoUrl
   figma_node_id: string | null;
-  snapshot_json: FigmaSnapshot;
-  storage_path: string | null;
+  snapshot_json: FigmaSnapshot | null; // null pour les versions post-migration 008
+  storage_path: string | null;         // path dans le bucket 'snapshots'
   analysis_json: DeltaJSON | null;
   ai_summary: string | null;
   status: 'draft' | 'review' | 'approved';

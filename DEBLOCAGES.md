@@ -138,6 +138,41 @@ Isolation design réelle : un designer peut travailler sur `feat/dark-mode` sans
 
 ---
 
+## 6. `snapshot_json` en PostgreSQL → Supabase Storage
+
+**Problème**
+Le controller `checkpoints.controller.ts` stockait le snapshot complet (`FigmaSnapshot`, 200-600KB de JSON) dans une colonne PostgreSQL `snapshot_json`. À chaque commit, deux opérations lourdes :
+- `INSERT` : 200-600KB de JSON dans une ligne PostgreSQL
+- `SELECT snapshot_json` : rechargement du même JSON pour calculer le diff de la version suivante
+
+À l'échelle (1 000 utilisateurs actifs, 5 commits/jour) : plusieurs centaines de MB/jour qui transitent dans PostgreSQL. Ralentissement des requêtes, saturation mémoire, coût croissant.
+
+Le champ `storage_path` existait déjà dans le type `Version` mais n'était jamais renseigné.
+
+**Fix**
+
+Migration `008_snapshot_storage.sql` :
+- Bucket Supabase Storage `snapshots` (privé, 5MB max, `application/json`)
+- `snapshot_json` rendu nullable en base (rétrocompatibilité)
+- Storage policies : un user ne peut accéder qu'aux snapshots de ses propres assets (`objects.name` pour lever l'ambiguïté avec les colonnes `name` de `assets` et `projects`)
+
+Controller `checkpoints.controller.ts` :
+- `SELECT` ne fetche plus `snapshot_json` — uniquement `id, version_number, storage_path`
+- Snapshot précédent téléchargé depuis Storage (`snapshots/{asset_id}/v{N}.json`)
+- Nouveau snapshot uploadé vers Storage avant l'insert DB
+- `INSERT` : `snapshot_json = null`, `storage_path = chemin`
+- Rollback propre : si l'insert DB échoue, le fichier Storage est supprimé
+
+**Note sur le format path**
+`objects.name` (et non `name`) est obligatoire dans les Storage policies dès qu'un EXISTS subquery joint `assets` ou `projects` — ces tables ont aussi une colonne `name`, rendant la référence ambiguë pour PostgreSQL.
+
+**Résultat débloqué**
+PostgreSQL ne stocke plus que des métadonnées légères (~2KB/commit). Les snapshots binaires vivent dans Storage, isolés par user via policies. Le diff engine (`DiffService`) est inchangé — il reçoit toujours deux `FigmaSnapshot` en mémoire, peu importe leur source.
+
+**Migration** `008_snapshot_storage.sql` — exécutée avec succès.
+
+---
+
 ## Synthèse
 
 | Fix | Bloquait quoi | Racine |
@@ -147,6 +182,7 @@ Isolation design réelle : un designer peut travailler sur `feat/dark-mode` sans
 | data URI size limit | Frame view inutilisable | Frontend rendering |
 | `figma.mixed` Symbol | Crash sur nodes complexes | API Figma edge case |
 | Branches = labels sans isolation | Toutes les branches écrasaient le même canvas | Architecture |
+| `snapshot_json` dans PostgreSQL | Scalabilité : saturation DB à l'échelle | Architecture |
 
 ---
 
