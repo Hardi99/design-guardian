@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { getSupabaseClient } from './config/supabase.js';
 import { authRouter } from './controllers/auth.controller.js';
 import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
@@ -29,6 +30,13 @@ export function createApp() {
     uptime_ms: Date.now() - startTime,
     timestamp: new Date().toISOString(),
   }));
+
+  // DB ping — keeps Supabase free tier from pausing (hit by UptimeRobot every 5min)
+  app.get('/ping', async (c) => {
+    const { error } = await getSupabaseClient().from('projects').select('id').limit(1);
+    if (error) return c.json({ status: 'db_error', error: error.message }, 503);
+    return c.json({ status: 'ok' });
+  });
 
   // Prometheus metrics (no auth — scraped by Prometheus server)
   app.get('/metrics', async (c) => {
