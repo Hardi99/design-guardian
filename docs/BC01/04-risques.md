@@ -14,10 +14,10 @@ quadrantChart
     Figma sort feature native: [0.38, 0.90]
     Figma change API Plugin: [0.22, 0.88]
     Adoption faible au lancement: [0.35, 0.72]
-    OpenAI quota dépassé: [0.52, 0.48]
+    OpenAI quota depasse: [0.52, 0.48]
     Railway downtime: [0.18, 0.62]
     Supabase free tier pause: [0.30, 0.55]
-    Latence réseau plugin: [0.48, 0.32]
+    Latence reseau plugin: [0.48, 0.32]
     Bug diff faux positif: [0.30, 0.55]
 ```
 
