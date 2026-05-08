@@ -4,19 +4,19 @@
 
 ```mermaid
 quadrantChart
-    title Parties prenantes — Influence vs Intérêt
+    title Parties prenantes - Influence vs Interet
     x-axis Faible interet --> Fort interet
     y-axis Faible influence --> Forte influence
-    quadrant-1 Gérer de près
-    quadrant-2 Satisfaire — Tenir informé
+    quadrant-1 Gerer de pres
+    quadrant-2 Satisfaire - Tenir informe
     quadrant-3 Surveiller
-    quadrant-4 Informer régulièrement
+    quadrant-4 Informer regulierement
     Jury M2: [0.82, 0.95]
     Commanditaire formation: [0.60, 0.90]
     Figma Platform: [0.35, 0.88]
     Designer early adopter: [0.95, 0.55]
     UX Designers: [0.84, 0.30]
-    Communauté Figma: [0.75, 0.28]
+    Communaute Figma: [0.75, 0.28]
     Packaging Designers: [0.65, 0.22]
     Illustrateurs vectoriels: [0.58, 0.20]
     OpenAI: [0.18, 0.52]
