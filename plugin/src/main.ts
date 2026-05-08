@@ -6,7 +6,11 @@ import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVec
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
-send({ type: 'FILE_INFO', fileKey: figma.fileKey ?? figma.root.id, fileName: figma.root.name });
+if (!figma.fileKey) {
+  send({ type: 'ERROR', message: 'Ce fichier n\'est pas sauvegardé sur Figma Cloud. Sauvegardez-le d\'abord (Fichier → Enregistrer dans le cloud) puis relancez le plugin.' });
+} else {
+  send({ type: 'FILE_INFO', fileKey: figma.fileKey, fileName: figma.root.name });
+}
 
 const user = figma.currentUser;
 if (user) {
