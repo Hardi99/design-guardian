@@ -54,7 +54,7 @@ gantt
 
     section Sprint 8 — Soutenance BC01/BC03
         Diagrammes architecture Mermaid        :done, s8a, 2026-05-08, 2026-05-09
-        Gantt & roadmap                        :active, s8b, 2026-05-09, 2026-05-12
+        Gantt et roadmap                       :active, s8b, 2026-05-09, 2026-05-12
         Parties prenantes & risques            :s8c, 2026-05-12, 2026-05-16
         Backlog MoSCoW + story points          :s8d, 2026-05-12, 2026-05-19
         Deck BC01 — 15-20 slides               :s8e, 2026-05-19, 2026-06-02

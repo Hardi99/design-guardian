@@ -5,7 +5,7 @@
 ```mermaid
 quadrantChart
     title Risques actifs — Probabilité vs Impact
-    x-axis Faible probabilité --> Forte probabilité
+    x-axis Faible probabilite --> Forte probabilite
     y-axis Faible impact --> Fort impact
     quadrant-1 Risques critiques — Traiter en priorité
     quadrant-2 Risques majeurs — Surveiller
