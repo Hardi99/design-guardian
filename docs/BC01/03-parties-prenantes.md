@@ -5,7 +5,7 @@
 ```mermaid
 quadrantChart
     title Parties prenantes — Influence vs Intérêt
-    x-axis Faible intérêt --> Fort intérêt
+    x-axis Faible interet --> Fort interet
     y-axis Faible influence --> Forte influence
     quadrant-1 Gérer de près
     quadrant-2 Satisfaire — Tenir informé
