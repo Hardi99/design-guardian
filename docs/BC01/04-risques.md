@@ -4,13 +4,13 @@
 
 ```mermaid
 quadrantChart
-    title Risques actifs — Probabilité vs Impact
+    title Risques actifs - Probabilite vs Impact
     x-axis Faible probabilite --> Forte probabilite
     y-axis Faible impact --> Fort impact
-    quadrant-1 Risques critiques — Traiter en priorité
-    quadrant-2 Risques majeurs — Surveiller
-    quadrant-3 Risques mineurs — Accepter
-    quadrant-4 Risques à surveiller
+    quadrant-1 Risques critiques - Traiter en priorite
+    quadrant-2 Risques majeurs - Surveiller
+    quadrant-3 Risques mineurs - Accepter
+    quadrant-4 Risques a surveiller
     Figma sort feature native: [0.38, 0.90]
     Figma change API Plugin: [0.22, 0.88]
     Adoption faible au lancement: [0.35, 0.72]
