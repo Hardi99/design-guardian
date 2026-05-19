@@ -118,14 +118,16 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     return c.json<ErrorResponse>({ error: 'Failed to upload snapshot to storage' }, 500);
   }
 
-  // 4b. Upload SVG pixel-perfect si fourni par exportAsync
+  // 4b. Upload PNG pixel-perfect si fourni par exportAsync
+  console.log('[DG] render_svg_b64:', body.render_svg_b64 ? `${body.render_svg_b64.length} chars, starts=${body.render_svg_b64.slice(0, 8)}` : 'absent');
   if (body.render_svg_b64) {
     const isPng = body.render_svg_b64.startsWith('iVBO');
     const renderPath = uploadedPath.replace('.json', isPng ? '_render.png' : '_render.svg');
     const renderBytes = Buffer.from(body.render_svg_b64, 'base64');
-    await getSupabaseStorage()
+    const { error: renderErr } = await getSupabaseStorage()
       .from(SNAPSHOTS_BUCKET)
-      .upload(renderPath, renderBytes, { contentType: isPng ? 'image/png' : 'image/svg+xml', upsert: false });
+      .upload(renderPath, renderBytes, { contentType: isPng ? 'image/png' : 'image/svg+xml', upsert: true });
+    console.log('[DG] render upload:', renderErr ? `FAILED: ${renderErr.message}` : `OK → ${renderPath}`);
   }
 
   // 5. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage
