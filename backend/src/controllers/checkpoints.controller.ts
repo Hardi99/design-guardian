@@ -121,7 +121,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   // 4b. Upload PNG pixel-perfect enveloppé en JSON (bucket accepte application/json uniquement)
   if (body.render_svg_b64) {
     const renderPath = uploadedPath.replace('.json', '_render.json');
-    const renderBytes = Buffer.from(JSON.stringify({ png_b64: body.render_svg_b64 }));
+    const renderBytes = Buffer.from(JSON.stringify({ svg_b64: body.render_svg_b64 }));
     const { error: renderErr } = await getSupabaseStorage()
       .from(SNAPSHOTS_BUCKET)
       .upload(renderPath, renderBytes, { contentType: 'application/json', upsert: true });

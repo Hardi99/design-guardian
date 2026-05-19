@@ -97,13 +97,14 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Si absent, génère le SVG depuis le snapshot (fallback)
   const resolveRenderB64 = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<string | null> => {
     if (storagePath) {
-      // PNG enveloppé en JSON (contourne la restriction MIME du bucket)
+      // SVG/PNG enveloppé en JSON (contourne la restriction MIME du bucket)
       const renderPath = storagePath.replace('.json', '_render.json');
       const { data } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(renderPath);
       if (data) {
         try {
-          const json = JSON.parse(await data.text()) as { png_b64?: string };
-          if (json.png_b64) return json.png_b64;
+          const json = JSON.parse(await data.text()) as { svg_b64?: string; png_b64?: string };
+          if (json.svg_b64) return json.svg_b64;
+          if (json.png_b64) return json.png_b64; // backward compat — anciennes versions PNG
         } catch { /* fallback */ }
       }
     }

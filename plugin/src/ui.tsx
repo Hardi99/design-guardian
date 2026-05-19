@@ -619,18 +619,19 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-// Frame renderer — PNG (exportAsync) or inline SVG (generated fallback)
-// PNG magic bytes in base64 always start with 'iVBO'
+// Frame renderer — SVG natif Figma (exportAsync) ou PNG legacy (iVBO) ou SVG reconstruit (fallback)
 function SvgFrame({ b64, style }: { b64: string; style?: string }) {
   if (b64.startsWith('iVBO')) {
+    // Legacy PNG — anciennes versions avant migration SVG
     return <img src={`data:image/png;base64,${b64}`} class={`${style ?? 'w-full h-full'} object-contain`} />;
   }
   const html = useMemo(() => {
     try {
       const svg = atob(b64);
+      // Figma SVG natif — conserver viewBox, forcer 100% width/height
       return svg
-        .replace(/\s+width="[^"]*"/, '')
-        .replace(/\s+height="[^"]*"/, '')
+        .replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1')
+        .replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1')
         .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
     } catch { return ''; }
   }, [b64]);
