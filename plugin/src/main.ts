@@ -43,7 +43,7 @@ figma.ui.onmessage = async (raw: unknown) => {
 };
 
 async function handleRestoreToFigma(snapshot: FigmaSnapshot): Promise<void> {
-  const root = figma.getNodeById(snapshot.figmaNodeId) as SceneNode | null;
+  const root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null;
   if (!root) {
     send({ type: 'ERROR', message: 'Nœud introuvable — ouvre le bon fichier Figma.' });
     return;
