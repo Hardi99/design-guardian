@@ -65,6 +65,8 @@ export interface NodeSnapshot {
   characters?: string;
   fontSize?: number;
   fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: string;
   // For VECTOR nodes
   vectorPaths?: FigmaVectorPath[];
   // Recursive children
