@@ -120,6 +120,25 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
                     const fn = (node as unknown as TextNode).fontName;
                     return typeof fn === 'object' && fn !== null && !Array.isArray(fn) ? (fn as FontName).family : undefined;
                   })() : undefined,
+    fontWeight:   node.type === 'TEXT' ? (() => {
+                    const fn = (node as unknown as TextNode).fontName;
+                    if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) return undefined;
+                    const style = (fn as FontName).style.toLowerCase();
+                    if (style.includes('thin')) return 100;
+                    if (style.includes('extralight') || style.includes('extra light') || style.includes('ultralight')) return 200;
+                    if (style.includes('light')) return 300;
+                    if (style.includes('medium')) return 500;
+                    if (style.includes('semibold') || style.includes('semi bold') || style.includes('demibold')) return 600;
+                    if (style.includes('extrabold') || style.includes('extra bold') || style.includes('ultrabold')) return 800;
+                    if (style.includes('black') || style.includes('heavy')) return 900;
+                    if (style.includes('bold')) return 700;
+                    return 400;
+                  })() : undefined,
+    fontStyle:    node.type === 'TEXT' ? (() => {
+                    const fn = (node as unknown as TextNode).fontName;
+                    if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) return undefined;
+                    return (fn as FontName).style.toLowerCase().includes('italic') ? 'italic' : 'normal';
+                  })() : undefined,
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
 }
