@@ -3,10 +3,21 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: design-guardian-api
+  # Local development — backend runs on port 3001
+  - job_name: design-guardian-local
     static_configs:
       - targets:
-          - host.docker.internal:3001   # local dev
-          # - design-guardian.up.railway.app:443  # production (HTTPS)
+          - host.docker.internal:3001
     metrics_path: /metrics
-    scheme: http   # passer à https pour Railway
+    scheme: http
+
+  # Production — Railway deployment
+  # Uncomment and set the correct hostname after first Railway deploy
+  # - job_name: design-guardian-prod
+  #   static_configs:
+  #     - targets:
+  #         - design-guardian-api.up.railway.app
+  #   metrics_path: /metrics
+  #   scheme: https
+  #   tls_config:
+  #     insecure_skip_verify: false
