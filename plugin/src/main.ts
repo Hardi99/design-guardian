@@ -87,11 +87,11 @@ function safeStr(v: unknown): string | undefined {
 }
 
 function extractRotation(node: SceneNode): number {
-  // absoluteTransform: [[a, b, tx], [c, d, ty]]
-  // rotation = atan2(b, a) in degrees
+  // absoluteTransform row 0: [cos(θ), -sin(θ), tx] — note the negative sin
+  // atan2(-sin(θ), cos(θ)) = -θ, so we negate to get the actual clockwise angle
   const a = node.absoluteTransform[0][0];
   const b = node.absoluteTransform[0][1];
-  const deg = Math.round(Math.atan2(b, a) * (180 / Math.PI) * 100) / 100;
+  const deg = -Math.round(Math.atan2(b, a) * (180 / Math.PI) * 100) / 100;
   return deg === 0 ? 0 : deg;
 }
 

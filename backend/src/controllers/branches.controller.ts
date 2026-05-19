@@ -111,8 +111,29 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     return toFullSvgB64(snapshot);
   };
 
-  const toNodeSvgB64 = (snapshot: FigmaSnapshot | null, nodeId: string): string | null => {
+  const toNodeSvgB64 = (
+    snapshot: FigmaSnapshot | null,
+    nodeId: string,
+    fullFrameB64?: string | null
+  ): string | null => {
     if (!snapshot) return null;
+
+    // Crop from the pixel-perfect frame SVG (same source as Frame view)
+    if (fullFrameB64 && !fullFrameB64.startsWith('iVBO')) {
+      try {
+        const node = findNodeById(snapshot.root, nodeId);
+        if (!node) return null;
+        const pad = 16;
+        const vb = `${node.x - snapshot.root.x - pad} ${node.y - snapshot.root.y - pad} ${node.width + pad * 2} ${node.height + pad * 2}`;
+        const svgStr = Buffer.from(fullFrameB64, 'base64').toString('utf-8');
+        const cropped = svgStr.replace(/<svg([^>]*)>/, (_m, attrs) =>
+          `<svg${attrs.replace(/\s+(?:viewBox|width|height)="[^"]*"/g, '')} viewBox="${vb}">`
+        );
+        return Buffer.from(cropped).toString('base64');
+      } catch { /* fallback */ }
+    }
+
+    // Fallback: reconstructed SVG from snapshot properties
     try {
       const node = findNodeById(snapshot.root, nodeId);
       if (!node) return null;
@@ -163,8 +184,8 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
-        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId),
-        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId),
+        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64),
+        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId, svgB64),
       });
     }
     for (const nd of delta.added) {
@@ -172,14 +193,14 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added',
         before_svg_b64: null,
-        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId),
+        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId, svgB64),
       });
     }
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed',
-        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId),
+        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64),
         after_svg_b64:  null,
       });
     }
