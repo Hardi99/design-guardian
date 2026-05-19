@@ -343,7 +343,7 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB6
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0 });
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
-  }, [apiKey, asset.id, branchName, snapshot, author]);
+  }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64]);
 
   if (saved) return (
     <div class="flex flex-col h-screen bg-gray-950 text-white p-6">

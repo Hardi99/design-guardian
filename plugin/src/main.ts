@@ -57,12 +57,19 @@ async function handleSnapshot(): Promise<void> {
   let render_svg_b64: string | undefined;
   if ('exportAsync' in node) {
     try {
-      const bytes = await (node as ExportMixin).exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 1 } });
+      const bytes = await (node as ExportMixin).exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 0.5 } });
+      // Chunk-based conversion avoids stack overflow on large arrays
+      const CHUNK = 8192;
       let b = '';
-      for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]!);
-      render_svg_b64 = btoa(b);
-    } catch {
-      // exportAsync failed — backend will generate SVG from snapshot as fallback
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        b += String.fromCharCode(...Array.from(bytes.slice(i, Math.min(i + CHUNK, bytes.length))));
+      }
+      const b64 = btoa(b);
+      // Skip if too large for POST body (> 1.5 MB base64 ≈ 1.1 MB PNG)
+      if (b64.length < 1_500_000) render_svg_b64 = b64;
+      console.log('[DG] exportAsync PNG:', bytes.length, 'bytes →', b64.length, 'b64 chars', render_svg_b64 ? '✓' : '(skipped: too large)');
+    } catch (e) {
+      console.log('[DG] exportAsync failed:', e);
     }
   }
 

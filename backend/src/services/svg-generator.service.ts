@@ -157,9 +157,7 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
     }
     const fs = node.fontSize ?? 14;
     const ff = node.fontFamily ? ` font-family="${escapeXml(node.fontFamily)}"` : '';
-    // Avoid invisible white text: force dark fill when fill is very light or absent
-    const isLightFill = fill && parseInt(fill.hex.slice(1), 16) > 0xCCCCCC;
-    const textFill = (!fill || isLightFill) ? { hex: '#222222', opacity: 1 } : fill;
+    const textFill = fill ?? { hex: '#000000', opacity: 1 };
     const textFillStr = gradFill ?? fillAttrs(textFill);
     // Clip long text to width
     const maxChars = Math.max(5, Math.floor(node.width / (fs * 0.55)));
