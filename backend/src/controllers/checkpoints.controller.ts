@@ -120,11 +120,12 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
 
   // 4b. Upload SVG pixel-perfect si fourni par exportAsync
   if (body.render_svg_b64) {
-    const svgPath = uploadedPath.replace('.json', '_render.svg');
-    const svgBytes = Buffer.from(body.render_svg_b64, 'base64');
+    const isPng = body.render_svg_b64.startsWith('iVBO');
+    const renderPath = uploadedPath.replace('.json', isPng ? '_render.png' : '_render.svg');
+    const renderBytes = Buffer.from(body.render_svg_b64, 'base64');
     await getSupabaseStorage()
       .from(SNAPSHOTS_BUCKET)
-      .upload(svgPath, svgBytes, { contentType: 'image/svg+xml', upsert: false });
+      .upload(renderPath, renderBytes, { contentType: isPng ? 'image/png' : 'image/svg+xml', upsert: false });
   }
 
   // 5. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage

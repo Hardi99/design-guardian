@@ -97,9 +97,11 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Si absent, génère le SVG depuis le snapshot (fallback)
   const resolveRenderB64 = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<string | null> => {
     if (storagePath) {
-      const renderPath = storagePath.replace('.json', '_render.svg');
-      const { data } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(renderPath);
-      if (data) return Buffer.from(await data.arrayBuffer()).toString('base64');
+      for (const ext of ['_render.png', '_render.svg']) {
+        const renderPath = storagePath.replace('.json', ext);
+        const { data } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(renderPath);
+        if (data) return Buffer.from(await data.arrayBuffer()).toString('base64');
+      }
     }
     return toFullSvgB64(snapshot);
   };
