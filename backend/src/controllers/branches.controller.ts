@@ -296,6 +296,29 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, async (c) => {
 });
 
 /**
+ * GET /api/branches/versions/:id/snapshot
+ * Returns the raw snapshot JSON for a version (fetched from Storage).
+ * Used by the plugin to get the data needed for canvas restore.
+ */
+branchesRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
+  const supabase = getSupabaseClient();
+  const { data: version } = await supabase
+    .from('versions')
+    .select('*, assets!inner(project_id)')
+    .eq('id', c.req.param('id'))
+    .single();
+
+  if (!version) return c.json<ErrorResponse>({ error: 'Version not found' }, 404);
+  if ((version.assets as { project_id: string }).project_id !== c.get('projectId'))
+    return c.json<ErrorResponse>({ error: 'Forbidden' }, 403);
+
+  const snapshot = await resolveSnapshot(version);
+  if (!snapshot) return c.json<ErrorResponse>({ error: 'Snapshot not found in storage' }, 404);
+
+  return c.json({ snapshot });
+});
+
+/**
  * PUT /api/branches/versions/:id/status
  * Update version status: draft | review | approved
  */

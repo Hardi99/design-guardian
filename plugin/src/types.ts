@@ -38,6 +38,8 @@ export interface NodeSnapshot {
   characters?: string;
   fontSize?: number;
   fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: string;
   children?: NodeSnapshot[];
 }
 
@@ -61,6 +63,7 @@ export type MainToUI =
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
+  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number }
   | { type: 'ERROR'; message: string };
 
 export type UIToMain =
@@ -68,4 +71,5 @@ export type UIToMain =
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'RESIZE'; width: number; height: number }
   | { type: 'CREATE_BRANCH'; branchName: string }
-  | { type: 'SWITCH_BRANCH'; branchName: string };
+  | { type: 'SWITCH_BRANCH'; branchName: string }
+  | { type: 'RESTORE_TO_FIGMA'; snapshot: FigmaSnapshot };
