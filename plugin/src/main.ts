@@ -6,11 +6,20 @@ import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVec
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
-if (!figma.fileKey) {
-  send({ type: 'ERROR', message: 'Ce fichier n\'est pas sauvegardé sur Figma Cloud. Sauvegardez-le d\'abord (Fichier → Enregistrer dans le cloud) puis relancez le plugin.' });
-} else {
-  send({ type: 'FILE_INFO', fileKey: figma.fileKey, fileName: figma.root.name });
-}
+// figma.fileKey is unavailable in some Figma contexts (desktop, certain plans).
+// Fallback: generate a stable per-file UUID stored in clientStorage.
+// clientStorage is file-scoped per user, so different files never collide.
+(async () => {
+  let fileKey = figma.fileKey as string | undefined;
+  if (!fileKey) {
+    fileKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
+    if (!fileKey) {
+      fileKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      await figma.clientStorage.setAsync('dg_file_id', fileKey);
+    }
+  }
+  send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
+})();
 
 const user = figma.currentUser;
 if (user) {
