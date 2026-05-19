@@ -10,6 +10,11 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   PORT: z.string().default('3001'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  RESEND_API_KEY: z.string().default(''),
+  RESEND_FROM: z.string().default('Design Guardian <noreply@designguardian.app>'),
+  TWILIO_ACCOUNT_SID: z.string().default(''),
+  TWILIO_AUTH_TOKEN: z.string().default(''),
+  TWILIO_FROM_NUMBER: z.string().default(''),
 });
 
 type Env = z.infer<typeof envSchema>;

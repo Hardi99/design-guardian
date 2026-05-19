@@ -7,6 +7,7 @@ import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
 import { checkpointsRouter } from './controllers/checkpoints.controller.js';
 import { branchesRouter } from './controllers/branches.controller.js';
+import { notificationsRouter } from './controllers/notifications.controller.js';
 import { metricsMiddleware } from './middleware/metrics.middleware.js';
 import { registry } from './services/metrics.service.js';
 import { getOpenApiSpec } from './services/openapi.js';
@@ -77,6 +78,7 @@ export function createApp() {
   app.route('/api/assets', assetsRouter);
   app.route('/api/checkpoints', checkpointsRouter);
   app.route('/api/branches', branchesRouter);
+  app.route('/api/notifications', notificationsRouter);
 
   return app;
 }
