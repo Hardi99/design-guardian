@@ -210,6 +210,81 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 });
 
 /**
+ * POST /api/branches/versions/:id/restore
+ * Creates a new checkpoint on the given branch using an older version's snapshot.
+ * The snapshot is fetched from Storage server-side — the frontend never needs to send it.
+ */
+branchesRouter.post('/versions/:id/restore', pluginMiddleware, async (c) => {
+  const supabase = getSupabaseClient();
+  const { branch_name, author } = await c.req.json<{
+    branch_name: string;
+    author: { figma_id: string; name: string; avatar_url?: string };
+  }>();
+
+  if (!branch_name) return c.json<ErrorResponse>({ error: 'branch_name required' }, 400);
+
+  // Load source version + verify ownership
+  const { data: src } = await supabase
+    .from('versions')
+    .select('*, assets!inner(project_id)')
+    .eq('id', c.req.param('id'))
+    .single();
+
+  if (!src) return c.json<ErrorResponse>({ error: 'Version not found' }, 404);
+  if ((src.assets as { project_id: string }).project_id !== c.get('projectId'))
+    return c.json<ErrorResponse>({ error: 'Forbidden' }, 403);
+
+  const snapshot = await resolveSnapshot(src);
+  if (!snapshot) return c.json<ErrorResponse>({ error: 'Snapshot not found in storage' }, 404);
+
+  // Next version number on target branch
+  const { data: prev } = await supabase
+    .from('versions')
+    .select('id, version_number, storage_path')
+    .eq('asset_id', src.asset_id)
+    .eq('branch_name', branch_name)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVersion = prev ? prev.version_number + 1 : 1;
+  const newPath = `${src.asset_id}/v${nextVersion}.json`;
+
+  const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
+  const { error: uploadErr } = await getSupabaseStorage()
+    .from(SNAPSHOTS_BUCKET)
+    .upload(newPath, bytes, { contentType: 'application/json', upsert: false });
+
+  if (uploadErr) return c.json<ErrorResponse>({ error: 'Failed to upload snapshot' }, 500);
+
+  const { data: version, error: versionErr } = await supabase
+    .from('versions')
+    .insert({
+      asset_id: src.asset_id,
+      parent_id: prev?.id ?? null,
+      branch_name,
+      version_number: nextVersion,
+      author_figma_id: author.figma_id,
+      author_name: author.name,
+      author_avatar_url: author.avatar_url ?? null,
+      figma_node_id: src.figma_node_id,
+      snapshot_json: null,
+      storage_path: newPath,
+      analysis_json: null,
+      ai_summary: `Restauration depuis v${src.version_number} (${src.branch_name})`,
+    })
+    .select()
+    .single();
+
+  if (versionErr || !version) {
+    await getSupabaseStorage().from(SNAPSHOTS_BUCKET).remove([newPath]);
+    return c.json<ErrorResponse>({ error: 'Failed to create restore checkpoint' }, 500);
+  }
+
+  return c.json({ version }, 201);
+});
+
+/**
  * PUT /api/branches/versions/:id/status
  * Update version status: draft | review | approved
  */

@@ -438,22 +438,19 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
   }, [apiKey, version.id, status]);
 
   const restore = useCallback(async () => {
-    if (!data || !author) return;
+    if (!author) return;
     setRestoring(true);
     try {
-      await api(apiKey, '/api/checkpoints', {
+      await api(apiKey, `/api/branches/versions/${version.id}/restore`, {
         method: 'POST',
         body: JSON.stringify({
-          asset_id: asset.id,
           branch_name: branch,
-          figma_node_id: (data.version.snapshot_json as FigmaSnapshot)?.figmaNodeId ?? null,
-          snapshot_json: data.version.snapshot_json,
           author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
         }),
       });
       onRestored();
     } catch (e) { setErr((e as Error).message); setRestoring(false); }
-  }, [apiKey, data, author, asset.id, branch, onRestored]);
+  }, [apiKey, version.id, author, branch, onRestored]);
 
   const delta = data?.version.analysis_json;
   const hasPrev = !!data?.prev_version;
