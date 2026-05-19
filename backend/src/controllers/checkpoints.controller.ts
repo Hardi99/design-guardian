@@ -118,6 +118,15 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     return c.json<ErrorResponse>({ error: 'Failed to upload snapshot to storage' }, 500);
   }
 
+  // 4b. Upload SVG pixel-perfect si fourni par exportAsync
+  if (body.render_svg_b64) {
+    const svgPath = uploadedPath.replace('.json', '_render.svg');
+    const svgBytes = Buffer.from(body.render_svg_b64, 'base64');
+    await getSupabaseStorage()
+      .from(SNAPSHOTS_BUCKET)
+      .upload(svgPath, svgBytes, { contentType: 'image/svg+xml', upsert: false });
+  }
+
   // 5. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage
   const { data: version, error: versionError } = await supabase
     .from('versions')

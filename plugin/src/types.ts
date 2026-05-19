@@ -56,7 +56,7 @@ export interface PluginAuthor {
 // ─── Messages main.ts ↔ ui.tsx ───────────────────────────────────────────────
 
 export type MainToUI =
-  | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string }
+  | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string; render_svg_b64?: string }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'BRANCH_CREATED'; branchName: string }
