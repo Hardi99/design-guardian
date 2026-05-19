@@ -9,6 +9,7 @@ import { checkpointsRouter } from './controllers/checkpoints.controller.js';
 import { branchesRouter } from './controllers/branches.controller.js';
 import { metricsMiddleware } from './middleware/metrics.middleware.js';
 import { registry } from './services/metrics.service.js';
+import { getOpenApiSpec } from './services/openapi.js';
 
 const startTime = Date.now();
 
@@ -43,6 +44,33 @@ export function createApp() {
     c.header('Content-Type', registry.contentType);
     return c.text(await registry.metrics());
   });
+
+  // OpenAPI spec + Swagger UI (BC02 — technical documentation)
+  app.get('/api/openapi.json', (c) => c.json(getOpenApiSpec()));
+  app.get('/api/docs', (c) => c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design Guardian — API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>body{margin:0}.swagger-ui .topbar{background:#18181b}</style>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+  SwaggerUIBundle({
+    url: '/api/openapi.json',
+    dom_id: '#swagger-ui',
+    deepLinking: true,
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: 'BaseLayout',
+    tryItOutEnabled: true,
+  });
+</script>
+</body>
+</html>`));
 
   app.route('/api/auth', authRouter);
   app.route('/api/projects', projectsRouter);
