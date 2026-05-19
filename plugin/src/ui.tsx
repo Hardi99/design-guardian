@@ -536,14 +536,14 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
                 <div class="flex-1 flex flex-col items-center justify-center border-r border-gray-800 p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{data.prev_version!.version_number} — avant</p>
                   {data.prev_svg_b64
-                    ? <SvgFrame b64={data.prev_svg_b64} style="flex-1 min-h-0 overflow-hidden" />
+                    ? <SvgFrame b64={data.prev_svg_b64} style="flex-1 min-h-0 overflow-hidden" zoomable />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
                 <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
                   {data.svg_b64
-                    ? <SvgFrame b64={data.svg_b64} style="flex-1 min-h-0 overflow-hidden" />
+                    ? <SvgFrame b64={data.svg_b64} style="flex-1 min-h-0 overflow-hidden" zoomable />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
@@ -620,23 +620,61 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
 // Frame renderer — SVG natif Figma (exportAsync) ou PNG legacy (iVBO) ou SVG reconstruit (fallback)
-function SvgFrame({ b64, style }: { b64: string; style?: string }) {
-  if (b64.startsWith('iVBO')) {
-    // Legacy PNG — anciennes versions avant migration SVG
-    return <img src={`data:image/png;base64,${b64}`} class={`${style ?? 'w-full h-full'} object-contain`} />;
-  }
+function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zoomable?: boolean }) {
+  const [zoom, setZoom] = useState(1);
+  const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
+
   const html = useMemo(() => {
+    if (b64.startsWith('iVBO')) return null;
     try {
       const svg = atob(b64);
-      // Figma SVG natif — conserver viewBox, forcer 100% width/height
       return svg
         .replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1')
         .replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1')
         .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
     } catch { return ''; }
   }, [b64]);
-  if (!html) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
-  return <div class={style ?? 'w-full h-full'} dangerouslySetInnerHTML={{ __html: html }} />;
+
+  const content = html === null
+    ? <img src={`data:image/png;base64,${b64}`} class="w-full h-full object-contain" />
+    : html
+      ? <div class="w-full h-full" dangerouslySetInnerHTML={{ __html: html }} />
+      : <p class="text-gray-600 text-xs">Erreur rendu</p>;
+
+  if (!zoomable) return <div class={style ?? 'w-full h-full'}>{content}</div>;
+
+  return (
+    <div
+      class={`${style ?? 'w-full h-full'} relative overflow-hidden`}
+      onWheel={(e) => { e.preventDefault(); setZoom(z => clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9))); }}
+    >
+      <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
+        {content}
+      </div>
+      {zoom !== 1 && (
+        <button
+          class="absolute top-2 right-2 text-[10px] text-gray-400 bg-gray-900/80 px-1.5 py-0.5 rounded hover:text-white"
+          onClick={() => setZoom(1)}
+        >
+          {Math.round(zoom * 100)}% ↺
+        </button>
+      )}
+    </div>
+  );
+}
+
+function NodeThumb({ b64 }: { b64: string }) {
+  const html = useMemo(() => {
+    if (b64.startsWith('iVBO')) return null;
+    try {
+      return atob(b64)
+        .replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
+        .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
+    } catch { return null; }
+  }, [b64]);
+  if (html === null) return <img src={`data:image/png;base64,${b64}`} class="max-w-full max-h-full object-contain" />;
+  if (!html) return null;
+  return <div class="w-full h-full" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
@@ -651,18 +689,12 @@ function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
         <span class={`text-[10px] px-1.5 py-0.5 rounded font-mono ${kindColor}`}>{kindLabel}</span>
       </div>
       <div class="flex">
-        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 border-r border-gray-800 min-h-[80px]">
-          {nd.before_svg_b64
-            ? <img src={`data:image/svg+xml;base64,${nd.before_svg_b64}`} alt="avant" class="max-w-full max-h-20 object-contain" />
-            : <span class="text-gray-700 text-xs">—</span>
-          }
+        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 border-r border-gray-800 min-h-[80px] max-h-24 overflow-hidden">
+          {nd.before_svg_b64 ? <NodeThumb b64={nd.before_svg_b64} /> : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">avant</span>
         </div>
-        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 min-h-[80px]">
-          {nd.after_svg_b64
-            ? <img src={`data:image/svg+xml;base64,${nd.after_svg_b64}`} alt="après" class="max-w-full max-h-20 object-contain" />
-            : <span class="text-gray-700 text-xs">—</span>
-          }
+        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 min-h-[80px] max-h-24 overflow-hidden">
+          {nd.after_svg_b64 ? <NodeThumb b64={nd.after_svg_b64} /> : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">après</span>
         </div>
       </div>

@@ -161,11 +161,15 @@ function renderNode(node: NodeSnapshot, parentX: number, parentY: number): strin
     const fi = node.fontStyle === 'italic' ? ' font-style="italic"' : '';
     const textFill = fill ?? { hex: '#000000', opacity: 1 };
     const textFillStr = gradFill ?? fillAttrs(textFill);
-    // Clip long text to width
-    const maxChars = Math.max(5, Math.floor(node.width / (fs * 0.55)));
-    const displayText = chars.length > maxChars ? chars.slice(0, maxChars) + '…' : chars;
     const textRotAttr = rot !== 0 ? ` transform="rotate(${rot} ${r2(relX + node.width / 2)} ${r2(relY + node.height / 2)})"` : '';
-    return `<text x="${relX}" y="${r2(relY + fs * 0.85)}" font-size="${fs}"${ff}${fw}${fi} ${textFillStr}${opacity}${textRotAttr}>${escapeXml(displayText)}</text>`;
+    const lines = chars.split('\n');
+    if (lines.length > 1) {
+      const tspans = lines.map((line, i) =>
+        `<tspan x="${relX}" dy="${i === 0 ? '0' : `${fs * 1.2}`}">${escapeXml(line)}</tspan>`
+      ).join('');
+      return `<text x="${relX}" y="${r2(relY + fs * 0.85)}" font-size="${fs}"${ff}${fw}${fi} ${textFillStr}${opacity}${textRotAttr}>${tspans}</text>`;
+    }
+    return `<text x="${relX}" y="${r2(relY + fs * 0.85)}" font-size="${fs}"${ff}${fw}${fi} ${textFillStr}${opacity}${textRotAttr}>${escapeXml(chars)}</text>`;
   }
 
   if (['FRAME', 'GROUP', 'COMPONENT', 'INSTANCE', 'COMPONENT_SET'].includes(type)) {
