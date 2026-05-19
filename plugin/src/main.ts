@@ -44,7 +44,20 @@ async function handleSnapshot(): Promise<void> {
     root: extractSnapshot(node),
   };
 
-  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id });
+  // Pixel-perfect SVG via exportAsync — requires "exports" permission in manifest
+  let render_svg_b64: string | undefined;
+  if ('exportAsync' in node) {
+    try {
+      const bytes = await (node as ExportMixin).exportAsync({ format: 'SVG', contentsOnly: false });
+      let b = '';
+      for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]!);
+      render_svg_b64 = btoa(b);
+    } catch {
+      // exportAsync failed — backend will generate SVG from snapshot as fallback
+    }
+  }
+
+  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id, render_svg_b64 });
 }
 
 // ─── Snapshot extraction ──────────────────────────────────────────────────────

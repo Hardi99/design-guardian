@@ -56,8 +56,9 @@ function App() {
   const [asset, setAsset]       = useState<Asset | null>(null);
   const [diffVersion, setDiffVersion] = useState<Version | null>(null);
   const [branch, setBranch]     = useState('main');
-  const [snapshot, setSnapshot] = useState<FigmaSnapshot | null>(null);
-  const [initErr, setInitErr]   = useState<string | null>(null);
+  const [snapshot, setSnapshot]           = useState<FigmaSnapshot | null>(null);
+  const [renderSvgB64, setRenderSvgB64]   = useState<string | undefined>(undefined);
+  const [initErr, setInitErr]             = useState<string | null>(null);
 
   useEffect(() => {
     const handler = async (e: MessageEvent) => {
@@ -80,7 +81,7 @@ function App() {
           break;
         }
         case 'AUTHOR_INFO':      setAuthor(msg.author); break;
-        case 'SNAPSHOT_READY':   setSnapshot(msg.snapshot); setScreen('checkpoint'); break;
+        case 'SNAPSHOT_READY':   setSnapshot(msg.snapshot); setRenderSvgB64(msg.render_svg_b64); setScreen('checkpoint'); break;
         case 'BRANCH_CREATED':   break; // Figma page created — UI already updated optimistically
         case 'BRANCH_SWITCHED':  break; // Figma page switched — no UI change needed
         case 'ERROR':            alert(`[DG] ${msg.message}`); break;
@@ -122,7 +123,7 @@ function App() {
 
   if (screen === 'checkpoint' && snapshot) return (
     <CheckpointScreen apiKey={apiKey!} author={author!} asset={asset!}
-      branch={branch} snapshot={snapshot}
+      branch={branch} snapshot={snapshot} renderSvgB64={renderSvgB64}
       onBack={() => setScreen('home')} onSaved={() => setScreen('home')}
     />
   );
@@ -313,11 +314,11 @@ function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
 
 interface CpProps {
   apiKey: string; author: PluginAuthor; asset: Asset; branch: string;
-  snapshot: FigmaSnapshot;
+  snapshot: FigmaSnapshot; renderSvgB64?: string;
   onBack: () => void; onSaved: () => void;
 }
 
-function CheckpointScreen({ apiKey, author, asset, branch, snapshot, onBack, onSaved }: CpProps) {
+function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB64, onBack, onSaved }: CpProps) {
   const [branchName, setBranchName] = useState(branch);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved]     = useState<{ summary: string | null; changes: number } | null>(null);
@@ -334,6 +335,7 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, onBack, onS
             branch_name: branchName.trim() || 'main',
             figma_node_id: snapshot.figmaNodeId,
             snapshot_json: snapshot,
+            render_svg_b64: renderSvgB64,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
           }),
         }

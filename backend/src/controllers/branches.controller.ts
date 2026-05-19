@@ -93,6 +93,17 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     } catch { return null; }
   };
 
+  // Tente de charger le SVG pixel-perfect depuis Storage (exportAsync)
+  // Si absent, génère le SVG depuis le snapshot (fallback)
+  const resolveRenderB64 = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<string | null> => {
+    if (storagePath) {
+      const renderPath = storagePath.replace('.json', '_render.svg');
+      const { data } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(renderPath);
+      if (data) return Buffer.from(await data.arrayBuffer()).toString('base64');
+    }
+    return toFullSvgB64(snapshot);
+  };
+
   const toNodeSvgB64 = (snapshot: FigmaSnapshot | null, nodeId: string): string | null => {
     if (!snapshot) return null;
     try {
@@ -122,8 +133,10 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
   const currentSnap = await resolveSnapshot(versionData);
 
-  const svgB64     = toFullSvgB64(currentSnap);
-  const prevSvgB64 = toFullSvgB64(prevSnap);
+  const [svgB64, prevSvgB64] = await Promise.all([
+    resolveRenderB64(versionData.storage_path, currentSnap),
+    resolveRenderB64(prevVersion?.storage_path ?? null, prevSnap),
+  ]);
 
   // Mini SVGs par nœud pour la vue node-diff
   const delta = versionData.analysis_json as {
