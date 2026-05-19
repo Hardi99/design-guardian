@@ -415,6 +415,8 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
   const [status, setStatus]       = useState(version.status);
   const [statusBusy, setStatusBusy] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [applyingToFigma, setApplyingToFigma] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
   const [view, setView] = useState<'nodes' | 'frame'>('nodes');
 
   useEffect(() => {
@@ -452,6 +454,30 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
     } catch (e) { setErr((e as Error).message); setRestoring(false); }
   }, [apiKey, version.id, author, branch, onRestored]);
 
+  const applyToFigma = useCallback(async () => {
+    setApplyingToFigma(true);
+    setRestoreMsg(null);
+    try {
+      const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${version.id}/snapshot`);
+      send({ type: 'RESTORE_TO_FIGMA', snapshot });
+    } catch (e) { setErr((e as Error).message); setApplyingToFigma(false); }
+  }, [apiKey, version.id]);
+
+  // Listen for RESTORE_COMPLETE from main.ts
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number } | undefined;
+      if (!msg) return;
+      if (msg.type === 'RESTORE_COMPLETE') {
+        setApplyingToFigma(false);
+        setRestoreMsg(`✓ ${msg.applied} nœud(s) restauré(s)${msg.skipped ? ` · ${msg.skipped} ignoré(s)` : ''}`);
+        setTimeout(() => setRestoreMsg(null), 4000);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   const delta = data?.version.analysis_json;
   const hasPrev = !!data?.prev_version;
 
@@ -476,12 +502,20 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         >
           {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
         </button>
-        {/* Restore */}
+        {/* Restore checkpoint */}
         {data && (
           <button onClick={restore} disabled={restoring}
             class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
             title="Créer un nouveau checkpoint depuis cette version">
-            {restoring ? '…' : '↩ Restore'}
+            {restoring ? '…' : '↩ Checkpoint'}
+          </button>
+        )}
+        {/* Apply to Figma canvas */}
+        {data && (
+          <button onClick={applyToFigma} disabled={applyingToFigma}
+            class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
+            title="Restaurer cette version directement sur le canvas Figma">
+            {applyingToFigma ? '…' : '↩ Apply to Figma'}
           </button>
         )}
         {hasPrev && (
@@ -498,6 +532,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         )}
       </div>
 
+      {restoreMsg && <div class="px-4 py-2 bg-green-900/40 border-b border-green-800 text-green-400 text-xs flex-shrink-0">{restoreMsg}</div>}
       {loading && <Spinner full />}
       {err    && <p class="text-red-400 text-xs p-4">{err}</p>}
 

@@ -33,13 +33,111 @@ if (user) {
 figma.ui.onmessage = async (raw: unknown) => {
   const msg = raw as UIToMain;
   switch (msg.type) {
-    case 'REQUEST_SNAPSHOT': await handleSnapshot(); break;
-    case 'OPEN_EXTERNAL':    figma.openExternal(msg.url); break;
-    case 'RESIZE':           figma.ui.resize(msg.width, msg.height); break;
-    case 'CREATE_BRANCH':    await handleCreateBranch(msg.branchName); break;
-    case 'SWITCH_BRANCH':    handleSwitchBranch(msg.branchName); break;
+    case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
+    case 'OPEN_EXTERNAL':     figma.openExternal(msg.url); break;
+    case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
+    case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
+    case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
+    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot); break;
   }
 };
+
+async function handleRestoreToFigma(snapshot: FigmaSnapshot): Promise<void> {
+  const root = figma.getNodeById(snapshot.figmaNodeId) as SceneNode | null;
+  if (!root) {
+    send({ type: 'ERROR', message: 'Nœud introuvable — ouvre le bon fichier Figma.' });
+    return;
+  }
+  try {
+    const { applied, skipped } = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+    send({ type: 'RESTORE_COMPLETE', applied, skipped });
+  } catch (e) {
+    send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
+  }
+}
+
+async function applySnapshot(
+  node: SceneNode,
+  snap: NodeSnapshot,
+  parentAbsX: number,
+  parentAbsY: number,
+  isRoot: boolean
+): Promise<{ applied: number; skipped: number }> {
+  let applied = 0, skipped = 0;
+  try {
+    // Position relative au parent — on ne déplace pas le frame racine sur le canvas
+    if (!isRoot && 'x' in node && 'y' in node) {
+      (node as { x: number; y: number }).x = snap.x - parentAbsX;
+      (node as { x: number; y: number }).y = snap.y - parentAbsY;
+    }
+
+    // Taille
+    if ('resize' in node) {
+      (node as LayoutMixin).resize(snap.width, snap.height);
+    }
+
+    // Opacité / visibilité
+    if ('opacity' in node)  (node as BlendMixin).opacity = snap.opacity;
+    if ('visible' in node && snap.visible !== undefined) node.visible = snap.visible;
+
+    // Fills (SOLID uniquement — gradients ignorés pour éviter les erreurs)
+    if ('fills' in node) {
+      const paints: Paint[] = snap.fills
+        .filter(f => f.type === 'SOLID' && f.color)
+        .map(f => ({
+          type: 'SOLID' as const,
+          color: { r: f.color!.r, g: f.color!.g, b: f.color!.b },
+          opacity: f.color!.a,
+          visible: f.visible ?? true,
+        } as SolidPaint));
+      if (paints.length > 0) (node as GeometryMixin).fills = paints;
+    }
+
+    // Strokes
+    if ('strokes' in node) {
+      const paints: Paint[] = snap.strokes
+        .filter(s => s.type === 'SOLID' && s.color)
+        .map(s => ({
+          type: 'SOLID' as const,
+          color: { r: s.color!.r, g: s.color!.g, b: s.color!.b },
+          opacity: s.opacity ?? s.color!.a,
+          visible: true,
+        } as SolidPaint));
+      if (paints.length > 0) (node as GeometryMixin).strokes = paints;
+    }
+
+    // Stroke weight + corner radius
+    if ('strokeWeight' in node && snap.strokeWeight !== undefined)
+      (node as IndividualStrokesMixin).strokeWeight = snap.strokeWeight;
+    if ('cornerRadius' in node && snap.cornerRadius !== undefined)
+      (node as CornerMixin).cornerRadius = snap.cornerRadius;
+
+    // Texte
+    if (node.type === 'TEXT' && snap.characters !== undefined) {
+      const t = node as TextNode;
+      const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName)
+        ? t.fontName as FontName
+        : { family: 'Inter', style: 'Regular' } as FontName;
+      await figma.loadFontAsync(fn);
+      t.characters = snap.characters;
+      if (snap.fontSize !== undefined && typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
+    }
+
+    applied++;
+  } catch { skipped++; }
+
+  // Récursion sur les enfants matchés par ID
+  if ('children' in node && snap.children) {
+    for (const childSnap of snap.children) {
+      const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
+      if (match) {
+        const r = await applySnapshot(match, childSnap, snap.x, snap.y, false);
+        applied += r.applied; skipped += r.skipped;
+      } else { skipped++; }
+    }
+  }
+  return { applied, skipped };
+}
 
 async function handleSnapshot(): Promise<void> {
   const [node] = figma.currentPage.selection;
