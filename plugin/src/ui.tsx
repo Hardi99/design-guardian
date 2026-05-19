@@ -619,19 +619,22 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-// Inline SVG renderer — avoids data URI size limits in Figma's webview
+// Frame renderer — PNG (exportAsync) or inline SVG (generated fallback)
+// PNG magic bytes in base64 always start with 'iVBO'
 function SvgFrame({ b64, style }: { b64: string; style?: string }) {
+  if (b64.startsWith('iVBO')) {
+    return <img src={`data:image/png;base64,${b64}`} class={`${style ?? 'w-full h-full'} object-contain`} />;
+  }
   const html = useMemo(() => {
     try {
       const svg = atob(b64);
-      // Strip fixed width/height so CSS controls sizing; keep viewBox for aspect ratio
       return svg
         .replace(/\s+width="[^"]*"/, '')
         .replace(/\s+height="[^"]*"/, '')
         .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
     } catch { return ''; }
   }, [b64]);
-  if (!html) return <p class="text-gray-600 text-xs">Erreur SVG</p>;
+  if (!html) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
   return <div class={style ?? 'w-full h-full'} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

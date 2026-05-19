@@ -57,7 +57,7 @@ async function handleSnapshot(): Promise<void> {
   let render_svg_b64: string | undefined;
   if ('exportAsync' in node) {
     try {
-      const bytes = await (node as ExportMixin).exportAsync({ format: 'SVG', contentsOnly: false });
+      const bytes = await (node as ExportMixin).exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 1 } });
       let b = '';
       for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]!);
       render_svg_b64 = btoa(b);
