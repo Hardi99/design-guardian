@@ -257,6 +257,17 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, async (c) => {
 
   if (uploadErr) return c.json<ErrorResponse>({ error: 'Failed to upload snapshot' }, 500);
 
+  // Copy pixel-perfect render if it exists on the source version
+  if (src.storage_path) {
+    const srcRender = src.storage_path.replace('.json', '_render.json');
+    const { data: renderData } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(srcRender);
+    if (renderData) {
+      const renderBytes = await renderData.arrayBuffer();
+      await getSupabaseStorage().from(SNAPSHOTS_BUCKET)
+        .upload(newPath.replace('.json', '_render.json'), renderBytes, { contentType: 'application/json', upsert: false });
+    }
+  }
+
   const { data: version, error: versionErr } = await supabase
     .from('versions')
     .insert({
