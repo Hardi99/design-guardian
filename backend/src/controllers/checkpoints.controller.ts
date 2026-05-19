@@ -6,6 +6,7 @@ import { DiffService } from '../services/diff.service.js';
 import { OpenAIService } from '../services/openai.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { checkpointsCreatedTotal, aiSummariesGeneratedTotal } from '../services/metrics.service.js';
+import { sendCheckpointNotification } from '../services/notification.service.js';
 import { createCheckpointSchema } from '../types/api.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot } from '../types/figma.js';
@@ -155,6 +156,19 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   }
 
   checkpointsCreatedTotal.inc();
+
+  // Fire-and-forget — ne bloque pas la réponse si Resend est absent/hors ligne
+  if (body.notify_email) {
+    sendCheckpointNotification({
+      to: body.notify_email,
+      authorName: body.author.name,
+      projectName: body.figma_node_id ?? 'Design Guardian',
+      branchName: body.branch_name,
+      versionNumber: nextVersion,
+      aiSummary,
+    }).catch(() => { /* silent — notifications are best-effort */ });
+  }
+
   return c.json<CheckpointResponse>({ version, analysis: analysisJson, ai_summary: aiSummary }, 201);
 });
 
