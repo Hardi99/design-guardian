@@ -1,7 +1,7 @@
 // ─── UI THREAD — Preact + HTTP. Aucun accès API Figma ici. ───────────────────
 
 import { render, h } from 'preact';
-import { useState, useEffect, useCallback, useMemo } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks';
 import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor } from './types.js';
 import './ui.css';
 
