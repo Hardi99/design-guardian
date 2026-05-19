@@ -622,7 +622,22 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 // Frame renderer — SVG natif Figma (exportAsync) ou PNG legacy (iVBO) ou SVG reconstruit (fallback)
 function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zoomable?: boolean }) {
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [grabbing, setGrabbing] = useState(false);
+  const dragRef = useRef<{ active: boolean; lastX: number; lastY: number }>({ active: false, lastX: 0, lastY: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
+
+  const clampPan = (x: number, y: number, z: number) => {
+    const el = containerRef.current;
+    if (!el) return { x, y };
+    // Keep at least 80px of the frame visible on each axis
+    const margin = 80;
+    const hw = el.clientWidth  * (1 + z) / 2 - margin;
+    const hh = el.clientHeight * (1 + z) / 2 - margin;
+    return { x: Math.min(hw, Math.max(-hw, x)), y: Math.min(hh, Math.max(-hh, y)) };
+  };
 
   const html = useMemo(() => {
     if (b64.startsWith('iVBO')) return null;
@@ -636,25 +651,51 @@ function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zooma
   }, [b64]);
 
   const content = html === null
-    ? <img src={`data:image/png;base64,${b64}`} class="w-full h-full object-contain" />
+    ? <img src={`data:image/png;base64,${b64}`} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />
     : html
-      ? <div class="w-full h-full" dangerouslySetInnerHTML={{ __html: html }} />
+      ? <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: html }} />
       : <p class="text-gray-600 text-xs">Erreur rendu</p>;
 
   if (!zoomable) return <div class={style ?? 'w-full h-full'}>{content}</div>;
 
+  const isTransformed = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
+
   return (
     <div
-      class={`${style ?? 'w-full h-full'} relative overflow-hidden`}
-      onWheel={(e) => { e.preventDefault(); setZoom(z => clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9))); }}
+      ref={containerRef}
+      class={`${style ?? 'w-full h-full'} relative overflow-hidden select-none`}
+      style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
+      onWheel={(e) => {
+        e.preventDefault();
+        setZoom(z => {
+          const nz = clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9));
+          setPan(p => clampPan(p.x, p.y, nz));
+          return nz;
+        });
+      }}
+      onMouseDown={(e) => {
+        dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
+        setGrabbing(true);
+        e.preventDefault();
+      }}
+      onMouseMove={(e) => {
+        if (!dragRef.current.active) return;
+        const dx = e.clientX - dragRef.current.lastX;
+        const dy = e.clientY - dragRef.current.lastY;
+        dragRef.current.lastX = e.clientX;
+        dragRef.current.lastY = e.clientY;
+        setPan(p => clampPan(p.x + dx, p.y + dy, zoom));
+      }}
+      onMouseUp={() => { dragRef.current.active = false; setGrabbing(false); }}
+      onMouseLeave={() => { dragRef.current.active = false; setGrabbing(false); }}
     >
-      <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
+      <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
         {content}
       </div>
-      {zoom !== 1 && (
+      {isTransformed && (
         <button
           class="absolute top-2 right-2 text-[10px] text-gray-400 bg-gray-900/80 px-1.5 py-0.5 rounded hover:text-white"
-          onClick={() => setZoom(1)}
+          onClick={(e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); }}
         >
           {Math.round(zoom * 100)}% ↺
         </button>
