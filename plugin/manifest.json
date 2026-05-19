@@ -9,8 +9,7 @@
   "main": "dist/main.js",
   "ui": "dist/index.html",
   "permissions": [
-    "currentuser",
-    "exports"
+    "currentuser"
   ],
   "networkAccess": {
     "allowedDomains": [
