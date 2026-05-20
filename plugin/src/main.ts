@@ -65,14 +65,20 @@ async function applySnapshot(
 ): Promise<{ applied: number; skipped: number }> {
   let applied = 0, skipped = 0;
   try {
-    // Position relative au parent — on ne déplace pas le frame racine sur le canvas
-    if (!isRoot && 'x' in node && 'y' in node) {
+    // Auto-layout children: Figma owns their position + size — manual override corrupts layout
+    const inAutoLayout = !isRoot && (() => {
+      const p = node.parent;
+      return !!(p && 'layoutMode' in p && (p as FrameNode).layoutMode !== 'NONE');
+    })();
+
+    // Position relative au parent — skip root and auto-layout children
+    if (!isRoot && !inAutoLayout && 'x' in node && 'y' in node) {
       (node as { x: number; y: number }).x = snap.x - parentAbsX;
       (node as { x: number; y: number }).y = snap.y - parentAbsY;
     }
 
-    // Taille
-    if ('resize' in node) {
+    // Taille — skip auto-layout children (Figma throws "Cannot resize auto layout child")
+    if ('resize' in node && !inAutoLayout) {
       (node as LayoutMixin).resize(snap.width, snap.height);
     }
 
