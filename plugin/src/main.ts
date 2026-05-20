@@ -77,8 +77,9 @@ async function applySnapshot(
       (node as { x: number; y: number }).y = snap.y - parentAbsY;
     }
 
-    // Taille — skip auto-layout children (Figma throws "Cannot resize auto layout child")
-    if ('resize' in node && !inAutoLayout) {
+    // Taille — skip root (déclenche le recalcul des contraintes BOTTOM sur les enfants)
+    // et skip auto-layout children (Figma throws "Cannot resize auto layout child")
+    if ('resize' in node && !isRoot && !inAutoLayout) {
       (node as LayoutMixin).resize(snap.width, snap.height);
     }
 
