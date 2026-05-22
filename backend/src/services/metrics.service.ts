@@ -32,6 +32,13 @@ export const aiSummariesGeneratedTotal = new Counter({
   registers: [registry],
 });
 
+export const paymentsTotal = new Counter({
+  name: 'payments_total',
+  help: 'Nombre de transactions de paiement',
+  labelNames: ['event', 'plan'],
+  registers: [registry],
+});
+
 export const activeConnections = new Gauge({
   name: 'active_connections',
   help: 'Connexions HTTP actives',
