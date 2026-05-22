@@ -17,6 +17,9 @@ export interface Project {
   owner_id: string;
   api_key: string;
   plan: 'free' | 'pro' | 'team';
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  notify_email: string | null;
   created_at: string;
 }
 

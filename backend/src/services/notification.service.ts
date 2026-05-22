@@ -118,6 +118,89 @@ export async function sendApprovalNotification(opts: {
   );
 }
 
+export async function sendSubscriptionStartedEmail(opts: {
+  to: string;
+  projectName: string;
+  plan: string;
+  nextBillingDate: string;
+}): Promise<EmailResult> {
+  return sendEmail(
+    opts.to,
+    `[Design Guardian] Abonnement ${opts.plan} activé`,
+    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#18181b">Bienvenue sur le plan ${opts.plan} 🎉</h2>
+      <p style="color:#52525b">Votre abonnement <strong>${opts.plan}</strong> pour le projet
+      <strong>${opts.projectName}</strong> est actif.</p>
+      <p style="color:#52525b">Prochain renouvellement : <strong>${opts.nextBillingDate}</strong>.</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px">Design Guardian — Semantic Vector Versioning</p>
+    </div>`,
+  );
+}
+
+export async function sendSubscriptionCancelledEmail(opts: {
+  to: string;
+  projectName: string;
+  plan: string;
+  endDate: string;
+}): Promise<EmailResult> {
+  return sendEmail(
+    opts.to,
+    `[Design Guardian] Abonnement annulé — ${opts.projectName}`,
+    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#18181b">Abonnement annulé</h2>
+      <p style="color:#52525b">Votre abonnement <strong>${opts.plan}</strong> pour
+      <strong>${opts.projectName}</strong> a été annulé.</p>
+      <p style="color:#52525b">Accès maintenu jusqu'au <strong>${opts.endDate}</strong>,
+      puis retour au plan Free.</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px">Design Guardian — Semantic Vector Versioning</p>
+    </div>`,
+  );
+}
+
+export async function sendPaymentFailedEmail(opts: {
+  to: string;
+  projectName: string;
+  amount: string;
+  nextAttempt: string;
+}): Promise<EmailResult> {
+  return sendEmail(
+    opts.to,
+    `[Design Guardian] Échec de paiement — action requise`,
+    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#dc2626">Échec de paiement</h2>
+      <p style="color:#52525b">Le paiement de <strong>${opts.amount}</strong> pour
+      <strong>${opts.projectName}</strong> a échoué.</p>
+      <p style="color:#52525b">Prochain essai : <strong>${opts.nextAttempt}</strong>.
+      Mettez à jour votre moyen de paiement pour éviter une interruption de service.</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px">Design Guardian — Semantic Vector Versioning</p>
+    </div>`,
+  );
+}
+
+export async function sendInvoiceEmail(opts: {
+  to: string;
+  projectName: string;
+  amount: string;
+  invoiceUrl: string;
+  period: string;
+}): Promise<EmailResult> {
+  return sendEmail(
+    opts.to,
+    `[Design Guardian] Facture — ${opts.projectName}`,
+    `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#18181b">Votre facture Design Guardian</h2>
+      <p style="color:#52525b">Période : <strong>${opts.period}</strong><br>
+      Projet : <strong>${opts.projectName}</strong><br>
+      Montant : <strong>${opts.amount}</strong></p>
+      <a href="${opts.invoiceUrl}" style="display:inline-block;margin-top:16px;padding:10px 20px;
+        background:#6366f1;color:#fff;text-decoration:none;border-radius:6px;font-size:14px">
+        Télécharger la facture
+      </a>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px">Design Guardian — Semantic Vector Versioning</p>
+    </div>`,
+  );
+}
+
 // ── SMS ───────────────────────────────────────────────────────────────────────
 
 export interface SmsResult { sent: boolean; sid?: string; error?: string }
