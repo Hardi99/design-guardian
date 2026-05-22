@@ -6,6 +6,39 @@ Versioning [Semver](https://semver.org/lang/fr/).
 
 ---
 
+## [1.4.0] — 2026-05-22
+
+### Added
+- **Service Paiements (BC F)** — `GET /api/payments/plans`, `POST /api/payments/checkout`, `/portal`, `/webhook`
+- Intégration Stripe : Checkout hébergé, billing portal, webhooks signés (`stripe-signature`)
+- 5 événements webhook : `checkout.session.completed`, `subscription.updated/deleted`, `invoice.payment_succeeded/failed`
+- Mise à jour automatique `projects.plan` + `stripe_subscription_id` à la réception du webhook
+- Emails transactionnels Stripe : activation abonnement, annulation, facture PDF, échec de paiement
+- Prometheus counter `payments_total{event, plan}`
+- Catalogue plans Free / Pro (12€/mois) / Team (39€/mois) avec réduction annuelle
+- Colonnes Supabase : `stripe_customer_id`, `stripe_subscription_id`, `notify_email`
+- Fiches recettes REC-PAY-004, REC-PAY-005, REC-PAY-006
+
+---
+
+## [1.3.0] — 2026-05-20
+
+### Added
+- **Service Notifications (BC D)** — Resend (email) + Twilio (SMS)
+- `POST /api/notifications/checkpoint` — notification collaborateurs sur nouveau checkpoint
+- `POST /api/notifications/sms/verify` — envoi code de vérification SMS
+- `POST /api/notifications/test` — endpoint de démonstration jury
+- Emails : checkpoint, review request, version approuvée
+- Dégradation gracieuse : variables env optionnelles, retourne `{ sent: false }` si non configuré
+- Fiches recettes REC-NOTIF-001, REC-NOTIF-002, REC-NOTIF-003
+
+### Fixed
+- **Apply to Figma** — `resize()` ignoré sur le nœud root (évite recalcul contraintes BOTTOM, bug nav bar)
+- **Apply to Figma** — position/resize ignorés pour les enfants en auto-layout (évite `Cannot resize auto layout child`)
+- `package-lock.json` resynchronisé après `bun add resend twilio` (CI `npm ci` était en échec)
+
+---
+
 ## [1.2.0] — 2026-03-31
 
 ### Added

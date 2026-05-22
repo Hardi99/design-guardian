@@ -10,10 +10,12 @@ graph TB
     end
 
     subgraph Backend["Backend (Hono + Node.js / Railway)"]
-        API["API REST\n/api/checkpoints\n/api/branches\n/api/assets\n/api/projects\n/health · /ping · /metrics"]
+        API["API REST\n/api/checkpoints · /api/branches\n/api/assets · /api/projects\n/api/notifications · /api/payments\n/health · /ping · /metrics · /api/docs"]
         DiffSvc["DiffService\nDiff géométrique ε=0.01px"]
-        OpenAISvc["OpenAIService\nAI Patch Note"]
+        OpenAISvc["OpenAIService\nAI Patch Note (GPT-4o-mini)"]
         SVGSvc["SVGService\nReconstruction SVG inline"]
+        NotifSvc["NotificationService\nResend (email) + Twilio (SMS)"]
+        StripeSvc["StripeService\nCheckout · Portal · Webhooks"]
     end
 
     subgraph Data["Persistance (Supabase)"]
@@ -37,6 +39,12 @@ graph TB
     DiffSvc -->|"DeltaJSON"| OpenAISvc
     OpenAISvc -->|"ai_summary"| API
     API --> SVGSvc
+    API --> NotifSvc
+    API --> StripeSvc
+    NotifSvc -->|"email transactionnel"| Resend["Resend API"]
+    NotifSvc -->|"SMS vérification"| Twilio["Twilio API"]
+    StripeSvc -->|"Checkout · Portal"| StripeAPI["Stripe API"]
+    StripeAPI -->|"webhook signé"| API
     API -->|"INSERT metadata\nstorage_path"| DB
     API -->|"UPLOAD snapshot\n{asset_id}/v{n}.json"| Storage
     API -->|"DOWNLOAD prev snapshot"| Storage
@@ -121,6 +129,9 @@ erDiagram
         text figma_file_key UK
         text api_key UK
         text plan
+        text stripe_customer_id
+        text stripe_subscription_id
+        text notify_email
         timestamp created_at
     }
 

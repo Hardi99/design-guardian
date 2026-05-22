@@ -132,6 +132,82 @@
 | **Résultat obtenu** | ✅ Conforme |
 | **Statut** | PASS |
 
+### REC-PAY-004 — Catalogue des plans (GET /api/payments/plans)
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-PAY-004 |
+| **Fonctionnalité** | Endpoint public retournant les plans Free / Pro / Team |
+| **Préconditions** | Backend accessible |
+| **Étapes** | 1. `GET https://design-guardian.up.railway.app/api/payments/plans` |
+| **Résultat attendu** | HTTP 200, JSON `{ plans: [{ id: "free" }, { id: "pro" }, { id: "team" }] }` avec prix et features |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
+### REC-PAY-005 — Création session Stripe Checkout (POST /api/payments/checkout)
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-PAY-005 |
+| **Fonctionnalité** | Génération d'une URL Stripe Checkout pour souscription Pro mensuelle |
+| **Préconditions** | `STRIPE_SECRET_KEY` et `STRIPE_PRICE_PRO_MONTHLY` configurés, X-API-Key valide |
+| **Étapes** | 1. `POST /api/payments/checkout` `{ plan: "pro", interval: "monthly", success_url: "...", cancel_url: "..." }` |
+| **Résultat attendu** | HTTP 201, `{ url: "https://checkout.stripe.com/...", session_id: "cs_..." }` |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
+### REC-PAY-006 — Webhook Stripe — activation abonnement
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-PAY-006 |
+| **Fonctionnalité** | Mise à jour du plan en BDD après paiement Stripe |
+| **Préconditions** | `STRIPE_WEBHOOK_SECRET` configuré, projet Stripe en mode test |
+| **Étapes** | 1. Utiliser Stripe CLI : `stripe trigger checkout.session.completed`<br>2. Observer Supabase : table `projects`, colonne `plan` |
+| **Résultat attendu** | `projects.plan` passe de `"free"` à `"pro"`. Email de bienvenue envoyé si `notify_email` renseigné. |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
+---
+
+## Module NOTIFICATIONS — Email & SMS
+
+### REC-NOTIF-001 — Email de test (POST /api/notifications/test)
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-NOTIF-001 |
+| **Fonctionnalité** | Envoi email transactionnel via Resend |
+| **Préconditions** | `RESEND_API_KEY` configuré, X-API-Key valide |
+| **Étapes** | 1. `POST /api/notifications/test` `{ "to": "test@example.com" }` |
+| **Résultat attendu** | HTTP 200, `{ sent: true, id: "re_..." }`. Email reçu avec sujet "[Design Guardian] Test de notification". |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
+### REC-NOTIF-002 — Notification checkpoint par email
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-NOTIF-002 |
+| **Fonctionnalité** | Email automatique lors de la création d'un checkpoint avec `notify_email` |
+| **Préconditions** | `RESEND_API_KEY` configuré, checkpoint créé avec champ `notify_email` |
+| **Étapes** | 1. `POST /api/checkpoints` avec `{ ..., notify_email: "test@example.com" }` |
+| **Résultat attendu** | Email reçu : sujet "[Design Guardian] Nouveau checkpoint — {projet}", corps avec AI summary |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
+### REC-NOTIF-003 — Code de vérification SMS (POST /api/notifications/sms/verify)
+
+| Champ | Valeur |
+|-------|--------|
+| **ID** | REC-NOTIF-003 |
+| **Fonctionnalité** | Envoi SMS de vérification via Twilio |
+| **Préconditions** | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` configurés |
+| **Étapes** | 1. `POST /api/notifications/sms/verify` `{ "to": "+33600000000", "code": "123456" }` |
+| **Résultat attendu** | HTTP 200, `{ sent: true, sid: "SM..." }`. SMS reçu avec le code. |
+| **Résultat obtenu** | ✅ Conforme |
+| **Statut** | PASS |
+
 ---
 
 ## Module VERSIONING — Checkpoints & Diff
