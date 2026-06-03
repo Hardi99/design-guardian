@@ -630,8 +630,8 @@ function DiffScreen() {
               <div class={`flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative ${blend === 'diff' ? 'bg-black' : ''}`}>
                 {blend === 'fade' ? (
                   <>
-                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity: 1 }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
                     {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
+                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
                   </>
                 ) : (
                   <>
