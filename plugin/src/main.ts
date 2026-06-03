@@ -6,18 +6,41 @@ import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVec
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
-// figma.fileKey is unavailable in some Figma contexts (desktop, certain plans).
-// Fallback: generate a stable per-file UUID stored in clientStorage.
-// clientStorage is file-scoped per user, so different files never collide.
+// Generate a cryptographically random hex ID.
+function generateFileId(): string {
+  const bytes = new Uint8Array(16);
+  try { crypto.getRandomValues(bytes); } catch {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Key resolution order — ensures all editors of the same file share one project:
+// 1. figma.fileKey          — available in dev mode + some Figma plans
+// 2. figma.root.getPluginData — stored in the file itself, shared across all users
+// 3. figma.clientStorage    — legacy per-user fallback (promotes to shared on write)
+// 4. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
-  let fileKey = figma.fileKey as string | undefined;
+  let fileKey: string =
+    (figma.fileKey as string | undefined) ??
+    figma.root.getPluginData('dg_file_id') ??
+    '';
+
   if (!fileKey) {
-    fileKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
-    if (!fileKey) {
-      fileKey = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      await figma.clientStorage.setAsync('dg_file_id', fileKey);
+    const userKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
+    if (userKey) {
+      fileKey = userKey;
+      // Promote legacy per-user key to file-scoped shared storage.
+      try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
     }
   }
+
+  if (!fileKey) {
+    fileKey = generateFileId();
+    try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
+    await figma.clientStorage.setAsync('dg_file_id', fileKey);
+  }
+
   send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
 })();
 

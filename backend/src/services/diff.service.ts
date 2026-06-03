@@ -13,8 +13,11 @@ export class DiffService {
   compareSnapshots(v1: FigmaSnapshot, v2: FigmaSnapshot): DeltaJSON {
     const startTime = performance.now();
 
-    const v1Map = this.flattenTree(v1.root);
-    const v2Map = this.flattenTree(v2.root);
+    // Root IDs differ → cloned branch (node.clone() generates new IDs).
+    // Fall back to tree-path matching so cross-branch diffs are meaningful.
+    const crossBranch = v1.root.id !== v2.root.id;
+    const v1Map = crossBranch ? this.flattenTreeByPath(v1.root) : this.flattenTree(v1.root);
+    const v2Map = crossBranch ? this.flattenTreeByPath(v2.root) : this.flattenTree(v2.root);
 
     const modified: NodeDelta[] = [];
     const added: NodeDelta[] = [];
@@ -61,7 +64,7 @@ export class DiffService {
     };
   }
 
-  // Flatten a node tree into a flat map: id -> NodeSnapshot
+  // Flatten by Figma node ID — used for same-branch diffs (IDs are stable).
   private flattenTree(root: NodeSnapshot): Map<string, NodeSnapshot> {
     const map = new Map<string, NodeSnapshot>();
     const traverse = (node: NodeSnapshot) => {
@@ -71,6 +74,22 @@ export class DiffService {
       }
     };
     traverse(root);
+    return map;
+  }
+
+  // Flatten by tree path — used for cross-branch diffs where IDs differ after clone.
+  // Key: "TYPE:name/childIndex:TYPE:name/…" — stable across clone, sensitive to renames.
+  private flattenTreeByPath(root: NodeSnapshot): Map<string, NodeSnapshot> {
+    const map = new Map<string, NodeSnapshot>();
+    const traverse = (node: NodeSnapshot, path: string) => {
+      map.set(path, node);
+      if (node.children) {
+        node.children.forEach((child, i) => {
+          traverse(child, `${path}/${i}:${child.type}:${child.name}`);
+        });
+      }
+    };
+    traverse(root, `${root.type}:${root.name}`);
     return map;
   }
 
