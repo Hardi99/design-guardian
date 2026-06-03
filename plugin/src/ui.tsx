@@ -134,13 +134,14 @@ function AssetsScreen() {
   const setAsset   = useAppStore(s => s.setAsset);
   const setScreen  = useAppStore(s => s.setScreen);
 
-  const [assets,   setAssets]   = useState<Asset[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [newName,  setNewName]  = useState('');
-  const [newType,  setNewType]  = useState<typeof ASSET_TYPES[number]>('ui');
-  const [saving,   setSaving]   = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [err,      setErr]      = useState<string | null>(null);
+  const [assets,    setAssets]    = useState<Asset[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [newName,   setNewName]   = useState('');
+  const [newType,   setNewType]   = useState<typeof ASSET_TYPES[number]>('ui');
+  const [saving,    setSaving]    = useState(false);
+  const [deleting,  setDeleting]  = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [err,       setErr]       = useState<string | null>(null);
 
   useEffect(() => {
     api<{ assets: Asset[] }>(apiKey, '/api/assets')
@@ -151,13 +152,11 @@ function AssetsScreen() {
 
   const onSelect = useCallback((a: Asset) => { setAsset(a); setScreen('home'); }, []);
 
-  const deleteAsset = useCallback(async (a: Asset, e: MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm(`Supprimer "${a.name}" et tout son historique ?`)) return;
-    setDeleting(a.id); setErr(null);
+  const confirmDelete = useCallback(async (id: string) => {
+    setDeleting(id); setConfirmId(null); setErr(null);
     try {
-      await api(apiKey, `/api/assets/${a.id}`, { method: 'DELETE' });
-      setAssets(prev => prev.filter(x => x.id !== a.id));
+      await api(apiKey, `/api/assets/${id}`, { method: 'DELETE' });
+      setAssets(prev => prev.filter(x => x.id !== id));
     } catch (err) { setErr((err as Error).message); }
     finally { setDeleting(null); }
   }, [apiKey]);
@@ -181,19 +180,28 @@ function AssetsScreen() {
         {loading && <Spinner />}
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
         {assets.map(a => (
-          <div key={a.id} class="flex items-center gap-2">
-          <button class="flex-1 text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors" onClick={() => onSelect(a)}>
-            <span class="text-sm font-medium">{a.name}</span>
-            <span class="text-xs text-gray-600 font-mono ml-2">{a.asset_type}</span>
-          </button>
-          <button
-            aria-label={`Supprimer ${a.name}`}
-            disabled={deleting === a.id}
-            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
-            onClick={e => deleteAsset(a, e as unknown as MouseEvent)}
-          >
-            {deleting === a.id ? '…' : '✕'}
-          </button>
+          <div key={a.id} class="flex flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <button class="flex-1 text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors" onClick={() => onSelect(a)}>
+                <span class="text-sm font-medium">{a.name}</span>
+                <span class="text-xs text-gray-600 font-mono ml-2">{a.asset_type}</span>
+              </button>
+              <button
+                aria-label={`Supprimer ${a.name}`}
+                disabled={deleting === a.id}
+                class={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${confirmId === a.id ? 'text-red-400 bg-red-500/10' : 'text-gray-600 hover:text-red-400 hover:bg-red-500/10'}`}
+                onClick={() => setConfirmId(confirmId === a.id ? null : a.id)}
+              >
+                {deleting === a.id ? '…' : '✕'}
+              </button>
+            </div>
+            {confirmId === a.id && (
+              <div class="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <span class="text-xs text-red-400 flex-1">Supprimer "{a.name}" ?</span>
+                <button class="text-xs text-gray-400 hover:text-white px-2 py-1" onClick={() => setConfirmId(null)}>Annuler</button>
+                <button class="text-xs text-red-400 hover:text-red-300 font-semibold px-2 py-1" onClick={() => confirmDelete(a.id)}>Supprimer</button>
+              </div>
+            )}
           </div>
         ))}
         {!loading && (
@@ -505,6 +513,7 @@ function DiffScreen() {
 
   const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
   const [opacity, setOpacity] = useState(0.5);
+  const [blend, setBlend] = useState<'fade' | 'diff'>('fade');
 
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
@@ -618,16 +627,34 @@ function DiffScreen() {
                 </div>
               </div>
             ) : (
-              <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
-                {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity: 1 }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
-                {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
-                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
-                  <span class="text-xs text-gray-500">avant</span>
-                  <input type="range" min={0} max={1} step={0.01} value={opacity}
-                    aria-label="Opacité du calque précédent"
-                    onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
-                    class="w-24 accent-purple-500" />
-                  <span class="text-xs text-gray-500">après</span>
+              <div class={`flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative ${blend === 'diff' ? 'bg-black' : ''}`}>
+                {blend === 'fade' ? (
+                  <>
+                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity: 1 }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
+                    {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
+                  </>
+                ) : (
+                  <>
+                    {data.prev_svg_b64 && <div class="absolute inset-0 p-4"><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
+                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ mixBlendMode: 'difference' }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
+                  </>
+                )}
+                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-gray-900/90 rounded-lg px-3 py-1.5">
+                  <div class="flex gap-1">
+                    <button aria-pressed={blend === 'fade'} class={`px-2 py-0.5 rounded text-xs transition-colors ${blend === 'fade' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setBlend('fade')}>Fondu</button>
+                    <button aria-pressed={blend === 'diff'} class={`px-2 py-0.5 rounded text-xs transition-colors ${blend === 'diff' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setBlend('diff')}>Différence</button>
+                  </div>
+                  {blend === 'fade' && (
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-gray-500">avant</span>
+                      <input type="range" min={0} max={1} step={0.01} value={opacity}
+                        aria-label="Opacité du calque précédent"
+                        onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                        class="w-24 accent-purple-500" />
+                      <span class="text-xs text-gray-500">après</span>
+                    </div>
+                  )}
+                  {blend === 'diff' && <span class="text-xs text-gray-500">Les zones modifiées s'illuminent</span>}
                 </div>
               </div>
             )}
