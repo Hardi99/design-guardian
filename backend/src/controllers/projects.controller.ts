@@ -8,8 +8,21 @@ import type { AppEnv } from '../types/hono.js';
 
 const projectsRouter = new Hono<AppEnv>();
 
+// Simple in-memory rate limiter: max 10 auto-init calls per IP per minute.
+const _autoInitBucket = new Map<string, { n: number; resetAt: number }>();
+function _checkAutoInitRate(ip: string): boolean {
+  const now = Date.now();
+  const b = _autoInitBucket.get(ip);
+  if (!b || b.resetAt < now) { _autoInitBucket.set(ip, { n: 1, resetAt: now + 60_000 }); return true; }
+  if (b.n >= 10) return false;
+  b.n++;
+  return true;
+}
+
 // ── Auto-init (no auth — Figma file key is the identifier) ───────────────────
 projectsRouter.post('/auto-init', zValidator('json', autoInitSchema), async (c) => {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (!_checkAutoInitRate(ip)) return c.json<ErrorResponse>({ error: 'Too many requests' }, 429);
   const { figma_file_key, figma_file_name } = c.req.valid('json');
   const db = getSupabaseClient();
 

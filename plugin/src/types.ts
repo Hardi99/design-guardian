@@ -68,6 +68,7 @@ export type MainToUI =
 
 export type UIToMain =
   | { type: 'REQUEST_SNAPSHOT' }
+  | { type: 'RETRY_INIT' }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'RESIZE'; width: number; height: number }
   | { type: 'CREATE_BRANCH'; branchName: string }

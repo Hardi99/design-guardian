@@ -38,6 +38,7 @@ function App() {
   const setAuthor     = useAppStore(s => s.setAuthor);
   const setSnapshot   = useAppStore(s => s.setSnapshot);
   const setInitErr    = useAppStore(s => s.setInitErr);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
     const handler = async (e: MessageEvent) => {
@@ -72,23 +73,54 @@ function App() {
 
   if (screen === 'loading')    return <LoadingScreen />;
   if (screen === 'assets')     return <AssetsScreen />;
-  if (screen === 'home')       return <HomeScreen />;
+  if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
   if (screen === 'diff')       return <DiffScreen />;
   if (screen === 'checkpoint') return <CheckpointScreen />;
+  if (showUpgrade) return (
+    <div class="flex flex-col h-screen bg-gray-950 text-white p-6 gap-4">
+      <div class="flex items-center gap-3 border-b border-gray-800 pb-4">
+        <button class="text-gray-500 hover:text-white text-sm" onClick={() => setShowUpgrade(false)}>←</button>
+        <span class="font-medium text-sm">Passer à Pro</span>
+      </div>
+      <div class="flex flex-col gap-3">
+        {[
+          { plan: 'Free',  price: '0€',   features: ['10 checkpoints / asset', 'Diff géométrique', 'IA Patch Notes'] },
+          { plan: 'Pro',   price: '9€/m', features: ['Checkpoints illimités', 'Toutes les branches', 'Export Delta JSON'] },
+          { plan: 'Team',  price: '29€/m', features: ['Collaboration multi-designers', 'Gold approval flow', 'Priorité support'] },
+        ].map(({ plan, price, features }) => (
+          <div key={plan} class="p-4 bg-gray-900 border border-gray-800 rounded-lg flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm">{plan}</span>
+              <span class="text-purple-400 text-sm font-mono">{price}</span>
+            </div>
+            {features.map(f => <p key={f} class="text-xs text-gray-400">· {f}</p>)}
+          </div>
+        ))}
+      </div>
+      <p class="text-xs text-gray-600 text-center mt-auto">Contact : design-guardian@proton.me</p>
+    </div>
+  );
   return <Spinner full />;
 }
 
 // ─── Loading ──────────────────────────────────────────────────────────────────
 
 function LoadingScreen() {
-  const initErr = useAppStore(s => s.initErr);
+  const initErr  = useAppStore(s => s.initErr);
+  const setInitErr = useAppStore(s => s.setInitErr);
   return (
     <div role="status" aria-label={initErr ? 'Erreur de connexion' : 'Connexion au projet…'} class="flex flex-col items-center justify-center h-screen bg-gray-950 text-white gap-3">
-      <Spinner />
-      {initErr
-        ? <p role="alert" class="text-red-400 text-xs text-center px-6">{initErr}</p>
-        : <p class="text-gray-500 text-xs" aria-hidden="true">Connexion au projet…</p>
-      }
+      {!initErr && <Spinner />}
+      {initErr ? (
+        <>
+          <p role="alert" class="text-red-400 text-xs text-center px-6">{initErr}</p>
+          <button class="btn-secondary text-xs px-3 py-1.5" onClick={() => { setInitErr(null); send({ type: 'RETRY_INIT' }); }}>
+            Réessayer
+          </button>
+        </>
+      ) : (
+        <p class="text-gray-500 text-xs" aria-hidden="true">Connexion au projet…</p>
+      )}
     </div>
   );
 }
@@ -164,7 +196,7 @@ function AssetsScreen() {
 
 // ─── Home (Timeline) ──────────────────────────────────────────────────────────
 
-function HomeScreen() {
+function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const apiKey         = useAppStore(s => s.apiKey)!;
   const author         = useAppStore(s => s.author);
   const asset          = useAppStore(s => s.asset)!;
@@ -209,7 +241,7 @@ function HomeScreen() {
                               'bg-gray-800 text-gray-500 cursor-pointer'
           }`}
           aria-label={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
-          onClick={() => plan === 'free' && send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}
+          onClick={() => plan === 'free' && onUpgrade()}
         >{plan.toUpperCase()}</button>
       </div>
 
@@ -253,7 +285,7 @@ function HomeScreen() {
 
       <div class="p-4 border-t border-gray-800 flex flex-col gap-2">
         {plan === 'free' && versions.length >= 10 && (
-          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}>Passer à Pro</span></p>
+          <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={onUpgrade}>Passer à Pro</span></p>
         )}
         <button class="btn-primary w-full" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={plan === 'free' && versions.length >= 10}>
           Capturer un checkpoint
@@ -273,7 +305,7 @@ function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span class="text-xs font-mono text-gray-400">v{v.version_number}</span>
-          {v.status === 'approved' && <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded">✦ Gold</span>}
+          {v.status === 'approved' && <span title="Gold : version validée et approuvée — référence de qualité pour l'équipe" class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded cursor-help">✦ Gold</span>}
           {v.status === 'review'   && <span class="px-1.5 py-0.5 bg-amber-500/10  text-amber-400  text-xs rounded">Review</span>}
           <span class="text-xs text-gray-600 ml-auto">{timeAgo(v.created_at)}</span>
         </div>
@@ -352,6 +384,7 @@ function CheckpointScreen() {
         <div class="p-3 bg-gray-900 rounded-lg border border-gray-800">
           <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
           <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
+          {!renderSvgB64 && <p class="text-xs text-amber-600/80 mt-1">Frame complexe — aperçu approximatif activé</p>}
         </div>
         <div>
           <label htmlFor="cp-branch" class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>

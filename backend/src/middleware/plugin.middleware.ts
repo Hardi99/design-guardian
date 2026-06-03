@@ -13,12 +13,13 @@ export async function pluginMiddleware(c: Context<ProjectEnv>, next: Next): Prom
 
   const { data } = await getSupabaseClient()
     .from('projects')
-    .select('id')
+    .select('id, plan')
     .eq('api_key', key)
     .maybeSingle();
 
   if (!data) return c.json({ error: 'Invalid API key' }, 401);
 
   c.set('projectId', data.id);
+  c.set('plan', data.plan ?? 'free');
   await next();
 }
