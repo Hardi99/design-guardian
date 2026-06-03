@@ -1,26 +1,16 @@
 // ─── UI THREAD — Preact + HTTP. Aucun accès API Figma ici. ───────────────────
 
 import { render, h } from 'preact';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'preact/hooks';
 import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor } from './types.js';
+import { useAppStore } from './useAppStore.js';
+import type { Asset, Version, Plan, Screen } from './store.js';
+import { diffReducer, initialDiffState } from './diffReducer.js';
+import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
+import { timeAgo } from './utils.js';
 import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Asset { id: string; name: string; asset_type: string }
-interface Version {
-  id: string; version_number: number; branch_name: string; parent_id: string | null;
-  status: 'draft' | 'review' | 'approved';
-  ai_summary: string | null; created_at: string;
-  author_name: string | null; author_avatar_url: string | null;
-}
-interface PropertyChange { property: string; oldValue: unknown; newValue: unknown; delta?: string }
-interface NodeDelta { nodeId: string; nodeName: string; nodeType: string; changes: PropertyChange[] }
-interface DeltaJSON { modified: NodeDelta[]; added: NodeDelta[]; removed: NodeDelta[]; totalChanges: number }
-type Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff';
-type Plan = 'free' | 'pro' | 'team';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,27 +28,16 @@ async function api<T>(key: string, path: string, opts?: RequestInit): Promise<T>
 
 function send(msg: UIToMain) { parent.postMessage({ pluginMessage: msg }, '*'); }
 
-function timeAgo(iso: string): string {
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (m < 1)  return 'à l\'instant';
-  if (m < 60) return `il y a ${m}min`;
-  const h = Math.floor(m / 60);
-  return h < 24 ? `il y a ${h}h` : `il y a ${Math.floor(h / 24)}j`;
-}
-
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── App (routeur) ────────────────────────────────────────────────────────────
 
 function App() {
-  const [screen, setScreen]     = useState<Screen>('loading');
-  const [apiKey, setApiKey]     = useState<string | null>(null);
-  const [plan, setPlan]         = useState<Plan>('free');
-  const [author, setAuthor]     = useState<PluginAuthor | null>(null);
-  const [asset, setAsset]       = useState<Asset | null>(null);
-  const [diffVersion, setDiffVersion] = useState<Version | null>(null);
-  const [branch, setBranch]     = useState('main');
-  const [snapshot, setSnapshot]           = useState<FigmaSnapshot | null>(null);
-  const [renderSvgB64, setRenderSvgB64]   = useState<string | undefined>(undefined);
-  const [initErr, setInitErr]             = useState<string | null>(null);
+  const screen        = useAppStore(s => s.screen);
+  const setScreen     = useAppStore(s => s.setScreen);
+  const setApiKey     = useAppStore(s => s.setApiKey);
+  const setPlan       = useAppStore(s => s.setPlan);
+  const setAuthor     = useAppStore(s => s.setAuthor);
+  const setSnapshot   = useAppStore(s => s.setSnapshot);
+  const setInitErr    = useAppStore(s => s.setInitErr);
 
   useEffect(() => {
     const handler = async (e: MessageEvent) => {
@@ -80,68 +59,55 @@ function App() {
           }
           break;
         }
-        case 'AUTHOR_INFO':      setAuthor(msg.author); break;
-        case 'SNAPSHOT_READY':   setSnapshot(msg.snapshot); setRenderSvgB64(msg.render_svg_b64); setScreen('checkpoint'); break;
-        case 'BRANCH_CREATED':   break; // Figma page created — UI already updated optimistically
-        case 'BRANCH_SWITCHED':  break; // Figma page switched — no UI change needed
-        case 'ERROR':            alert(`[DG] ${msg.message}`); break;
+        case 'AUTHOR_INFO':    setAuthor(msg.author); break;
+        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64); setScreen('checkpoint'); break;
+        case 'BRANCH_CREATED': break;
+        case 'BRANCH_SWITCHED': break;
+        case 'ERROR': alert(`[DG] ${msg.message}`); break;
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  if (screen === 'loading') return (
-    <div class="flex flex-col items-center justify-center h-screen bg-gray-950 text-white gap-3">
+  if (screen === 'loading')    return <LoadingScreen />;
+  if (screen === 'assets')     return <AssetsScreen />;
+  if (screen === 'home')       return <HomeScreen />;
+  if (screen === 'diff')       return <DiffScreen />;
+  if (screen === 'checkpoint') return <CheckpointScreen />;
+  return <Spinner full />;
+}
+
+// ─── Loading ──────────────────────────────────────────────────────────────────
+
+function LoadingScreen() {
+  const initErr = useAppStore(s => s.initErr);
+  return (
+    <div role="status" aria-label={initErr ? 'Erreur de connexion' : 'Connexion au projet…'} class="flex flex-col items-center justify-center h-screen bg-gray-950 text-white gap-3">
       <Spinner />
       {initErr
-        ? <p class="text-red-400 text-xs text-center px-6">{initErr}</p>
-        : <p class="text-gray-500 text-xs">Connexion au projet…</p>
+        ? <p role="alert" class="text-red-400 text-xs text-center px-6">{initErr}</p>
+        : <p class="text-gray-500 text-xs" aria-hidden="true">Connexion au projet…</p>
       }
     </div>
   );
-
-  if (screen === 'assets') return (
-    <AssetsScreen apiKey={apiKey!} onSelect={a => { setAsset(a); setScreen('home'); }} />
-  );
-
-  if (screen === 'home') return (
-    <HomeScreen apiKey={apiKey!} author={author} asset={asset!} plan={plan}
-      branch={branch} onBranchChange={setBranch}
-      onCapture={() => send({ type: 'REQUEST_SNAPSHOT' })}
-      onChangeAsset={() => setScreen('assets')}
-      onOpenDiff={v => { setDiffVersion(v); setScreen('diff'); }}
-    />
-  );
-
-  if (screen === 'diff' && diffVersion) return (
-    <DiffScreen apiKey={apiKey!} version={diffVersion} author={author} asset={asset!} branch={branch} plan={plan}
-      onBack={() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }}
-      onRestored={() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }}
-    />
-  );
-
-  if (screen === 'checkpoint' && snapshot) return (
-    <CheckpointScreen apiKey={apiKey!} author={author!} asset={asset!}
-      branch={branch} snapshot={snapshot} renderSvgB64={renderSvgB64}
-      onBack={() => setScreen('home')} onSaved={() => setScreen('home')}
-    />
-  );
-
-  return <Spinner full />;
 }
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
 const ASSET_TYPES = ['ui', 'logo', 'icon', 'packaging', 'illustration', 'other'] as const;
 
-function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asset) => void }) {
-  const [assets, setAssets]   = useState<Asset[]>([]);
+function AssetsScreen() {
+  const apiKey     = useAppStore(s => s.apiKey)!;
+  const setAsset   = useAppStore(s => s.setAsset);
+  const setScreen  = useAppStore(s => s.setScreen);
+
+  const [assets,  setAssets]  = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<typeof ASSET_TYPES[number]>('ui');
-  const [saving, setSaving]   = useState(false);
-  const [err, setErr]         = useState<string | null>(null);
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState<string | null>(null);
 
   useEffect(() => {
     api<{ assets: Asset[] }>(apiKey, '/api/assets')
@@ -149,6 +115,8 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
       .catch(e => setErr((e as Error).message))
       .finally(() => setLoading(false));
   }, [apiKey]);
+
+  const onSelect = useCallback((a: Asset) => { setAsset(a); setScreen('home'); }, []);
 
   const create = useCallback(async () => {
     if (!newName.trim()) return;
@@ -167,7 +135,7 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
       <Topbar label="Choisir un asset" />
       <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {loading && <Spinner />}
-        {err && <p class="text-red-400 text-xs">{err}</p>}
+        {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
         {assets.map(a => (
           <button key={a.id} class="w-full text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors" onClick={() => onSelect(a)}>
             <span class="text-sm font-medium">{a.name}</span>
@@ -176,17 +144,17 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
         ))}
         {!loading && (
           <div class="mt-2 flex flex-col gap-2">
-            <p class="text-xs text-gray-500 uppercase tracking-wide">Nouvel asset</p>
-            <input class="input" placeholder="Nom de l'asset…" value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
+            <label htmlFor="new-asset-name" class="text-xs text-gray-500 uppercase tracking-wide">Nouvel asset</label>
+            <input id="new-asset-name" class="input" placeholder="Nom de l'asset…" value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
             <div class="flex gap-1 flex-wrap">
               {ASSET_TYPES.map(t => (
-                <button key={t} class={`px-2.5 py-1 rounded text-xs transition-colors ${newType === t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setNewType(t)}>{t}</button>
+                <button key={t} aria-pressed={newType === t} class={`px-2.5 py-1 rounded text-xs transition-colors ${newType === t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setNewType(t)}>{t}</button>
               ))}
             </div>
             <button class="btn-primary" onClick={create} disabled={saving || !newName.trim()}>
               {saving ? 'Création…' : 'Créer l\'asset'}
             </button>
-            {err && <p class="text-red-400 text-xs">{err}</p>}
+            {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
           </div>
         )}
       </div>
@@ -196,18 +164,21 @@ function AssetsScreen({ apiKey, onSelect }: { apiKey: string; onSelect: (a: Asse
 
 // ─── Home (Timeline) ──────────────────────────────────────────────────────────
 
-interface HomeProps {
-  apiKey: string; author: PluginAuthor | null; asset: Asset; plan: Plan;
-  branch: string; onBranchChange: (b: string) => void;
-  onCapture: () => void; onChangeAsset: () => void; onOpenDiff: (v: Version) => void;
-}
+function HomeScreen() {
+  const apiKey         = useAppStore(s => s.apiKey)!;
+  const author         = useAppStore(s => s.author);
+  const asset          = useAppStore(s => s.asset)!;
+  const plan           = useAppStore(s => s.plan);
+  const branch         = useAppStore(s => s.branch);
+  const setBranch      = useAppStore(s => s.setBranch);
+  const setScreen      = useAppStore(s => s.setScreen);
+  const setDiffVersion = useAppStore(s => s.setDiffVersion);
 
-function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCapture, onChangeAsset, onOpenDiff }: HomeProps) {
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [branches, setBranches] = useState<string[]>(['main']);
-  const [loading, setLoading]   = useState(true);
-  const [newBranch, setNewBranch] = useState('');
-  const [err, setErr]           = useState<string | null>(null);
+  const [versions,   setVersions]   = useState<Version[]>([]);
+  const [branches,   setBranches]   = useState<string[]>(['main']);
+  const [loading,    setLoading]    = useState(true);
+  const [newBranch,  setNewBranch]  = useState('');
+  const [err,        setErr]        = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -219,40 +190,43 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
 
   const visible = versions.filter(v => v.branch_name === branch);
 
+  const openDiff = useCallback((v: Version) => { setDiffVersion(v); setScreen('diff'); }, []);
+
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 gap-2">
-        <button class="flex items-center gap-2 min-w-0" onClick={onChangeAsset} title="Changer d'asset">
+        <button class="flex items-center gap-2 min-w-0" onClick={() => setScreen('assets')} title="Changer d'asset">
           <Logo small />
           <div class="min-w-0">
             <p class="text-sm font-medium truncate">{asset.name}</p>
             {author && <p class="text-xs text-gray-500 truncate">{author.name}</p>}
           </div>
         </button>
-        <span
-          class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 cursor-pointer ${
+        <button
+          class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 ${
             plan === 'team' ? 'bg-purple-500/20 text-purple-400' :
             plan === 'pro'  ? 'bg-blue-500/20 text-blue-400' :
-                              'bg-gray-800 text-gray-500'
+                              'bg-gray-800 text-gray-500 cursor-pointer'
           }`}
-          title={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
+          aria-label={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
           onClick={() => plan === 'free' && send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}
-        >{plan.toUpperCase()}</span>
+        >{plan.toUpperCase()}</button>
       </div>
 
       <div class="flex items-center gap-1.5 px-4 py-2 border-b border-gray-800 overflow-x-auto">
         {branches.map(b => (
-          <button key={b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => { onBranchChange(b); send({ type: 'SWITCH_BRANCH', branchName: b }); }}>{b}</button>
+          <button key={b} aria-pressed={branch === b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => { setBranch(b); send({ type: 'SWITCH_BRANCH', branchName: b }); }}>{b}</button>
         ))}
         <input
-          class="bg-transparent border border-dashed border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-500 placeholder-gray-700 focus:outline-none focus:border-purple-500 w-24"
+          aria-label="Créer une branche"
+          class="bg-transparent border border-dashed border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-500 placeholder-gray-700 focus:outline-none focus:border-purple-500 focus-visible:ring-2 focus-visible:ring-purple-500 w-24"
           placeholder="+ branche" value={newBranch}
           onInput={e => setNewBranch((e.target as HTMLInputElement).value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && newBranch.trim()) {
               const b = newBranch.trim();
               if (!branches.includes(b)) setBranches(prev => [...prev, b]);
-              onBranchChange(b);
+              setBranch(b);
               send({ type: 'CREATE_BRANCH', branchName: b });
               setNewBranch('');
             }
@@ -262,7 +236,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
 
       <div class="flex-1 overflow-y-auto">
         {loading && <Spinner />}
-        {err && <p class="text-red-400 text-xs p-4">{err}</p>}
+        {err && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
         {!loading && visible.length === 0 && (
           <div class="flex flex-col items-center justify-center py-12 px-6 text-center gap-2">
             <p class="text-gray-400 text-sm">Aucun checkpoint sur <span class="font-mono text-purple-400">{branch}</span></p>
@@ -272,7 +246,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
         {visible.length > 0 && (
           <div class="relative px-4 py-3">
             <div class="absolute left-7 top-0 bottom-0 w-px bg-gray-800" />
-            {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} onClick={() => onOpenDiff(v)} />)}
+            {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} onClick={() => openDiff(v)} />)}
           </div>
         )}
       </div>
@@ -281,7 +255,7 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
         {plan === 'free' && versions.length >= 10 && (
           <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={() => send({ type: 'OPEN_EXTERNAL', url: 'https://design-guardian.vercel.app/pricing' })}>Passer à Pro</span></p>
         )}
-        <button class="btn-primary w-full" onClick={onCapture} disabled={plan === 'free' && versions.length >= 10}>
+        <button class="btn-primary w-full" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={plan === 'free' && versions.length >= 10}>
           Capturer un checkpoint
         </button>
       </div>
@@ -291,38 +265,50 @@ function HomeScreen({ apiKey, author, asset, plan, branch, onBranchChange, onCap
 
 function VersionRow({ v, onClick }: { v: Version; onClick?: () => void }) {
   const dot = { approved: 'bg-green-500', review: 'bg-amber-500', draft: 'bg-gray-600' }[v.status];
-  return (
-    <div class={`flex items-start gap-3 py-3 ${onClick ? 'cursor-pointer hover:bg-gray-900/50 rounded-lg px-1 -mx-1 transition-colors' : ''}`} onClick={onClick}>
+  const inner = (
+    <>
       <div class="relative z-10 flex-shrink-0 mt-1.5">
         <div class={`w-2.5 h-2.5 rounded-full border-2 border-gray-950 ${dot}`} />
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span class="text-xs font-mono text-gray-400">v{v.version_number}</span>
-          {v.status === 'approved' && <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded" title="Gold — Version validée, référence officielle du projet.">✦ Gold</span>}
+          {v.status === 'approved' && <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 text-xs rounded">✦ Gold</span>}
           {v.status === 'review'   && <span class="px-1.5 py-0.5 bg-amber-500/10  text-amber-400  text-xs rounded">Review</span>}
           <span class="text-xs text-gray-600 ml-auto">{timeAgo(v.created_at)}</span>
         </div>
         {v.author_name && <p class="text-xs text-gray-500 mt-0.5">{v.author_name}</p>}
         {v.ai_summary  && <p class="text-xs text-gray-300 mt-1 leading-relaxed line-clamp-2">{v.ai_summary}</p>}
       </div>
-    </div>
+    </>
   );
+  if (onClick) return (
+    <button
+      class="w-full text-left flex items-start gap-3 py-3 hover:bg-gray-900/50 rounded-lg px-1 -mx-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-inset"
+      onClick={onClick}
+      aria-label={`Version ${v.version_number}${v.author_name ? ` par ${v.author_name}` : ''}${v.ai_summary ? ` — ${v.ai_summary.slice(0, 80)}` : ''}`}
+    >
+      {inner}
+    </button>
+  );
+  return <div class="flex items-start gap-3 py-3">{inner}</div>;
 }
 
 // ─── Checkpoint ───────────────────────────────────────────────────────────────
 
-interface CpProps {
-  apiKey: string; author: PluginAuthor; asset: Asset; branch: string;
-  snapshot: FigmaSnapshot; renderSvgB64?: string;
-  onBack: () => void; onSaved: () => void;
-}
+function CheckpointScreen() {
+  const apiKey       = useAppStore(s => s.apiKey)!;
+  const author       = useAppStore(s => s.author)!;
+  const asset        = useAppStore(s => s.asset)!;
+  const branch       = useAppStore(s => s.branch);
+  const snapshot     = useAppStore(s => s.snapshot)!;
+  const renderSvgB64 = useAppStore(s => s.renderSvgB64);
+  const setScreen    = useAppStore(s => s.setScreen);
 
-function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB64, onBack, onSaved }: CpProps) {
   const [branchName, setBranchName] = useState(branch);
-  const [loading, setLoading] = useState(false);
-  const [saved, setSaved]     = useState<{ summary: string | null; changes: number } | null>(null);
-  const [err, setErr]         = useState<string | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [saved,      setSaved]      = useState<{ summary: string | null; changes: number } | null>(null);
+  const [err,        setErr]        = useState<string | null>(null);
 
   const save = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -331,11 +317,11 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB6
         apiKey, '/api/checkpoints', {
           method: 'POST',
           body: JSON.stringify({
-            asset_id: asset.id,
-            branch_name: branchName.trim() || 'main',
-            figma_node_id: snapshot.figmaNodeId,
-            snapshot_json: snapshot,
-            render_svg_b64: renderSvgB64,
+            asset_id:        asset.id,
+            branch_name:     branchName.trim() || 'main',
+            figma_node_id:   snapshot.figmaNodeId,
+            snapshot_json:   snapshot,
+            render_svg_b64:  renderSvgB64,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
           }),
         }
@@ -355,23 +341,23 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB6
           {saved.changes > 0 && <p class="text-xs text-purple-400">{saved.changes} modification(s)</p>}
         </div>
       </div>
-      <button class="btn-secondary w-full" onClick={onSaved}>← Retour à la timeline</button>
+      <button class="btn-secondary w-full" onClick={() => setScreen('home')}>← Retour à la timeline</button>
     </div>
   );
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
-      <Topbar label="Nouveau checkpoint" onBack={onBack} />
+      <Topbar label="Nouveau checkpoint" onBack={() => setScreen('home')} />
       <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         <div class="p-3 bg-gray-900 rounded-lg border border-gray-800">
           <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
           <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
         </div>
         <div>
-          <label class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>
-          <input class="input mt-1" placeholder="main" value={branchName} onInput={e => setBranchName((e.target as HTMLInputElement).value)} />
+          <label htmlFor="cp-branch" class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>
+          <input id="cp-branch" class="input mt-1" placeholder="main" value={branchName} onInput={e => setBranchName((e.target as HTMLInputElement).value)} />
         </div>
-        {err && <p class="text-red-400 text-xs">{err}</p>}
+        {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
       </div>
       <div class="p-4 border-t border-gray-800">
         <button class="btn-primary w-full" onClick={save} disabled={loading}>
@@ -384,108 +370,104 @@ function CheckpointScreen({ apiKey, author, asset, branch, snapshot, renderSvgB6
 
 // ─── Diff Viewer ──────────────────────────────────────────────────────────────
 
-interface NodeDiffVisual {
-  nodeId: string; nodeName: string; nodeType: string;
-  changes: PropertyChange[];
-  kind: 'modified' | 'added' | 'removed';
-  before_svg_b64: string | null;
-  after_svg_b64: string | null;
-}
-
-interface DiffData {
-  version: Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null };
-  prev_version: (Version & { snapshot_json: unknown }) | null;
-  svg_b64: string | null;
-  prev_svg_b64: string | null;
-  node_diffs: NodeDiffVisual[];
-}
-
-interface DiffScreenProps {
-  apiKey: string; version: Version; author: PluginAuthor | null;
-  asset: Asset; branch: string; plan: Plan;
-  onBack: () => void; onRestored: () => void;
-}
-
-function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored }: DiffScreenProps) {
-  const [data, setData]           = useState<DiffData | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [err, setErr]             = useState<string | null>(null);
-  const [mode, setMode]           = useState<'split' | 'overlay'>('split');
-  const [opacity, setOpacity]     = useState(0.5);
-  const [status, setStatus]       = useState(version.status);
-  const [statusBusy, setStatusBusy] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [applyingToFigma, setApplyingToFigma] = useState(false);
-  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
-  const [view, setView] = useState<'nodes' | 'frame'>('nodes');
-
+function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
-    api<DiffData>(apiKey, `/api/branches/versions/${version.id}`)
-      .then(setData)
-      .catch(e => setErr((e as Error).message))
-      .finally(() => setLoading(false));
-  }, [apiKey, version.id]);
+    api<DiffData>(apiKey, `/api/branches/versions/${versionId}`)
+      .then(data => dispatch({ type: 'LOAD_SUCCESS', data }))
+      .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
+  }, [apiKey, versionId]);
+}
 
-  const cycleStatus = useCallback(async () => {
+function useRestoreListener(dispatch: (a: DiffAction) => void) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number } | undefined;
+      if (!msg || msg.type !== 'RESTORE_COMPLETE') return;
+      dispatch({ type: 'APPLY_COMPLETE', applied: msg.applied ?? 0, skipped: msg.skipped });
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => dispatch({ type: 'CLEAR_MSG' }), 4000);
+    };
+    window.addEventListener('message', handler);
+    return () => {
+      window.removeEventListener('message', handler);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+}
+
+function useCycleStatus(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string, status: Version['status']) {
+  return useCallback(async () => {
     const next: Version['status'] = status === 'draft' ? 'review' : status === 'review' ? 'approved' : 'draft';
-    setStatusBusy(true);
+    dispatch({ type: 'STATUS_START' });
     try {
-      await api(apiKey, `/api/branches/versions/${version.id}/status`, {
+      await api(apiKey, `/api/branches/versions/${versionId}/status`, {
         method: 'PUT', body: JSON.stringify({ status: next }),
       });
-      setStatus(next);
-    } catch (e) { setErr((e as Error).message); }
-    finally { setStatusBusy(false); }
-  }, [apiKey, version.id, status]);
+      dispatch({ type: 'STATUS_SUCCESS', status: next });
+    } catch (e) { dispatch({ type: 'STATUS_ERROR', err: (e as Error).message }); }
+  }, [apiKey, versionId, status]);
+}
 
-  const restore = useCallback(async () => {
-    if (!author) return;
-    setRestoring(true);
+function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
+  return useCallback(async () => {
+    dispatch({ type: 'APPLY_START' });
     try {
-      await api(apiKey, `/api/branches/versions/${version.id}/restore`, {
+      const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${versionId}/snapshot`);
+      send({ type: 'RESTORE_TO_FIGMA', snapshot });
+    } catch (e) { dispatch({ type: 'APPLY_ERROR', err: (e as Error).message }); }
+  }, [apiKey, versionId]);
+}
+
+function useRestore(
+  dispatch: (a: DiffAction) => void, apiKey: string, versionId: string,
+  author: PluginAuthor | null, branch: string, setScreen: (s: Screen) => void,
+) {
+  return useCallback(async () => {
+    if (!author) return;
+    dispatch({ type: 'RESTORE_START' });
+    try {
+      await api(apiKey, `/api/branches/versions/${versionId}/restore`, {
         method: 'POST',
         body: JSON.stringify({
           branch_name: branch,
           author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
         }),
       });
-      onRestored();
-    } catch (e) { setErr((e as Error).message); setRestoring(false); }
-  }, [apiKey, version.id, author, branch, onRestored]);
+      send({ type: 'RESIZE', width: 400, height: 600 });
+      setScreen('home');
+    } catch (e) { dispatch({ type: 'RESTORE_ERROR', err: (e as Error).message }); }
+  }, [apiKey, versionId, author, branch]);
+}
 
-  const applyToFigma = useCallback(async () => {
-    setApplyingToFigma(true);
-    setRestoreMsg(null);
-    try {
-      const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${version.id}/snapshot`);
-      send({ type: 'RESTORE_TO_FIGMA', snapshot });
-    } catch (e) { setErr((e as Error).message); setApplyingToFigma(false); }
-  }, [apiKey, version.id]);
+function DiffScreen() {
+  const apiKey    = useAppStore(s => s.apiKey)!;
+  const version   = useAppStore(s => s.diffVersion)!;
+  const author    = useAppStore(s => s.author);
+  const branch    = useAppStore(s => s.branch);
+  const setScreen = useAppStore(s => s.setScreen);
 
-  // Listen for RESTORE_COMPLETE from main.ts
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number } | undefined;
-      if (!msg) return;
-      if (msg.type === 'RESTORE_COMPLETE') {
-        setApplyingToFigma(false);
-        setRestoreMsg(`✓ ${msg.applied} nœud(s) restauré(s)${msg.skipped ? ` · ${msg.skipped} ignoré(s)` : ''}`);
-        setTimeout(() => setRestoreMsg(null), 4000);
-      }
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
+  const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
+  const [opacity, setOpacity] = useState(0.5);
 
-  const delta = data?.version.analysis_json;
+  useDiffLoader(dispatch, apiKey, version.id);
+  useRestoreListener(dispatch);
+  const cycleStatus  = useCycleStatus(dispatch, apiKey, version.id, state.status);
+  const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id);
+  const restore      = useRestore(dispatch, apiKey, version.id, author, branch, setScreen);
+
+  const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
+
+  const { data, loading, err, mode, status, statusBusy, restoring, applyingToFigma, restoreMsg, view } = state;
+  const delta   = data?.version.analysis_json;
   const hasPrev = !!data?.prev_version;
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       {/* Header */}
       <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-800 flex-shrink-0">
-        <button class="text-gray-500 hover:text-white text-sm flex-shrink-0" onClick={onBack}>←</button>
+        <button aria-label="Retour à la timeline" class="text-gray-500 hover:text-white text-sm flex-shrink-0" onClick={goBack}>←</button>
         <span class="font-medium text-sm flex-1 truncate">
           v{version.version_number}
           <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
@@ -493,7 +475,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         {/* Status toggle */}
         <button
           onClick={cycleStatus} disabled={statusBusy}
-          title={status === 'approved' ? 'Gold — Version validée, référence officielle du projet. Cliquer pour repasser en Draft.' : status === 'review' ? 'En review — En attente de validation. Cliquer pour passer en Gold.' : 'Draft — Version en cours. Cliquer pour soumettre en Review.'}
+          aria-label={status === 'approved' ? 'Statut : Gold. Cliquer pour repasser en Draft.' : status === 'review' ? 'Statut : Review. Cliquer pour passer en Gold.' : 'Statut : Draft. Cliquer pour soumettre en Review.'}
           class={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 transition-colors ${
             status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
             status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :
@@ -506,7 +488,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         {data && (
           <button onClick={restore} disabled={restoring}
             class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
-            title="Créer un nouveau checkpoint depuis cette version">
+            aria-label="Créer un checkpoint depuis cette version">
             {restoring ? '…' : '↩ Checkpoint'}
           </button>
         )}
@@ -514,27 +496,27 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
         {data && (
           <button onClick={applyToFigma} disabled={applyingToFigma}
             class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
-            title="Restaurer cette version directement sur le canvas Figma">
+            aria-label="Appliquer cette version sur le canvas Figma">
             {applyingToFigma ? '…' : '↩ Apply to Figma'}
           </button>
         )}
         {hasPrev && (
           <div class="flex gap-1 flex-shrink-0">
-            <button class={`px-2 py-1 rounded text-xs transition-colors ${view === 'nodes' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setView('nodes')}>Nodes</button>
-            <button class={`px-2 py-1 rounded text-xs transition-colors ${view === 'frame' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setView('frame')}>Frame</button>
+            <button aria-pressed={view === 'nodes'} class={`px-2 py-1 rounded text-xs transition-colors ${view === 'nodes' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_VIEW', view: 'nodes' })}>Nodes</button>
+            <button aria-pressed={view === 'frame'} class={`px-2 py-1 rounded text-xs transition-colors ${view === 'frame' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_VIEW', view: 'frame' })}>Frame</button>
           </div>
         )}
         {hasPrev && view === 'frame' && (
           <div class="flex gap-1 flex-shrink-0">
-            <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'split' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('split')}>Split</button>
-            <button class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setMode('overlay')}>Overlay</button>
+            <button aria-pressed={mode === 'split'}   class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'split'   ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_MODE', mode: 'split' })}>Split</button>
+            <button aria-pressed={mode === 'overlay'} class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_MODE', mode: 'overlay' })}>Overlay</button>
           </div>
         )}
       </div>
 
-      {restoreMsg && <div class="px-4 py-2 bg-green-900/40 border-b border-green-800 text-green-400 text-xs flex-shrink-0">{restoreMsg}</div>}
+      {restoreMsg && <div role="status" class="px-4 py-2 bg-green-900/40 border-b border-green-800 text-green-400 text-xs flex-shrink-0">{restoreMsg}</div>}
       {loading && <Spinner full />}
-      {err    && <p class="text-red-400 text-xs p-4">{err}</p>}
+      {err     && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
 
       {data && (
         <div class="flex flex-1 overflow-hidden">
@@ -587,6 +569,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
                 <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
                   <span class="text-xs text-gray-500">avant</span>
                   <input type="range" min={0} max={1} step={0.01} value={opacity}
+                    aria-label="Opacité du calque précédent"
                     onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
                     class="w-24 accent-purple-500" />
                   <span class="text-xs text-gray-500">après</span>
@@ -603,10 +586,7 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
             </div>
 
             {!delta && <p class="text-xs text-gray-600 p-4">Première version — aucune diff.</p>}
-
-            {delta && delta.totalChanges === 0 && (
-              <p class="text-xs text-gray-500 p-4">Aucune modification détectée.</p>
-            )}
+            {delta && delta.totalChanges === 0 && <p class="text-xs text-gray-500 p-4">Aucune modification détectée.</p>}
 
             {delta && [...delta.modified, ...delta.added, ...delta.removed].map(node => (
               <div key={node.nodeId} class="px-4 py-3 border-b border-gray-800/50">
@@ -651,12 +631,11 @@ function DiffScreen({ apiKey, version, author, asset, branch, onBack, onRestored
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-// Frame renderer — SVG natif Figma (exportAsync) ou PNG legacy (iVBO) ou SVG reconstruit (fallback)
 function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zoomable?: boolean }) {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom,     setZoom]     = useState(1);
+  const [pan,      setPan]      = useState({ x: 0, y: 0 });
   const [grabbing, setGrabbing] = useState(false);
-  const dragRef = useRef<{ active: boolean; lastX: number; lastY: number }>({ active: false, lastX: 0, lastY: 0 });
+  const dragRef      = useRef<{ active: boolean; lastX: number; lastY: number }>({ active: false, lastX: 0, lastY: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
@@ -664,7 +643,6 @@ function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zooma
   const clampPan = (x: number, y: number, z: number) => {
     const el = containerRef.current;
     if (!el) return { x, y };
-    // Keep at least 80px of the frame visible on each axis
     const margin = 80;
     const hw = el.clientWidth  * (1 + z) / 2 - margin;
     const hh = el.clientHeight * (1 + z) / 2 - margin;
@@ -726,6 +704,7 @@ function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zooma
       </div>
       {isTransformed && (
         <button
+          aria-label={`Réinitialiser le zoom (${Math.round(zoom * 100)}%)`}
           class="absolute top-2 right-2 text-[10px] text-gray-400 bg-gray-900/80 px-1.5 py-0.5 rounded hover:text-white"
           onClick={(e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); }}
         >
@@ -797,14 +776,14 @@ function Logo({ small = false }: { small?: boolean }) {
 function Topbar({ label, onBack }: { label: string; onBack?: () => void }) {
   return (
     <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-800">
-      {onBack && <button class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>}
+      {onBack && <button aria-label="Retour" class="text-gray-500 hover:text-white text-sm" onClick={onBack}>←</button>}
       <span class="font-medium text-sm flex-1 truncate">{label}</span>
     </div>
   );
 }
 
 function Spinner({ full = false }: { full?: boolean }) {
-  const inner = <div class="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />;
+  const inner = <div role="status" aria-label="Chargement…" class="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />;
   return full
     ? <div class="flex items-center justify-center h-screen bg-gray-950">{inner}</div>
     : <div class="flex justify-center py-6">{inner}</div>;
