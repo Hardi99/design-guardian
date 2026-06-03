@@ -132,6 +132,7 @@ export class DiffService {
     for (let i = 0; i < fillCount; i++) {
       const f1 = v1.fills[i];
       const f2 = v2.fills[i];
+      if (!f1 || !f2) continue;
       const label = v1.fills.length > 1 ? `fill[${i}]` : 'fill';
       if (f1.type !== f2.type) {
         changes.push({ property: label, oldValue: f1.type, newValue: f2.type, delta: `${f1.type} → ${f2.type}` });
