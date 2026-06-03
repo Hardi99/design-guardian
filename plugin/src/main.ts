@@ -232,22 +232,37 @@ async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Pro
   return { applied, skipped };
 }
 
+// Walk up the parent chain to find the owning page.
+function isOnCurrentPage(node: SceneNode): boolean {
+  let n: BaseNode | null = node;
+  while (n) {
+    if (n.type === 'PAGE') return n.id === figma.currentPage.id;
+    n = n.parent;
+  }
+  return false;
+}
+
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
 async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string, delta?: RestorationDelta): Promise<void> {
   // getNodeByIdAsync can throw (not just return null) when the node doesn't exist
   let root: SceneNode | null = null;
   try { root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null; } catch {}
-  const onCurrentPage = root !== null && root.parent === figma.currentPage;
+  // Node exists on the current page (anywhere in the tree, not just a direct child)
+  const onCurrentPage = root !== null && isOnCurrentPage(root);
 
-  if (onCurrentPage) {
-    // Same-branch: delta-based restore — only touches what changed.
-    // Falls back to full applySnapshot for checkpoints without a delta (first version).
+  if (onCurrentPage && root) {
+    // Same-branch: delta-based restore (only touches what changed).
+    // If the delta matches nothing on the canvas (applied 0) or there's no delta,
+    // fall back to a full snapshot restore by ID — guarantees a real change.
     const hasDelta = delta && (delta.modified.length + delta.removed.length + (delta.added?.length ?? 0)) > 0;
     try {
-      const result = hasDelta
+      let result = hasDelta
         ? await applyDelta(snapshot, delta!)
-        : await applySnapshot(root!, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+        : { applied: 0, skipped: 0 };
+      if (result.applied === 0) {
+        result = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+      }
       figma.commitUndo();
       send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
     } catch (e) {
