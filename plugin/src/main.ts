@@ -2,7 +2,7 @@
 // Accès exclusif à l'API Figma. Communication UI via postMessage uniquement.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot, RestorationDelta } from './types';
+import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -71,7 +71,7 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
-    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64, msg.delta); break;
+    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64); break;
   }
 };
 
@@ -107,27 +107,8 @@ async function restoreFont(t: TextNode, snap: NodeSnapshot): Promise<void> {
   }
 }
 
-function buildSnapMap(root: NodeSnapshot): Map<string, NodeSnapshot> {
-  const map = new Map<string, NodeSnapshot>();
-  const traverse = (node: NodeSnapshot) => {
-    map.set(node.id, node);
-    if (node.children) node.children.forEach(traverse);
-  };
-  traverse(root);
-  return map;
-}
-
-function normalizeChangedProps(changes: Array<{ property: string }>): Set<string> {
-  const props = new Set<string>();
-  for (const { property } of changes) {
-    if (property.startsWith('fill'))                                       props.add('fills');
-    else if (property.startsWith('stroke') && property !== 'strokeWeight') props.add('strokes');
-    else if (property.startsWith('effect'))                                props.add('effects');
-    else props.add(property);
-  }
-  return props;
-}
-
+// Single source of truth for applying a node's stored properties.
+// Restore passes the full set; every property the snapshot holds is covered here.
 async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<string>): Promise<void> {
   const inAutoLayout = (() => {
     const p = node.parent;
@@ -207,28 +188,31 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
     (node as VectorNode).vectorPaths = snap.vectorPaths as VectorPath[];
 }
 
-async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Promise<{ applied: number; skipped: number }> {
+// Every property a snapshot can hold. Root excludes geometry (don't move/resize
+// the tracked frame); children include it (restore their layout within the frame).
+const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'strokeWeight', 'fills', 'strokes', 'effects', 'fontFamily', 'fontWeight', 'fontStyle', 'characters', 'fontSize', 'vectorPaths'];
+const RESTORE_PROPS_ROOT     = new Set(RESTORE_PROPS);
+const RESTORE_PROPS_CHILDREN = new Set([...RESTORE_PROPS, 'x', 'y', 'width', 'height']);
+
+// Full restore: walk the snapshot tree, match each node by ID, apply ALL its
+// properties. No reliance on the stored diff — guarantees the canvas reflects
+// the version completely (every node, every property). Preserves node identity.
+async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, isRoot: boolean): Promise<{ applied: number; skipped: number }> {
   let applied = 0, skipped = 0;
-  const snapMap = buildSnapMap(snapshot.root);
+  try {
+    await applyDeltaProps(node, snap, isRoot ? RESTORE_PROPS_ROOT : RESTORE_PROPS_CHILDREN);
+    applied++;
+  } catch { skipped++; }
 
-  for (const nd of delta.modified) {
-    let node: SceneNode | null = null;
-    try { node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null; } catch {}
-    const snap = snapMap.get(nd.nodeId);
-    if (!node || !snap) { skipped++; continue; }
-    try { await applyDeltaProps(node, snap, normalizeChangedProps(nd.changes)); applied++; }
-    catch { skipped++; }
+  if ('children' in node && snap.children) {
+    for (const childSnap of snap.children) {
+      const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
+      if (match) {
+        const r = await applyFullSnapshot(match, childSnap, false);
+        applied += r.applied; skipped += r.skipped;
+      } else { skipped++; }
+    }
   }
-
-  for (const nd of delta.removed) {
-    let node: SceneNode | null = null;
-    try { node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null; } catch {}
-    if (node && 'visible' in node) { node.visible = false; applied++; } else skipped++;
-  }
-
-  // Added nodes cannot be recreated programmatically — reported as skipped
-  skipped += delta.added?.length ?? 0;
-
   return { applied, skipped };
 }
 
@@ -244,7 +228,7 @@ function isOnCurrentPage(node: SceneNode): boolean {
 
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
-async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string, delta?: RestorationDelta): Promise<void> {
+async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
   // getNodeByIdAsync can throw (not just return null) when the node doesn't exist
   let root: SceneNode | null = null;
   try { root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null; } catch {}
@@ -252,17 +236,9 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
   const onCurrentPage = root !== null && isOnCurrentPage(root);
 
   if (onCurrentPage && root) {
-    // Same-branch: delta-based restore (only touches what changed).
-    // If the delta matches nothing on the canvas (applied 0) or there's no delta,
-    // fall back to a full snapshot restore by ID — guarantees a real change.
-    const hasDelta = delta && (delta.modified.length + delta.removed.length + (delta.added?.length ?? 0)) > 0;
+    // Same-branch: full restore by ID — every node, every property.
     try {
-      let result = hasDelta
-        ? await applyDelta(snapshot, delta!)
-        : { applied: 0, skipped: 0 };
-      if (result.applied === 0) {
-        result = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
-      }
+      const result = await applyFullSnapshot(root, snapshot.root, true);
       figma.commitUndo();
       send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
     } catch (e) {
@@ -308,124 +284,6 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
   } catch (e) {
     send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
   }
-}
-
-async function applySnapshot(
-  node: SceneNode,
-  snap: NodeSnapshot,
-  parentAbsX: number,
-  parentAbsY: number,
-  isRoot: boolean
-): Promise<{ applied: number; skipped: number }> {
-  let applied = 0, skipped = 0;
-  try {
-    // Auto-layout children: Figma owns their position + size — manual override corrupts layout
-    const inAutoLayout = !isRoot && (() => {
-      const p = node.parent;
-      return !!(p && 'layoutMode' in p && (p as FrameNode).layoutMode !== 'NONE');
-    })();
-
-    // Position relative au parent — skip root and auto-layout children
-    if (!isRoot && !inAutoLayout && 'x' in node && 'y' in node) {
-      (node as { x: number; y: number }).x = snap.x - parentAbsX;
-      (node as { x: number; y: number }).y = snap.y - parentAbsY;
-    }
-
-    // Taille — skip root (déclenche le recalcul des contraintes BOTTOM sur les enfants)
-    // et skip auto-layout children (Figma throws "Cannot resize auto layout child")
-    if ('resize' in node && !isRoot && !inAutoLayout) {
-      (node as LayoutMixin).resize(snap.width, snap.height);
-    }
-
-    // Opacité / visibilité
-    if ('opacity' in node)  (node as BlendMixin).opacity = snap.opacity;
-    if ('visible' in node && snap.visible !== undefined) node.visible = snap.visible;
-
-    // Fills — SOLID + linear/radial gradients (angle approximated from stored value)
-    if ('fills' in node) {
-      const paints: Paint[] = [];
-      for (const f of snap.fills) {
-        if (f.type === 'SOLID' && f.color) {
-          paints.push({
-            type: 'SOLID',
-            color: { r: f.color.r, g: f.color.g, b: f.color.b },
-            opacity: f.color.a,
-            visible: f.visible ?? true,
-          } as SolidPaint);
-        } else if ((f.type === 'GRADIENT_LINEAR' || f.type === 'GRADIENT_RADIAL') && f.gradientStops?.length) {
-          const r = ((f.gradientAngle ?? 0) * Math.PI) / 180;
-          const cos = Math.cos(r);
-          const sin = Math.sin(r);
-          paints.push({
-            type: f.type,
-            gradientStops: f.gradientStops.map(s => ({
-              position: s.position,
-              color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
-            })),
-            // Centered gradient transform reconstructed from stored angle
-            gradientTransform: [
-              [cos, sin, 0.5 * (1 - cos - sin)],
-              [-sin, cos, 0.5 * (1 + sin - cos)],
-            ] as Transform,
-            visible: f.visible ?? true,
-            opacity: f.opacity ?? 1,
-          } as GradientPaint);
-        }
-      }
-      if (paints.length > 0) (node as GeometryMixin).fills = paints;
-    }
-
-    // Strokes
-    if ('strokes' in node) {
-      const paints: Paint[] = snap.strokes
-        .filter(s => s.type === 'SOLID' && s.color)
-        .map(s => ({
-          type: 'SOLID' as const,
-          color: { r: s.color!.r, g: s.color!.g, b: s.color!.b },
-          opacity: s.opacity ?? s.color!.a,
-          visible: true,
-        } as SolidPaint));
-      if (paints.length > 0) (node as GeometryMixin).strokes = paints;
-    }
-
-    // Stroke weight + corner radius
-    if ('strokeWeight' in node && snap.strokeWeight !== undefined)
-      (node as IndividualStrokesMixin).strokeWeight = snap.strokeWeight;
-    if ('cornerRadius' in node && snap.cornerRadius !== undefined)
-      (node as CornerMixin).cornerRadius = snap.cornerRadius;
-
-    // Texte — font d'abord (requis avant characters), puis contenu
-    if (node.type === 'TEXT') {
-      const t = node as TextNode;
-
-      if (snap.fontFamily || snap.fontStyleName) {
-        await restoreFont(t, snap);
-      }
-
-      if (snap.characters !== undefined) {
-        const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName)
-          ? t.fontName as FontName
-          : { family: 'Inter', style: 'Regular' } as FontName;
-        await figma.loadFontAsync(fn);
-        t.characters = snap.characters;
-        if (snap.fontSize !== undefined && typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
-      }
-    }
-
-    applied++;
-  } catch { skipped++; }
-
-  // Récursion sur les enfants matchés par ID
-  if ('children' in node && snap.children) {
-    for (const childSnap of snap.children) {
-      const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
-      if (match) {
-        const r = await applySnapshot(match, childSnap, snap.x, snap.y, false);
-        applied += r.applied; skipped += r.skipped;
-      } else { skipped++; }
-    }
-  }
-  return { applied, skipped };
 }
 
 async function handleSnapshot(): Promise<void> {
