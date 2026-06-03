@@ -134,12 +134,13 @@ function AssetsScreen() {
   const setAsset   = useAppStore(s => s.setAsset);
   const setScreen  = useAppStore(s => s.setScreen);
 
-  const [assets,  setAssets]  = useState<Asset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<typeof ASSET_TYPES[number]>('ui');
-  const [saving,  setSaving]  = useState(false);
-  const [err,     setErr]     = useState<string | null>(null);
+  const [assets,   setAssets]   = useState<Asset[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [newName,  setNewName]  = useState('');
+  const [newType,  setNewType]  = useState<typeof ASSET_TYPES[number]>('ui');
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [err,      setErr]      = useState<string | null>(null);
 
   useEffect(() => {
     api<{ assets: Asset[] }>(apiKey, '/api/assets')
@@ -149,6 +150,17 @@ function AssetsScreen() {
   }, [apiKey]);
 
   const onSelect = useCallback((a: Asset) => { setAsset(a); setScreen('home'); }, []);
+
+  const deleteAsset = useCallback(async (a: Asset, e: MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Supprimer "${a.name}" et tout son historique ?`)) return;
+    setDeleting(a.id); setErr(null);
+    try {
+      await api(apiKey, `/api/assets/${a.id}`, { method: 'DELETE' });
+      setAssets(prev => prev.filter(x => x.id !== a.id));
+    } catch (err) { setErr((err as Error).message); }
+    finally { setDeleting(null); }
+  }, [apiKey]);
 
   const create = useCallback(async () => {
     if (!newName.trim()) return;
@@ -169,10 +181,20 @@ function AssetsScreen() {
         {loading && <Spinner />}
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
         {assets.map(a => (
-          <button key={a.id} class="w-full text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors" onClick={() => onSelect(a)}>
+          <div key={a.id} class="flex items-center gap-2">
+          <button class="flex-1 text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 rounded-lg transition-colors" onClick={() => onSelect(a)}>
             <span class="text-sm font-medium">{a.name}</span>
             <span class="text-xs text-gray-600 font-mono ml-2">{a.asset_type}</span>
           </button>
+          <button
+            aria-label={`Supprimer ${a.name}`}
+            disabled={deleting === a.id}
+            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+            onClick={e => deleteAsset(a, e as unknown as MouseEvent)}
+          >
+            {deleting === a.id ? '…' : '✕'}
+          </button>
+          </div>
         ))}
         {!loading && (
           <div class="mt-2 flex flex-col gap-2">
