@@ -12,12 +12,9 @@ scrape_configs:
     scheme: http
 
   # Production — Railway deployment
-  # Uncomment and set the correct hostname after first Railway deploy
-  # - job_name: design-guardian-prod
-  #   static_configs:
-  #     - targets:
-  #         - design-guardian-api.up.railway.app
-  #   metrics_path: /metrics
-  #   scheme: https
-  #   tls_config:
-  #     insecure_skip_verify: false
+  - job_name: design-guardian-prod
+    static_configs:
+      - targets:
+          - design-guardian.up.railway.app
+    metrics_path: /metrics
+    scheme: https
