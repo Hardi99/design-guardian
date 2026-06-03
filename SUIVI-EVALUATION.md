@@ -1,6 +1,6 @@
 # Suivi d'évaluation — Design Guardian
 
-> Dernière mise à jour : 2026-05-22
+> Dernière mise à jour : 2026-05-22 — Grafana ✅ (dashboard provisionné, screenshot docs/screenshots/)
 > Deux évaluations distinctes, un seul projet.
 
 ---
@@ -26,7 +26,7 @@ Critère principal : **6 microservices + 1 frontend React**
 |---|---------|-----------------|------|-------------------|
 | A | **Auth** (OAuth + OpenID) | OAuth Google/GitHub + JWT + inscription email | ✅ | `auth.controller.ts`, `plugin.middleware.ts` |
 | B | **Base de données** | CRUD Supabase, validation, contraintes | ✅ | `supabase.ts`, migrations Supabase |
-| C | **Métriques** | Prometheus + Grafana, health checks | ⚠️ Prometheus ✅, Grafana ❌ | `metrics.service.ts`, `/metrics` |
+| C | **Métriques** | Prometheus + Grafana, health checks | ✅ | `metrics.service.ts`, `/metrics`, `monitoring/` |
 | D | **Notifications** | Email (Resend) + SMS (Twilio) | ✅ | `notification.service.ts`, `notifications.controller.ts` |
 | E | **IA** | LLM, traitement requêtes, vendre aux users | ✅ | `openai.service.ts`, `diff.service.ts` |
 | F | **Paiements** | Stripe, abonnements récurrents, webhooks | ✅ | `stripe.service.ts`, `payments.controller.ts` |
@@ -47,7 +47,7 @@ Critère principal : **6 microservices + 1 frontend React**
 | **BC01** | Cartographie, faisabilité, risques, SWOT, veille, budget, architecture, deck 15-20 slides | ⚠️ Docs Mermaid ✅, deck slides ❌ |
 | **BC02** | Stratégie tests, tests unitaires (63 cas), cahier recettes, CI/CD, OpenAPI/Swagger | ✅ |
 | **BC03** | Scrum, backlog MoSCoW, sprints, KPIs, burndown, vidéo Sprint Review 10-15 min | ⚠️ Docs ✅, vidéo ❌ |
-| **BC04** | Dependabot ✅, Prometheus ✅, Grafana ❌, CHANGELOG ✅, hotfix process ✅ | ⚠️ |
+| **BC04** | Dependabot ✅, Prometheus ✅, Grafana ✅, CHANGELOG ✅, hotfix process ✅ | ✅ |
 
 ---
 
@@ -102,7 +102,7 @@ Critère principal : **Acquis / Non Acquis** par compétence. Format livrable = 
 | Compétence | Livrable attendu jury | État | Fichier(s) |
 |------------|----------------------|------|------------|
 | C4.1.1 Gestion mises à jour dépendances | Process MAJ, fréquence, périmètre | ✅ | `.github/dependabot.yml` |
-| C4.1.2 Système supervision + alertes 🔒 | Prometheus + Grafana, sondes, seuils | ⚠️ | Prometheus ✅, Grafana dashboard ❌ |
+| C4.1.2 Système supervision + alertes 🔒 | Prometheus + Grafana, sondes, seuils | ✅ | `monitoring/prometheus.yml`, `monitoring/grafana/` |
 | C4.2.1 Consignation anomalies | Fiche incident type + exemple réel | ⚠️ | Template dans RECETTES ✅, exemple réel ❌ |
 | C4.2.2 Créer/déployer correctif | Hotfix branch + CI/CD | ✅ | Commits `fix:` + Railway auto-deploy |
 | C4.3.1 Axes d'amélioration | Recommandations argumentées | ⚠️ | À rédiger (roadmap) |
@@ -118,7 +118,6 @@ Critère principal : **Acquis / Non Acquis** par compétence. Format livrable = 
 | Item | Action |
 |------|--------|
 | **Deck 15-20 slides** (C1.6) | Créer la présentation client |
-| **Grafana dashboard** (C4.1.2) | Configurer dashboard sur infra Railway |
 
 ### Impact fort, non éliminatoire
 
