@@ -190,6 +190,21 @@ export class DiffService {
       this.compareNumeric(changes, 'fontSize', v1.fontSize, v2.fontSize, 'px');
     }
 
+    // Font family
+    if (v1.fontFamily !== undefined && v2.fontFamily !== undefined && v1.fontFamily !== v2.fontFamily) {
+      changes.push({ property: 'fontFamily', oldValue: v1.fontFamily, newValue: v2.fontFamily, delta: `${v1.fontFamily} → ${v2.fontFamily}` });
+    }
+
+    // Font weight
+    if (v1.fontWeight !== undefined && v2.fontWeight !== undefined && v1.fontWeight !== v2.fontWeight) {
+      changes.push({ property: 'fontWeight', oldValue: v1.fontWeight, newValue: v2.fontWeight, delta: `${v1.fontWeight} → ${v2.fontWeight}` });
+    }
+
+    // Font style (italic / normal)
+    if (v1.fontStyle !== undefined && v2.fontStyle !== undefined && v1.fontStyle !== v2.fontStyle) {
+      changes.push({ property: 'fontStyle', oldValue: v1.fontStyle, newValue: v2.fontStyle, delta: `${v1.fontStyle} → ${v2.fontStyle}` });
+    }
+
     // Effects — compare count + per-effect values (not just count)
     const v1Effects = v1.effects ?? [];
     const v2Effects = v2.effects ?? [];
