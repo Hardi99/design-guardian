@@ -88,6 +88,25 @@ function weightToStyle(weight?: number, italic = false): string {
   return italic ? (base === 'Regular' ? 'Italic' : `${base} Italic`) : base;
 }
 
+// Load + apply font for a text node. Tries the exact stored style string first
+// (source of truth), then the weight-derived approximation, then Regular/Italic.
+async function restoreFont(t: TextNode, snap: NodeSnapshot): Promise<void> {
+  const family = snap.fontFamily
+    ?? (typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? (t.fontName as FontName).family : 'Inter');
+  const candidates = [
+    snap.fontStyleName,                                          // exact round-trip
+    weightToStyle(snap.fontWeight, snap.fontStyle === 'italic'), // approximation (old checkpoints)
+    snap.fontStyle === 'italic' ? 'Italic' : 'Regular',          // last-resort fallback
+  ].filter((s): s is string => !!s);
+  for (const style of candidates) {
+    try {
+      await figma.loadFontAsync({ family, style });
+      t.fontName = { family, style };
+      return;
+    } catch { /* try next candidate */ }
+  }
+}
+
 function buildSnapMap(root: NodeSnapshot): Map<string, NodeSnapshot> {
   const map = new Map<string, NodeSnapshot>();
   const traverse = (node: NodeSnapshot) => {
@@ -171,18 +190,7 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
 
   // Font family / weight / style — must be restored before characters or fontSize
   if ((props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle')) && node.type === 'TEXT') {
-    const t = node as TextNode;
-    const family = snap.fontFamily
-      ?? (typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? (t.fontName as FontName).family : 'Inter');
-    const style = weightToStyle(snap.fontWeight, snap.fontStyle === 'italic');
-    try {
-      await figma.loadFontAsync({ family, style });
-      t.fontName = { family, style };
-    } catch {
-      // Fallback: try Regular / Italic only (font may not have the weight variant)
-      const fallbackStyle = snap.fontStyle === 'italic' ? 'Italic' : 'Regular';
-      try { await figma.loadFontAsync({ family, style: fallbackStyle }); t.fontName = { family, style: fallbackStyle }; } catch {}
-    }
+    await restoreFont(node as TextNode, snap);
   }
 
   if (props.has('characters') && node.type === 'TEXT') {
@@ -375,15 +383,8 @@ async function applySnapshot(
     if (node.type === 'TEXT') {
       const t = node as TextNode;
 
-      if (snap.fontFamily) {
-        const style = weightToStyle(snap.fontWeight, snap.fontStyle === 'italic');
-        try {
-          await figma.loadFontAsync({ family: snap.fontFamily, style });
-          t.fontName = { family: snap.fontFamily, style };
-        } catch {
-          const fallback: FontName = { family: snap.fontFamily, style: snap.fontStyle === 'italic' ? 'Italic' : 'Regular' };
-          try { await figma.loadFontAsync(fallback); t.fontName = fallback; } catch {}
-        }
+      if (snap.fontFamily || snap.fontStyleName) {
+        await restoreFont(t, snap);
       }
 
       if (snap.characters !== undefined) {
@@ -508,6 +509,12 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
                     const fn = (node as unknown as TextNode).fontName;
                     if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) return undefined;
                     return (fn as FontName).style.toLowerCase().includes('italic') ? 'italic' : 'normal';
+                  })() : undefined,
+    // Raw Figma style string ("Medium", "Book", "DemiBold Italic"…) — source of truth for restore
+    fontStyleName: node.type === 'TEXT' ? (() => {
+                    const fn = (node as unknown as TextNode).fontName;
+                    if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) return undefined;
+                    return (fn as FontName).style;
                   })() : undefined,
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
