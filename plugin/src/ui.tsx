@@ -536,18 +536,29 @@ function DiffScreen() {
           v{version.version_number}
           <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
         </span>
-        {/* Status toggle */}
-        <button
-          onClick={cycleStatus} disabled={statusBusy}
-          aria-label={status === 'approved' ? 'Statut : Gold. Cliquer pour repasser en Draft.' : status === 'review' ? 'Statut : Review. Cliquer pour passer en Gold.' : 'Statut : Draft. Cliquer pour soumettre en Review.'}
-          class={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 transition-colors ${
-            status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
-            status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :
-                                    'bg-gray-800 text-gray-500 hover:bg-gray-700'
-          }`}
-        >
-          {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
-        </button>
+        {/* Status toggle + tooltip explicatif */}
+        <div class="relative group flex-shrink-0">
+          <button
+            onClick={cycleStatus} disabled={statusBusy}
+            aria-label={status === 'approved' ? 'Statut : Gold. Cliquer pour repasser en Draft.' : status === 'review' ? 'Statut : Review. Cliquer pour passer en Gold.' : 'Statut : Draft. Cliquer pour soumettre en Review.'}
+            class={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
+              status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :
+                                      'bg-gray-800 text-gray-500 hover:bg-gray-700'
+            }`}
+          >
+            {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
+          </button>
+          <div role="tooltip" class="hidden group-hover:block absolute top-full left-0 mt-1.5 z-50 w-56 p-2.5 bg-gray-900 border border-gray-700 rounded-lg shadow-xl text-left">
+            <p class="text-[11px] font-semibold text-gray-200 mb-1">Cycle de validation</p>
+            <p class="text-[10px] leading-relaxed text-gray-400">
+              <span class="text-gray-500">Draft</span> (brouillon) →
+              <span class="text-amber-400"> Review</span> (en relecture) →
+              <span class="text-green-400"> ✦ Gold</span> (version approuvée, référence de l'équipe).
+            </p>
+            <p class="text-[10px] text-gray-600 mt-1">Cliquer pour changer de statut.</p>
+          </div>
+        </div>
         {/* Restore checkpoint */}
         {data && (
           <button onClick={restore} disabled={restoring}
