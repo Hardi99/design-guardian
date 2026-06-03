@@ -23,8 +23,9 @@ const SNAPSHOTS_BUCKET = 'snapshots';
  * Chemin du snapshot dans Supabase Storage.
  * Format : {asset_id}/v{version_number}.json
  */
-function snapshotPath(assetId: string, versionNumber: number): string {
-  return `${assetId}/v${versionNumber}.json`;
+function snapshotPath(assetId: string, branch: string, versionNumber: number): string {
+  const safeBranch = branch.replace(/[^a-zA-Z0-9-_]/g, '_');
+  return `${assetId}/${safeBranch}/v${versionNumber}.json`;
 }
 
 /**
@@ -89,7 +90,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     .maybeSingle();
 
   const nextVersion = prev ? prev.version_number + 1 : 1;
-  const newPath = snapshotPath(body.asset_id, nextVersion);
+  const newPath = snapshotPath(body.asset_id, body.branch_name, nextVersion);
 
   // 3. Diff + résumé IA
   //    Le snapshot précédent est téléchargé depuis Storage, pas depuis PostgreSQL.
