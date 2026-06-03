@@ -40,6 +40,7 @@ export interface NodeSnapshot {
   fontFamily?: string;
   fontWeight?: number;
   fontStyle?: string;
+  fontStyleName?: string; // raw Figma fontName.style — exact round-trip for restore
   children?: NodeSnapshot[];
 }
 
