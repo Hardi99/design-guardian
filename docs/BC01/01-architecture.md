@@ -1,56 +1,46 @@
 # C1.5 — Architecture Logicielle — Design Guardian
 
-## 1. Architecture globale des microservices
+## 1. Architecture globale — Vue macro
 
 ```mermaid
 graph TB
-    subgraph Plugin["Plugin Figma (Preact + Tailwind)"]
-        UI["UI Thread — ui.tsx\nAppels HTTP, rendu timeline"]
-        Main["Main Thread — main.ts\nAPI Figma uniquement"]
+    Designer(["👤 Designer\nFigma Desktop"])
+
+    subgraph Plugin["Plugin Figma · Preact + Tailwind"]
+        direction LR
+        Main["main.ts\nAPI Figma"]
+        UIThread["ui.tsx\nInterface + HTTP"]
+        Main <-->|postMessage| UIThread
     end
 
-    subgraph Backend["Backend (Hono + Node.js / Railway)"]
-        API["API REST\n/api/checkpoints · /api/branches\n/api/assets · /api/projects\n/api/notifications · /api/payments\n/health · /ping · /metrics · /api/docs"]
-        DiffSvc["DiffService\nDiff géométrique ε=0.01px"]
-        OpenAISvc["OpenAIService\nAI Patch Note (GPT-4o-mini)"]
-        SVGSvc["SVGService\nReconstruction SVG inline"]
-        NotifSvc["NotificationService\nResend (email) + Twilio (SMS)"]
-        StripeSvc["StripeService\nCheckout · Portal · Webhooks"]
+    subgraph Backend["API Backend · HonoJS · Railway"]
+        direction LR
+        Auth["Auth\nOAuth · JWT"]
+        Core["Checkpoints · Diff · IA\nBranches · Assets"]
+        Payments["Paiements\nStripe"]
+        Notifs["Notifications\nResend · Twilio"]
+        Metrics["Métriques\nPrometheus /metrics"]
     end
 
-    subgraph Data["Persistance (Supabase)"]
-        DB[("PostgreSQL\nprojects · assets · versions")]
-        Storage["Storage\nSnapshots JSON\n{asset_id}/v{n}.json"]
+    subgraph Data["Supabase"]
+        DB[("PostgreSQL")]
+        Storage["Storage\nSnapshots JSON"]
     end
 
-    subgraph Monitoring["Monitoring"]
-        Prometheus["Prometheus\nscrape /metrics"]
-        Grafana["Grafana\nDashboard"]
-    end
+    OpenAI["🤖 OpenAI\nGPT-4o-mini"]
+    StripeAPI["💳 Stripe"]
+    Monitoring["📊 Prometheus · Grafana"]
+    CI["⚙️ GitHub Actions\nCI/CD · Tests"]
 
-    subgraph CI["CI/CD"]
-        GH["GitHub Actions\nbuild · typecheck · tests · coverage"]
-    end
-
-    Main -->|"extractSnapshot()\nabsoluteTransform, fills,\nvectorPaths, children"| UI
-    UI -->|"postMessage CAPTURE_CHECKPOINT"| Main
-    UI -->|"HTTPS POST /api/checkpoints\n{snapshot_json, branch, author}"| API
-    API --> DiffSvc
-    DiffSvc -->|"DeltaJSON"| OpenAISvc
-    OpenAISvc -->|"ai_summary"| API
-    API --> SVGSvc
-    API --> NotifSvc
-    API --> StripeSvc
-    NotifSvc -->|"email transactionnel"| Resend["Resend API"]
-    NotifSvc -->|"SMS vérification"| Twilio["Twilio API"]
-    StripeSvc -->|"Checkout · Portal"| StripeAPI["Stripe API"]
-    StripeAPI -->|"webhook signé"| API
-    API -->|"INSERT metadata\nstorage_path"| DB
-    API -->|"UPLOAD snapshot\n{asset_id}/v{n}.json"| Storage
-    API -->|"DOWNLOAD prev snapshot"| Storage
-    Prometheus -->|"scrape /metrics"| API
-    Grafana -->|"query"| Prometheus
-    GH -->|"deploy on push"| Backend
+    Designer -->|"API Figma\n(main thread)"| Main
+    UIThread -->|"HTTPS · X-API-Key"| Backend
+    Backend --> Data
+    Core --> OpenAI
+    Payments --> StripeAPI
+    StripeAPI -->|"webhook signé"| Payments
+    Notifs -->|"email + SMS"| UIThread
+    Monitoring -->|"scrape /metrics"| Metrics
+    CI -->|"deploy on push"| Backend
 ```
 
 ---
