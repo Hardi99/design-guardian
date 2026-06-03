@@ -79,10 +79,14 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
   const root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null;
   const onCurrentPage = root !== null && root.parent === figma.currentPage;
 
-  if (onCurrentPage) {
-    // Same-branch restore: apply snapshot properties directly to the existing node.
+  // No SVG stored (very old checkpoint pre-exportAsync) — property fallback, same-branch only.
+  if (!renderSvgB64) {
+    if (!root || !onCurrentPage) {
+      send({ type: 'ERROR', message: 'Pas de visuel stocké pour cette version. Recapturez un checkpoint.' });
+      return;
+    }
     try {
-      const { applied, skipped } = await applySnapshot(root!, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+      const { applied, skipped } = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
       send({ type: 'RESTORE_COMPLETE', applied, skipped });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
@@ -90,26 +94,34 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     return;
   }
 
-  // Cross-branch restore: the source node lives on a different page.
-  // Use the exportAsync SVG captured at checkpoint time — no property reconstruction.
-  if (!renderSvgB64) {
-    send({ type: 'ERROR', message: 'Pas de visuel disponible pour cette version. Recapturez un checkpoint.' });
-    return;
-  }
-
+  // SVG-based restore — same path for same-branch and cross-branch.
+  // No property reconstruction: the captured exportAsync SVG is the source of truth.
   try {
     const svgString = atob(renderSvgB64);
     const newNode = figma.createNodeFromSvg(svgString);
     newNode.name = snapshot.figmaNodeName;
-    // Position at the same canvas coordinates as the original snapshot.
-    newNode.x = snapshot.root.x;
-    newNode.y = snapshot.root.y;
-    figma.currentPage.appendChild(newNode);
+
+    if (onCurrentPage && root) {
+      // Same-branch: replace the existing node, keep its current position and z-order.
+      const parent = root.parent as PageNode;
+      const idx = (parent.children as readonly SceneNode[]).indexOf(root as SceneNode);
+      newNode.x = (root as FrameNode).x;
+      newNode.y = (root as FrameNode).y;
+      parent.appendChild(newNode);
+      if (idx >= 0) parent.insertChild(idx, newNode);
+      root.remove();
+    } else {
+      // Cross-branch: add to current page at the snapshot's original canvas position.
+      newNode.x = snapshot.root.x;
+      newNode.y = snapshot.root.y;
+      figma.currentPage.appendChild(newNode);
+    }
+
     figma.currentPage.selection = [newNode];
     figma.viewport.scrollAndZoomIntoView([newNode]);
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
   } catch (e) {
-    send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
+    send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
   }
 }
 
