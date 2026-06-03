@@ -443,14 +443,14 @@ function useCycleStatus(dispatch: (a: DiffAction) => void, apiKey: string, versi
   }, [apiKey, versionId, status]);
 }
 
-function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
+function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string, svgB64: string | null) {
   return useCallback(async () => {
     dispatch({ type: 'APPLY_START' });
     try {
       const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${versionId}/snapshot`);
-      send({ type: 'RESTORE_TO_FIGMA', snapshot });
+      send({ type: 'RESTORE_TO_FIGMA', snapshot, render_svg_b64: svgB64 ?? undefined });
     } catch (e) { dispatch({ type: 'APPLY_ERROR', err: (e as Error).message }); }
-  }, [apiKey, versionId]);
+  }, [apiKey, versionId, svgB64]);
 }
 
 function useRestore(
@@ -487,7 +487,7 @@ function DiffScreen() {
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
   const cycleStatus  = useCycleStatus(dispatch, apiKey, version.id, state.status);
-  const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id);
+  const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id, state.data?.svg_b64 ?? null);
   const restore      = useRestore(dispatch, apiKey, version.id, author, branch, setScreen);
 
   const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
