@@ -204,7 +204,8 @@ async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Pro
   const snapMap = buildSnapMap(snapshot.root);
 
   for (const nd of delta.modified) {
-    const node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null;
+    let node: SceneNode | null = null;
+    try { node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null; } catch {}
     const snap = snapMap.get(nd.nodeId);
     if (!node || !snap) { skipped++; continue; }
     try { await applyDeltaProps(node, snap, normalizeChangedProps(nd.changes)); applied++; }
@@ -212,7 +213,8 @@ async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Pro
   }
 
   for (const nd of delta.removed) {
-    const node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null;
+    let node: SceneNode | null = null;
+    try { node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null; } catch {}
     if (node && 'visible' in node) { node.visible = false; applied++; } else skipped++;
   }
 
@@ -225,7 +227,9 @@ async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Pro
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
 async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string, delta?: RestorationDelta): Promise<void> {
-  const root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null;
+  // getNodeByIdAsync can throw (not just return null) when the node doesn't exist
+  let root: SceneNode | null = null;
+  try { root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null; } catch {}
   const onCurrentPage = root !== null && root.parent === figma.currentPage;
 
   if (onCurrentPage) {
