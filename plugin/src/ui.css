@@ -26,13 +26,13 @@ body {
 
 @layer components {
   .input {
-    @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors;
+    @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus-visible:ring-2 focus-visible:ring-purple-500 transition-colors;
   }
   .btn-primary {
-    @apply py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors;
+    @apply py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2;
   }
   .btn-secondary {
-    @apply py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-sm transition-colors;
+    @apply py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2;
   }
   .line-clamp-2 {
     display: -webkit-box;
@@ -40,4 +40,11 @@ body {
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+}
+
+/* WCAG 2.4.7 — Focus visible pour tous les éléments interactifs inline */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #a855f7;
+  outline-offset: 2px;
 }
