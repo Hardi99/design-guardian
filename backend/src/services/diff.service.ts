@@ -214,6 +214,7 @@ export class DiffService {
       for (let i = 0; i < v1Effects.length; i++) {
         const e1 = v1Effects[i];
         const e2 = v2Effects[i];
+        if (!e1 || !e2) continue;
         const label = v1Effects.length > 1 ? `effect[${i}]` : 'effect';
         if (e1.visible !== e2.visible)
           changes.push({ property: `${label}.visible`, oldValue: e1.visible, newValue: e2.visible, delta: e2.visible ? 'caché → visible' : 'visible → caché' });
