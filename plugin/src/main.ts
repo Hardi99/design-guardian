@@ -71,21 +71,45 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
-    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot); break;
+    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64); break;
   }
 };
 
-async function handleRestoreToFigma(snapshot: FigmaSnapshot): Promise<void> {
+async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
   const root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null;
-  if (!root) {
-    send({ type: 'ERROR', message: 'Nœud introuvable — ouvre le bon fichier Figma.' });
+  const onCurrentPage = root !== null && root.parent === figma.currentPage;
+
+  if (onCurrentPage) {
+    // Same-branch restore: apply snapshot properties directly to the existing node.
+    try {
+      const { applied, skipped } = await applySnapshot(root!, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+      send({ type: 'RESTORE_COMPLETE', applied, skipped });
+    } catch (e) {
+      send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
+    }
     return;
   }
+
+  // Cross-branch restore: the source node lives on a different page.
+  // Use the exportAsync SVG captured at checkpoint time — no property reconstruction.
+  if (!renderSvgB64) {
+    send({ type: 'ERROR', message: 'Pas de visuel disponible pour cette version. Recapturez un checkpoint.' });
+    return;
+  }
+
   try {
-    const { applied, skipped } = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
-    send({ type: 'RESTORE_COMPLETE', applied, skipped });
+    const svgString = atob(renderSvgB64);
+    const newNode = figma.createNodeFromSvg(svgString);
+    newNode.name = snapshot.figmaNodeName;
+    // Position at the same canvas coordinates as the original snapshot.
+    newNode.x = snapshot.root.x;
+    newNode.y = snapshot.root.y;
+    figma.currentPage.appendChild(newNode);
+    figma.currentPage.selection = [newNode];
+    figma.viewport.scrollAndZoomIntoView([newNode]);
+    send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
   } catch (e) {
-    send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
+    send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
   }
 }
 
