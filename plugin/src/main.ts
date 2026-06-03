@@ -371,15 +371,29 @@ async function applySnapshot(
     if ('cornerRadius' in node && snap.cornerRadius !== undefined)
       (node as CornerMixin).cornerRadius = snap.cornerRadius;
 
-    // Texte
-    if (node.type === 'TEXT' && snap.characters !== undefined) {
+    // Texte — font d'abord (requis avant characters), puis contenu
+    if (node.type === 'TEXT') {
       const t = node as TextNode;
-      const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName)
-        ? t.fontName as FontName
-        : { family: 'Inter', style: 'Regular' } as FontName;
-      await figma.loadFontAsync(fn);
-      t.characters = snap.characters;
-      if (snap.fontSize !== undefined && typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
+
+      if (snap.fontFamily) {
+        const style = weightToStyle(snap.fontWeight, snap.fontStyle === 'italic');
+        try {
+          await figma.loadFontAsync({ family: snap.fontFamily, style });
+          t.fontName = { family: snap.fontFamily, style };
+        } catch {
+          const fallback: FontName = { family: snap.fontFamily, style: snap.fontStyle === 'italic' ? 'Italic' : 'Regular' };
+          try { await figma.loadFontAsync(fallback); t.fontName = fallback; } catch {}
+        }
+      }
+
+      if (snap.characters !== undefined) {
+        const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName)
+          ? t.fontName as FontName
+          : { family: 'Inter', style: 'Regular' } as FontName;
+        await figma.loadFontAsync(fn);
+        t.characters = snap.characters;
+        if (snap.fontSize !== undefined && typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
+      }
     }
 
     applied++;
