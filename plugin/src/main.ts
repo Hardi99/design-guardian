@@ -77,6 +77,17 @@ figma.ui.onmessage = async (raw: unknown) => {
 
 // ─── Delta-based restore helpers ─────────────────────────────────────────────
 
+// Reconstruct the Figma font style string from stored weight + italic flag.
+function weightToStyle(weight?: number, italic = false): string {
+  const w = weight ?? 400;
+  const base =
+    w <= 100 ? 'Thin'       : w <= 200 ? 'ExtraLight' :
+    w <= 300 ? 'Light'      : w <= 400 ? 'Regular'    :
+    w <= 500 ? 'Medium'     : w <= 600 ? 'SemiBold'   :
+    w <= 700 ? 'Bold'       : w <= 800 ? 'ExtraBold'  : 'Black';
+  return italic ? (base === 'Regular' ? 'Italic' : `${base} Italic`) : base;
+}
+
 function buildSnapMap(root: NodeSnapshot): Map<string, NodeSnapshot> {
   const map = new Map<string, NodeSnapshot>();
   const traverse = (node: NodeSnapshot) => {
@@ -158,6 +169,22 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
     (node as BlendMixin).effects = effects;
   }
 
+  // Font family / weight / style — must be restored before characters or fontSize
+  if ((props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle')) && node.type === 'TEXT') {
+    const t = node as TextNode;
+    const family = snap.fontFamily
+      ?? (typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? (t.fontName as FontName).family : 'Inter');
+    const style = weightToStyle(snap.fontWeight, snap.fontStyle === 'italic');
+    try {
+      await figma.loadFontAsync({ family, style });
+      t.fontName = { family, style };
+    } catch {
+      // Fallback: try Regular / Italic only (font may not have the weight variant)
+      const fallbackStyle = snap.fontStyle === 'italic' ? 'Italic' : 'Regular';
+      try { await figma.loadFontAsync({ family, style: fallbackStyle }); t.fontName = { family, style: fallbackStyle }; } catch {}
+    }
+  }
+
   if (props.has('characters') && node.type === 'TEXT') {
     const t = node as TextNode;
     const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? t.fontName as FontName : { family: 'Inter', style: 'Regular' };
@@ -226,9 +253,26 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     const svgString = atob(renderSvgB64);
     const newNode = figma.createNodeFromSvg(svgString);
     newNode.name = snapshot.figmaNodeName;
-    newNode.x = snapshot.root.x;
-    newNode.y = snapshot.root.y;
-    figma.currentPage.appendChild(newNode);
+
+    // Replace existing node by name if found — keeps z-order + position,
+    // and makes the operation fully undoable as one step (old node is restored on Ctrl+Z).
+    const existing = figma.currentPage.children
+      .find(n => n.name === snapshot.figmaNodeName) as SceneNode | undefined;
+
+    if (existing) {
+      const parent = existing.parent as PageNode;
+      const idx = (parent.children as readonly SceneNode[]).indexOf(existing);
+      newNode.x = (existing as FrameNode).x;
+      newNode.y = (existing as FrameNode).y;
+      parent.appendChild(newNode);
+      if (idx >= 0) parent.insertChild(idx, newNode);
+      existing.remove();
+    } else {
+      newNode.x = snapshot.root.x;
+      newNode.y = snapshot.root.y;
+      figma.currentPage.appendChild(newNode);
+    }
+
     figma.currentPage.selection = [newNode];
     figma.viewport.scrollAndZoomIntoView([newNode]);
     figma.commitUndo();
