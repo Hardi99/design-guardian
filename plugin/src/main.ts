@@ -115,8 +115,10 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
   }
   if ((props.has('width') || props.has('height')) && !inAutoLayout && 'resize' in node)
     (node as LayoutMixin).resize(snap.width, snap.height);
-  if (props.has('opacity')      && 'opacity'      in node) (node as BlendMixin).opacity = snap.opacity;
-  if (props.has('visible'))                                  node.visible = snap.visible ?? true;
+  if (props.has('opacity')  && 'opacity' in node) (node as BlendMixin).opacity = snap.opacity;
+  if (props.has('visible'))                       node.visible = snap.visible ?? true;
+  if (props.has('rotation') && 'rotation' in node && snap.rotation !== undefined)
+    (node as SceneNode & { rotation: number }).rotation = snap.rotation;
   if (props.has('cornerRadius') && 'cornerRadius' in node && snap.cornerRadius !== undefined)
     (node as CornerMixin).cornerRadius = snap.cornerRadius;
   if (props.has('strokeWeight') && 'strokeWeight' in node && snap.strokeWeight !== undefined)
@@ -139,6 +141,21 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
   if (props.has('strokes') && 'strokes' in node) {
     const paints: Paint[] = snap.strokes.filter(s => s.type === 'SOLID' && s.color).map(s => ({ type: 'SOLID', color: { r: s.color!.r, g: s.color!.g, b: s.color!.b }, opacity: s.opacity ?? s.color!.a, visible: true } as SolidPaint));
     if (paints.length > 0) (node as GeometryMixin).strokes = paints;
+  }
+
+  if (props.has('effects') && 'effects' in node) {
+    const effects: Effect[] = [];
+    for (const e of snap.effects ?? []) {
+      const color = e.color ? { r: e.color.r, g: e.color.g, b: e.color.b, a: e.color.a } : { r: 0, g: 0, b: 0, a: 0.25 };
+      if (e.type === 'DROP_SHADOW') {
+        effects.push({ type: 'DROP_SHADOW', visible: e.visible, radius: e.radius, spread: 0, blendMode: 'NORMAL', showShadowBehindNode: false, color, offset: e.offset ?? { x: 4, y: 4 } } as DropShadowEffect);
+      } else if (e.type === 'INNER_SHADOW') {
+        effects.push({ type: 'INNER_SHADOW', visible: e.visible, radius: e.radius, spread: 0, blendMode: 'NORMAL', color, offset: e.offset ?? { x: 0, y: 0 } } as InnerShadowEffect);
+      } else if (e.type === 'LAYER_BLUR' || e.type === 'BACKGROUND_BLUR') {
+        effects.push({ type: e.type, visible: e.visible, radius: e.radius } as BlurEffect);
+      }
+    }
+    (node as BlendMixin).effects = effects;
   }
 
   if (props.has('characters') && node.type === 'TEXT') {
@@ -192,6 +209,7 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
       const result = hasDelta
         ? await applyDelta(snapshot, delta!)
         : await applySnapshot(root!, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+      figma.commitUndo();
       send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
@@ -213,6 +231,7 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     figma.currentPage.appendChild(newNode);
     figma.currentPage.selection = [newNode];
     figma.viewport.scrollAndZoomIntoView([newNode]);
+    figma.commitUndo();
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
   } catch (e) {
     send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
