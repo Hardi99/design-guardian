@@ -248,7 +248,8 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, async (c) => {
     .maybeSingle();
 
   const nextVersion = prev ? prev.version_number + 1 : 1;
-  const newPath = `${src.asset_id}/v${nextVersion}.json`;
+  const safeBranch = branch_name.replace(/[^a-zA-Z0-9-_]/g, '_');
+  const newPath = `${src.asset_id}/${safeBranch}/v${nextVersion}.json`;
 
   const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
   const { error: uploadErr } = await getSupabaseStorage()
