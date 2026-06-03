@@ -2,7 +2,7 @@
 // Accès exclusif à l'API Figma. Communication UI via postMessage uniquement.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
+import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot, RestorationDelta } from './types';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -71,57 +71,151 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
-    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64); break;
+    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64, msg.delta); break;
   }
 };
 
-async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
+// ─── Delta-based restore helpers ─────────────────────────────────────────────
+
+function buildSnapMap(root: NodeSnapshot): Map<string, NodeSnapshot> {
+  const map = new Map<string, NodeSnapshot>();
+  const traverse = (node: NodeSnapshot) => {
+    map.set(node.id, node);
+    if (node.children) node.children.forEach(traverse);
+  };
+  traverse(root);
+  return map;
+}
+
+function normalizeChangedProps(changes: Array<{ property: string }>): Set<string> {
+  const props = new Set<string>();
+  for (const { property } of changes) {
+    if (property.startsWith('fill'))                                       props.add('fills');
+    else if (property.startsWith('stroke') && property !== 'strokeWeight') props.add('strokes');
+    else if (property.startsWith('effect'))                                props.add('effects');
+    else props.add(property);
+  }
+  return props;
+}
+
+async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<string>): Promise<void> {
+  const inAutoLayout = (() => {
+    const p = node.parent;
+    return !!(p && 'layoutMode' in p && (p as FrameNode).layoutMode !== 'NONE');
+  })();
+
+  if ((props.has('x') || props.has('y')) && !inAutoLayout && 'x' in node) {
+    let parentAbsX = 0, parentAbsY = 0;
+    if (node.parent && 'absoluteTransform' in node.parent) {
+      parentAbsX = (node.parent as SceneNode).absoluteTransform[0][2];
+      parentAbsY = (node.parent as SceneNode).absoluteTransform[1][2];
+    }
+    (node as { x: number; y: number }).x = snap.x - parentAbsX;
+    (node as { x: number; y: number }).y = snap.y - parentAbsY;
+  }
+  if ((props.has('width') || props.has('height')) && !inAutoLayout && 'resize' in node)
+    (node as LayoutMixin).resize(snap.width, snap.height);
+  if (props.has('opacity')      && 'opacity'      in node) (node as BlendMixin).opacity = snap.opacity;
+  if (props.has('visible'))                                  node.visible = snap.visible ?? true;
+  if (props.has('cornerRadius') && 'cornerRadius' in node && snap.cornerRadius !== undefined)
+    (node as CornerMixin).cornerRadius = snap.cornerRadius;
+  if (props.has('strokeWeight') && 'strokeWeight' in node && snap.strokeWeight !== undefined)
+    (node as IndividualStrokesMixin).strokeWeight = snap.strokeWeight;
+
+  if (props.has('fills') && 'fills' in node) {
+    const paints: Paint[] = [];
+    for (const f of snap.fills) {
+      if (f.type === 'SOLID' && f.color) {
+        paints.push({ type: 'SOLID', color: { r: f.color.r, g: f.color.g, b: f.color.b }, opacity: f.color.a, visible: f.visible ?? true } as SolidPaint);
+      } else if ((f.type === 'GRADIENT_LINEAR' || f.type === 'GRADIENT_RADIAL') && f.gradientStops?.length) {
+        const r = ((f.gradientAngle ?? 0) * Math.PI) / 180;
+        const cos = Math.cos(r), sin = Math.sin(r);
+        paints.push({ type: f.type, gradientStops: f.gradientStops.map(s => ({ position: s.position, color: s.color })), gradientTransform: [[cos, sin, 0.5 * (1 - cos - sin)], [-sin, cos, 0.5 * (1 + sin - cos)]] as Transform, visible: f.visible ?? true, opacity: f.opacity ?? 1 } as GradientPaint);
+      }
+    }
+    if (paints.length > 0) (node as GeometryMixin).fills = paints;
+  }
+
+  if (props.has('strokes') && 'strokes' in node) {
+    const paints: Paint[] = snap.strokes.filter(s => s.type === 'SOLID' && s.color).map(s => ({ type: 'SOLID', color: { r: s.color!.r, g: s.color!.g, b: s.color!.b }, opacity: s.opacity ?? s.color!.a, visible: true } as SolidPaint));
+    if (paints.length > 0) (node as GeometryMixin).strokes = paints;
+  }
+
+  if (props.has('characters') && node.type === 'TEXT') {
+    const t = node as TextNode;
+    const fn = typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? t.fontName as FontName : { family: 'Inter', style: 'Regular' };
+    await figma.loadFontAsync(fn);
+    if (snap.characters !== undefined) t.characters = snap.characters;
+  }
+  if (props.has('fontSize') && node.type === 'TEXT' && snap.fontSize !== undefined) {
+    const t = node as TextNode;
+    if (typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
+  }
+  if (props.has('vectorPaths') && 'vectorPaths' in node && snap.vectorPaths?.length)
+    (node as VectorNode).vectorPaths = snap.vectorPaths as VectorPath[];
+}
+
+async function applyDelta(snapshot: FigmaSnapshot, delta: RestorationDelta): Promise<{ applied: number; skipped: number }> {
+  let applied = 0, skipped = 0;
+  const snapMap = buildSnapMap(snapshot.root);
+
+  for (const nd of delta.modified) {
+    const node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null;
+    const snap = snapMap.get(nd.nodeId);
+    if (!node || !snap) { skipped++; continue; }
+    try { await applyDeltaProps(node, snap, normalizeChangedProps(nd.changes)); applied++; }
+    catch { skipped++; }
+  }
+
+  for (const nd of delta.removed) {
+    const node = await figma.getNodeByIdAsync(nd.nodeId) as SceneNode | null;
+    if (node && 'visible' in node) { node.visible = false; applied++; } else skipped++;
+  }
+
+  // Added nodes cannot be recreated programmatically — reported as skipped
+  skipped += delta.added?.length ?? 0;
+
+  return { applied, skipped };
+}
+
+// ─── Restore to Figma canvas ──────────────────────────────────────────────────
+
+async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string, delta?: RestorationDelta): Promise<void> {
   const root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null;
   const onCurrentPage = root !== null && root.parent === figma.currentPage;
 
-  // No SVG stored (very old checkpoint pre-exportAsync) — property fallback, same-branch only.
-  if (!renderSvgB64) {
-    if (!root || !onCurrentPage) {
-      send({ type: 'ERROR', message: 'Pas de visuel stocké pour cette version. Recapturez un checkpoint.' });
-      return;
-    }
+  if (onCurrentPage) {
+    // Same-branch: delta-based restore — only touches what changed.
+    // Falls back to full applySnapshot for checkpoints without a delta (first version).
+    const hasDelta = delta && (delta.modified.length + delta.removed.length + (delta.added?.length ?? 0)) > 0;
     try {
-      const { applied, skipped } = await applySnapshot(root, snapshot.root, snapshot.root.x, snapshot.root.y, true);
-      send({ type: 'RESTORE_COMPLETE', applied, skipped });
+      const result = hasDelta
+        ? await applyDelta(snapshot, delta!)
+        : await applySnapshot(root!, snapshot.root, snapshot.root.x, snapshot.root.y, true);
+      send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
     }
     return;
   }
 
-  // SVG-based restore — same path for same-branch and cross-branch.
-  // No property reconstruction: the captured exportAsync SVG is the source of truth.
+  // Cross-branch: use exportAsync SVG captured at checkpoint time — no reconstruction.
+  if (!renderSvgB64) {
+    send({ type: 'ERROR', message: 'Pas de visuel stocké pour cette version. Recapturez un checkpoint.' });
+    return;
+  }
   try {
     const svgString = atob(renderSvgB64);
     const newNode = figma.createNodeFromSvg(svgString);
     newNode.name = snapshot.figmaNodeName;
-
-    if (onCurrentPage && root) {
-      // Same-branch: replace the existing node, keep its current position and z-order.
-      const parent = root.parent as PageNode;
-      const idx = (parent.children as readonly SceneNode[]).indexOf(root as SceneNode);
-      newNode.x = (root as FrameNode).x;
-      newNode.y = (root as FrameNode).y;
-      parent.appendChild(newNode);
-      if (idx >= 0) parent.insertChild(idx, newNode);
-      root.remove();
-    } else {
-      // Cross-branch: add to current page at the snapshot's original canvas position.
-      newNode.x = snapshot.root.x;
-      newNode.y = snapshot.root.y;
-      figma.currentPage.appendChild(newNode);
-    }
-
+    newNode.x = snapshot.root.x;
+    newNode.y = snapshot.root.y;
+    figma.currentPage.appendChild(newNode);
     figma.currentPage.selection = [newNode];
     figma.viewport.scrollAndZoomIntoView([newNode]);
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
   } catch (e) {
-    send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
+    send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
   }
 }
 
