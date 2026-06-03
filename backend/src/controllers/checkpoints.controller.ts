@@ -78,7 +78,33 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
 
   if (assetError || !asset) return c.json<ErrorResponse>({ error: 'Asset not found' }, 404);
 
-  // 2. Version précédente sur cette branche — uniquement métadonnées + storage_path
+  // 2a. Plan limit — free plan: max 10 checkpoints per asset (all branches combined)
+  if (c.get('plan') === 'free') {
+    const { count } = await supabase
+      .from('versions')
+      .select('id', { count: 'exact', head: true })
+      .eq('asset_id', body.asset_id);
+    if ((count ?? 0) >= 10) {
+      return c.json<ErrorResponse>({ error: 'Free plan limit reached (10 checkpoints). Upgrade to continue.' }, 403);
+    }
+  }
+
+  // 2b. Node consistency — within a branch, all checkpoints must track the same Figma node
+  if (body.figma_node_id) {
+    const { data: prevOnBranch } = await supabase
+      .from('versions')
+      .select('figma_node_id')
+      .eq('asset_id', body.asset_id)
+      .eq('branch_name', body.branch_name)
+      .not('figma_node_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (prevOnBranch?.figma_node_id && prevOnBranch.figma_node_id !== body.figma_node_id) {
+      return c.json<ErrorResponse>({ error: 'Node mismatch: this branch already tracks a different Figma element.' }, 409);
+    }
+  }
+
+  // 4. Version précédente sur cette branche — uniquement métadonnées + storage_path
   //    On ne charge plus snapshot_json depuis PostgreSQL.
   const { data: prev } = await supabase
     .from('versions')
@@ -92,7 +118,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   const nextVersion = prev ? prev.version_number + 1 : 1;
   const newPath = snapshotPath(body.asset_id, body.branch_name, nextVersion);
 
-  // 3. Diff + résumé IA
+  // 5. Diff + résumé IA
   //    Le snapshot précédent est téléchargé depuis Storage, pas depuis PostgreSQL.
   let analysisJson = null;
   let aiSummary = null;
@@ -113,14 +139,14 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     }
   }
 
-  // 4. Upload du nouveau snapshot vers Supabase Storage
+  // 6. Upload du nouveau snapshot vers Supabase Storage
   const uploadedPath = await uploadSnapshot(newPath, body.snapshot_json as FigmaSnapshot);
 
   if (!uploadedPath) {
     return c.json<ErrorResponse>({ error: 'Failed to upload snapshot to storage' }, 500);
   }
 
-  // 4b. Upload PNG pixel-perfect enveloppé en JSON (bucket accepte application/json uniquement)
+  // 6b. Upload PNG pixel-perfect enveloppé en JSON (bucket accepte application/json uniquement)
   if (body.render_svg_b64) {
     const renderPath = uploadedPath.replace('.json', '_render.json');
     const renderBytes = Buffer.from(JSON.stringify({ svg_b64: body.render_svg_b64 }));
@@ -130,7 +156,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     console.log('[DG] render upload:', renderErr ? `FAILED: ${JSON.stringify(renderErr)}` : `OK → ${renderPath}`);
   }
 
-  // 5. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage
+  // 7. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage
   const { data: version, error: versionError } = await supabase
     .from('versions')
     .insert({

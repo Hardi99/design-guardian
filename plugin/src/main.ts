@@ -41,6 +41,11 @@ function generateFileId(): string {
     await figma.clientStorage.setAsync('dg_file_id', fileKey);
   }
 
+  // Store main page ID once so handleSwitchBranch can find it reliably.
+  if (!figma.root.getPluginData('dg_main_page_id')) {
+    try { figma.root.setPluginData('dg_main_page_id', figma.currentPage.id); } catch { /* read-only */ }
+  }
+
   send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
 })();
 
@@ -57,6 +62,11 @@ figma.ui.onmessage = async (raw: unknown) => {
   const msg = raw as UIToMain;
   switch (msg.type) {
     case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
+    case 'RETRY_INIT': {
+      const key = (figma.fileKey as string | undefined) ?? figma.root.getPluginData('dg_file_id');
+      if (key) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
+      break;
+    }
     case 'OPEN_EXTERNAL':     figma.openExternal(msg.url); break;
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
@@ -110,16 +120,37 @@ async function applySnapshot(
     if ('opacity' in node)  (node as BlendMixin).opacity = snap.opacity;
     if ('visible' in node && snap.visible !== undefined) node.visible = snap.visible;
 
-    // Fills (SOLID uniquement — gradients ignorés pour éviter les erreurs)
+    // Fills — SOLID + linear/radial gradients (angle approximated from stored value)
     if ('fills' in node) {
-      const paints: Paint[] = snap.fills
-        .filter(f => f.type === 'SOLID' && f.color)
-        .map(f => ({
-          type: 'SOLID' as const,
-          color: { r: f.color!.r, g: f.color!.g, b: f.color!.b },
-          opacity: f.color!.a,
-          visible: f.visible ?? true,
-        } as SolidPaint));
+      const paints: Paint[] = [];
+      for (const f of snap.fills) {
+        if (f.type === 'SOLID' && f.color) {
+          paints.push({
+            type: 'SOLID',
+            color: { r: f.color.r, g: f.color.g, b: f.color.b },
+            opacity: f.color.a,
+            visible: f.visible ?? true,
+          } as SolidPaint);
+        } else if ((f.type === 'GRADIENT_LINEAR' || f.type === 'GRADIENT_RADIAL') && f.gradientStops?.length) {
+          const r = ((f.gradientAngle ?? 0) * Math.PI) / 180;
+          const cos = Math.cos(r);
+          const sin = Math.sin(r);
+          paints.push({
+            type: f.type,
+            gradientStops: f.gradientStops.map(s => ({
+              position: s.position,
+              color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
+            })),
+            // Centered gradient transform reconstructed from stored angle
+            gradientTransform: [
+              [cos, sin, 0.5 * (1 - cos - sin)],
+              [-sin, cos, 0.5 * (1 + sin - cos)],
+            ] as Transform,
+            visible: f.visible ?? true,
+            opacity: f.opacity ?? 1,
+          } as GradientPaint);
+        }
+      }
       if (paints.length > 0) (node as GeometryMixin).fills = paints;
     }
 
@@ -354,9 +385,16 @@ async function handleCreateBranch(branchName: string): Promise<void> {
 }
 
 function handleSwitchBranch(branchName: string): void {
-  const page = branchName === 'main'
-    ? figma.root.children.find(p => !p.name.startsWith('dg/')) as PageNode | undefined
-    : figma.root.children.find(p => p.name === `dg/${branchName}`) as PageNode | undefined;
+  let page: PageNode | undefined;
+  if (branchName === 'main') {
+    // Use stored main page ID first — reliable even if the file has multiple non-dg pages
+    const mainId = figma.root.getPluginData('dg_main_page_id');
+    page = mainId
+      ? figma.root.children.find(p => p.id === mainId) as PageNode | undefined
+      : figma.root.children.find(p => !p.name.startsWith('dg/')) as PageNode | undefined;
+  } else {
+    page = figma.root.children.find(p => p.name === `dg/${branchName}`) as PageNode | undefined;
+  }
   if (page) {
     figma.currentPage = page;
     send({ type: 'BRANCH_SWITCHED', branchName });

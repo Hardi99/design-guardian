@@ -124,22 +124,27 @@ export class DiffService {
       this.compareNumeric(changes, 'strokeWeight', v1.strokeWeight, v2.strokeWeight, 'px');
     }
 
-    // Fills (compare first solid fill color)
-    const v1Fill = v1.fills.find(f => f.type === 'SOLID' && f.color);
-    const v2Fill = v2.fills.find(f => f.type === 'SOLID' && f.color);
-    if (v1Fill?.color && v2Fill?.color && !this.colorsEqual(v1Fill.color, v2Fill.color)) {
-      const oldHex = this.colorToHex(v1Fill.color);
-      const newHex = this.colorToHex(v2Fill.color);
-      changes.push({ property: 'fill', oldValue: oldHex, newValue: newHex, delta: `${oldHex} -> ${newHex}` });
-    }
-
-    // Fill visibility change
+    // Fills — compare all fills, not just the first
     if (v1.fills.length !== v2.fills.length) {
-      changes.push({
-        property: 'fills',
-        oldValue: `${v1.fills.length} fill(s)`,
-        newValue: `${v2.fills.length} fill(s)`,
-      });
+      changes.push({ property: 'fills', oldValue: `${v1.fills.length} fill(s)`, newValue: `${v2.fills.length} fill(s)`, delta: `${v1.fills.length} → ${v2.fills.length}` });
+    }
+    const fillCount = Math.min(v1.fills.length, v2.fills.length);
+    for (let i = 0; i < fillCount; i++) {
+      const f1 = v1.fills[i];
+      const f2 = v2.fills[i];
+      const label = v1.fills.length > 1 ? `fill[${i}]` : 'fill';
+      if (f1.type !== f2.type) {
+        changes.push({ property: label, oldValue: f1.type, newValue: f2.type, delta: `${f1.type} → ${f2.type}` });
+        continue;
+      }
+      if (f1.type === 'SOLID' && f2.type === 'SOLID' && f1.color && f2.color && !this.colorsEqual(f1.color, f2.color)) {
+        const oldHex = this.colorToHex(f1.color);
+        const newHex = this.colorToHex(f2.color);
+        changes.push({ property: label, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
+      }
+      if ((f1.visible ?? true) !== (f2.visible ?? true)) {
+        changes.push({ property: `${label}.visible`, oldValue: f1.visible, newValue: f2.visible, delta: f2.visible ? 'masqué → visible' : 'visible → masqué' });
+      }
     }
 
     // Strokes (compare first solid stroke)
@@ -185,15 +190,26 @@ export class DiffService {
       this.compareNumeric(changes, 'fontSize', v1.fontSize, v2.fontSize, 'px');
     }
 
-    // Effects (count change as proxy)
-    const v1FxCount = (v1.effects ?? []).filter(e => e.visible).length;
-    const v2FxCount = (v2.effects ?? []).filter(e => e.visible).length;
-    if (v1FxCount !== v2FxCount) {
-      changes.push({
-        property: 'effects',
-        oldValue: `${v1FxCount} effet(s)`,
-        newValue: `${v2FxCount} effet(s)`,
-      });
+    // Effects — compare count + per-effect values (not just count)
+    const v1Effects = v1.effects ?? [];
+    const v2Effects = v2.effects ?? [];
+    if (v1Effects.length !== v2Effects.length) {
+      changes.push({ property: 'effects', oldValue: `${v1Effects.length} effet(s)`, newValue: `${v2Effects.length} effet(s)`, delta: `${v1Effects.length} → ${v2Effects.length}` });
+    } else {
+      for (let i = 0; i < v1Effects.length; i++) {
+        const e1 = v1Effects[i];
+        const e2 = v2Effects[i];
+        const label = v1Effects.length > 1 ? `effect[${i}]` : 'effect';
+        if (e1.visible !== e2.visible)
+          changes.push({ property: `${label}.visible`, oldValue: e1.visible, newValue: e2.visible, delta: e2.visible ? 'caché → visible' : 'visible → caché' });
+        if (Math.abs(e1.radius - e2.radius) > this.EPSILON)
+          changes.push({ property: `${label}.radius`, oldValue: e1.radius, newValue: e2.radius, delta: `${e1.radius}px → ${e2.radius}px` });
+        if (e1.color && e2.color && !this.colorsEqual(e1.color, e2.color)) {
+          const oldHex = this.colorToHex(e1.color);
+          const newHex = this.colorToHex(e2.color);
+          changes.push({ property: `${label}.color`, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
+        }
+      }
     }
 
     return changes;
