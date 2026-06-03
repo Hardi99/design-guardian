@@ -273,9 +273,10 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
       figma.currentPage.appendChild(newNode);
     }
 
-    figma.currentPage.selection = [newNode];
-    figma.viewport.scrollAndZoomIntoView([newNode]);
     figma.commitUndo();
+    // Selection + zoom are cosmetic — don't fail the restore if they throw
+    try { figma.currentPage.selection = [newNode]; } catch {}
+    try { figma.viewport.scrollAndZoomIntoView([newNode]); } catch {}
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
   } catch (e) {
     send({ type: 'ERROR', message: `Erreur restauration cross-branche : ${String(e)}` });
