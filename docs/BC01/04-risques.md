@@ -30,7 +30,7 @@ quadrantChart
 | R01 | Figma sort une feature native de versioning | Moyenne | Critique | 🔴 Élevée | Différenciation prix (Branches = 45$/mois/user, DG = Free) + précision 0.01px + AI Patch Note |
 | R02 | Figma modifie/supprime l'API Plugin | Faible | Critique | 🔴 Élevée | Utiliser uniquement les APIs stables documentées, surveiller changelogs Figma |
 | R03 | Adoption faible au lancement | Moyenne | Majeur | 🟠 Haute | Early adopter actif depuis mai 2026, plugin public Figma Community, onboarding à venir |
-| R05 | Bug diff faux positif | Faible | Majeur | 🟠 Haute | 63 tests Vitest, tolérance ε=0.01px — risque réduit post-tests |
+| R05 | Bug diff faux positif | Faible | Majeur | 🟠 Haute | 123 tests Vitest (63 back · 60 plugin), tolérance ε=0.01px — risque réduit post-tests |
 | R06 | OpenAI quota dépassé / coût | Moyenne | Modéré | 🟡 Moyenne | Rate limiting backend, fallback `ai_summary = null` si quota dépassé |
 | R07 | Railway downtime | Faible | Modéré | 🟡 Moyenne | Health checks `/health`, monitoring Grafana, rollback Railway en 1 clic |
 | R08 | Supabase free tier pause automatique | Moyenne | Modéré | 🟡 Moyenne | Endpoint `/ping` + UptimeRobot toutes les 5min pour maintenir la base active |

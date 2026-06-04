@@ -25,7 +25,7 @@ gantt
 
     section Sprint 3 Diff Engine
         DiffService algorithme geometrique     :done, s3a, 2025-01-06, 2025-01-27
-        63 tests Vitest diff.service           :done, s3b, 2025-01-20, 2025-02-10
+        63 tests backend Vitest                :done, s3b, 2025-01-20, 2025-02-10
         Fix Zod schema champs silencieux       :done, s3c, 2025-01-27, 2025-02-03
 
     section Sprint 4 IA et Viewer
@@ -42,7 +42,7 @@ gantt
         CI/CD GitHub Actions                   :done, s6a, 2025-05-05, 2025-05-19
         Prometheus et Grafana                  :done, s6b, 2025-05-12, 2025-05-26
         Dependabot et CHANGELOG                :done, s6c, 2025-05-19, 2025-06-02
-        Cahier de recettes 63 tests            :done, s6d, 2025-10-01, 2025-11-15
+        Cahier de recettes REC-XXX             :done, s6d, 2025-10-01, 2025-11-15
 
     section Sprint 7 Scalabilite et Production
         Migration 008 Snapshots vers Storage   :done, s7a, 2026-04-01, 2026-04-15
@@ -54,6 +54,7 @@ gantt
 
     section Sprint 8 Soutenance BC01 BC03
         Diagrammes architecture Mermaid        :done, s8a, 2026-05-08, 2026-05-09
+        Refacto plugin et 60 tests Vitest      :done, s8h, 2026-06-01, 2026-06-04
         Planning et roadmap                    :active, s8b, 2026-05-09, 2026-05-12
         Parties prenantes et risques           :s8c, 2026-05-12, 2026-05-16
         Backlog MoSCoW et story points         :s8d, 2026-05-12, 2026-05-19

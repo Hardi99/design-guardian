@@ -40,7 +40,7 @@ graph TB
     StripeAPI -->|"webhook signé"| Payments
     Notifs -->|"email + SMS"| UIThread
     Monitoring -->|"scrape /metrics"| Metrics
-    CI -->|"deploy on push"| Backend
+    CI ==>|"deploy on push"| Core
 ```
 
 ---
@@ -61,8 +61,10 @@ sequenceDiagram
     PluginUI->>Main: postMessage(CAPTURE_SNAPSHOT)
     Main->>Main: extractSnapshot(selectedNode)
     Note over Main: Parcours récursif du node tree<br/>absoluteTransform → x, y absolus<br/>fills, strokes, effects, opacity<br/>vectorPaths, cornerRadius, characters<br/>safeNum() pour figma.mixed
-    Main->>PluginUI: postMessage(SNAPSHOT_READY, snapshot_json)
-    PluginUI->>Backend: POST /api/checkpoints {snapshot_json, branch, author}
+    Main->>Main: node.exportAsync({ format: 'SVG' }) → render_svg_b64
+    Note over Main: SVG natif Figma (pixel-perfect)<br/>capturé tel quel, aucune reconstruction
+    Main->>PluginUI: postMessage(SNAPSHOT_READY, snapshot_json + render_svg_b64)
+    PluginUI->>Backend: POST /api/checkpoints {snapshot_json, render_svg_b64, branch, author}
     Backend->>DB: SELECT id, version_number, storage_path (dernière version)
     DB-->>Backend: {prev.storage_path}
     Backend->>Storage: DOWNLOAD {asset_id}/v{prev}.json
@@ -71,7 +73,7 @@ sequenceDiagram
     Note over Backend: flattenTree() → Map id/node<br/>Removed / Added / Modified<br/>Tolérance ε = 0.01px → DeltaJSON
     Backend->>OpenAI: generatePatchNote(deltaJSON, author)
     OpenAI-->>Backend: ai_summary (texte lisible)
-    Backend->>Storage: UPLOAD {asset_id}/v{new}.json
+    Backend->>Storage: UPLOAD {asset_id}/{branch}/v{new}.json + render_svg natif
     Storage-->>Backend: storage_path
     Backend->>DB: INSERT versions {storage_path, analysis_json, ai_summary, parent_id}
     DB-->>Backend: {version_id}
@@ -95,15 +97,15 @@ sequenceDiagram
     PluginUI->>Backend: GET /api/branches/versions/{id}
     Backend->>DB: SELECT version + parent_id
     DB-->>Backend: {version, parent_id, storage_path}
-    Backend->>Storage: DOWNLOAD snapshot courant
-    Backend->>Storage: DOWNLOAD snapshot parent
-    Storage-->>Backend: current_snap, prev_snap
-    Backend->>Backend: SVGService.generateSvgFromSnapshot(current)
-    Backend->>Backend: SVGService.generateSvgFromSnapshot(prev)
-    Backend->>Backend: node-level SVGs pour chaque nœud du delta
+    Backend->>Storage: DOWNLOAD render_svg natif (version courante)
+    Backend->>Storage: DOWNLOAD render_svg natif (version parent)
+    Storage-->>Backend: current_svg, prev_svg
+    Note over Backend: SVG exporté nativement par Figma (exportAsync)<br/>au moment du checkpoint — aucune reconstruction
+    Backend->>DB: SELECT analysis_json (delta pré-calculé)
+    DB-->>Backend: node_diffs[]
     Backend-->>PluginUI: {svg_b64, prev_svg_b64, node_diffs[]}
     PluginUI-->>Designer: Diff Viewer — Split / Overlay / Nodes
-    Note over Designer,PluginUI: Split : côte à côte avant | après<br/>Overlay : superposition avec opacité<br/>Nodes : liste des changements card par card
+    Note over Designer,PluginUI: Split : côte à côte avant | après<br/>Overlay : superposition + mode Différence<br/>Nodes : liste des changements card par card
 ```
 
 ---
@@ -198,7 +200,7 @@ graph LR
 graph LR
     Commit["git push\nmaster"] --> Build["Build\ntsc / vite build"]
     Build --> Types["Typecheck\ntsc --noEmit"]
-    Types --> Tests["Vitest\n63 tests unitaires"]
+    Types --> Tests["Vitest\n123 tests (63 back · 60 plugin)"]
     Tests --> Coverage["Coverage gate\n≥ 80%"]
     Coverage --> Deploy["Deploy\nRailway auto-deploy"]
     Deploy --> Health["Health check\n/health · /ping"]
