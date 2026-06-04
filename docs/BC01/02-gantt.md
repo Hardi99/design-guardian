@@ -1,6 +1,40 @@
 # C1.4.1 — Charge de travail & Planning — Design Guardian
 
-## Diagramme de Gantt — Sprints du projet
+## Vue condensée — 1 barre par sprint (version slide / Canva)
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'background':'transparent'}}}%%
+gantt
+    title Design Guardian — Planning projet (Oct 2024 → Juin 2026)
+    dateFormat YYYY-MM-DD
+    axisFormat %b %y
+    todayMarker off
+
+    section Cadrage
+        S0 · Besoin · faisabilité · archi      :done, 2024-10-01, 2024-10-28
+    section Fondations
+        S1 · Railway · Supabase · schéma BDD   :done, 2024-10-28, 2024-11-25
+    section Plugin MVP
+        S2 · Snapshot natif · 1er checkpoint   :done, 2024-11-25, 2024-12-23
+    section Diff Engine
+        S3 · DiffService · 63 tests backend    :done, 2025-01-06, 2025-02-10
+    section IA & Viewer
+        S4 · AI Patch Note · Diff Viewer       :done, 2025-02-10, 2025-03-17
+    section Features
+        S5 · Branches · Gold · Restore         :done, 2025-03-17, 2025-04-28
+    section Qualité & Infra
+        S6 · CI/CD · Prometheus · Grafana      :done, 2025-05-05, 2025-06-02
+    section Production
+        S7 · Migration Storage · Figma Store   :done, 2026-04-01, 2026-04-25
+        Approbation Figma Community            :milestone, 2026-05-08, 0d
+    section Soutenance
+        S8 · Refacto plugin · 60 tests · deck  :active, 2026-05-08, 2026-06-07
+        Oral BC01                              :milestone, 2026-06-13, 0d
+```
+
+---
+
+## Diagramme de Gantt détaillé — Sprints du projet
 
 ```mermaid
 gantt
