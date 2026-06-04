@@ -4,35 +4,35 @@
 
 ```mermaid
 graph TB
-    Designer(["👤 Designer\nFigma Desktop"])
+    Designer(["👤 Designer<br/>Figma Desktop"])
 
     subgraph Plugin["Plugin Figma · Preact + Tailwind"]
         direction LR
-        Main["main.ts\nAPI Figma"]
-        UIThread["ui.tsx\nInterface + HTTP"]
+        Main["main.ts<br/>API Figma"]
+        UIThread["ui.tsx<br/>Interface + HTTP"]
         Main <-->|postMessage| UIThread
     end
 
     subgraph Backend["API Backend · HonoJS · Railway"]
         direction LR
-        Auth["Auth\nOAuth · JWT"]
-        Core["Checkpoints · Diff · IA\nBranches · Assets"]
-        Payments["Paiements\nStripe"]
-        Notifs["Notifications\nResend · Twilio"]
-        Metrics["Métriques\nPrometheus /metrics"]
+        Auth["Auth<br/>OAuth · JWT"]
+        Core["Checkpoints · Diff · IA<br/>Branches · Assets"]
+        Payments["Paiements<br/>Stripe"]
+        Notifs["Notifications<br/>Resend · Twilio"]
+        Metrics["Métriques<br/>Prometheus /metrics"]
     end
 
     subgraph Data["Supabase"]
         DB[("PostgreSQL")]
-        Storage["Storage\nSnapshots JSON"]
+        Storage["Storage<br/>Snapshots JSON"]
     end
 
-    OpenAI["🤖 OpenAI\nGPT-4o-mini"]
+    OpenAI["🤖 OpenAI<br/>GPT-4o-mini"]
     StripeAPI["💳 Stripe"]
     Monitoring["📊 Prometheus · Grafana"]
-    CI["⚙️ GitHub Actions\nCI/CD · Tests"]
+    CI["⚙️ GitHub Actions<br/>CI/CD · Tests"]
 
-    Designer -->|"API Figma\n(main thread)"| Main
+    Designer -->|"API Figma<br/>(main thread)"| Main
     UIThread -->|"HTTPS · X-API-Key"| Backend
     Backend --> Data
     Core --> OpenAI
@@ -174,16 +174,16 @@ erDiagram
 graph LR
     subgraph FigmaDesktop["Figma Desktop"]
         subgraph MainThread["Main Thread — main.ts"]
-            FigmaAPI["figma.fileKey\nfigma.currentUser\nfigma.currentPage\nnode.absoluteTransform\nnode.fills · node.effects\nnode.vectorPaths\nfigma.createPage()"]
+            FigmaAPI["figma.fileKey<br/>figma.currentUser<br/>figma.currentPage<br/>node.absoluteTransform<br/>node.fills · node.effects<br/>node.vectorPaths<br/>figma.createPage()"]
         end
         subgraph UIThread["UI Thread — ui.tsx (Webview)"]
-            Preact["Preact + Tailwind\nTimeline · DiffViewer\nCheckpoint · Branches\nGold status"]
-            HTTP["fetch() HTTPS\nX-API-Key header"]
+            Preact["Preact + Tailwind<br/>Timeline · DiffViewer<br/>Checkpoint · Branches<br/>Gold status"]
+            HTTP["fetch() HTTPS<br/>X-API-Key header"]
         end
     end
 
-    MainThread <-->|"figma.ui.postMessage\nfigma.ui.onmessage"| UIThread
-    HTTP -->|"HTTPS Railway"| BackendAPI["Backend\nHono + Node.js\nRailway"]
+    MainThread <-->|"figma.ui.postMessage<br/>figma.ui.onmessage"| UIThread
+    HTTP -->|"HTTPS Railway"| BackendAPI["Backend<br/>Hono + Node.js<br/>Railway"]
 
     style MainThread fill:#f0f9ff,stroke:#0ea5e9
     style UIThread fill:#fef9f0,stroke:#f59e0b
@@ -198,12 +198,12 @@ graph LR
 
 ```mermaid
 graph LR
-    Commit["git push\nmaster"] --> Build["Build\ntsc / vite build"]
-    Build --> Types["Typecheck\ntsc --noEmit"]
-    Types --> Tests["Vitest\n123 tests (63 back · 60 plugin)"]
-    Tests --> Coverage["Coverage gate\n≥ 80%"]
-    Coverage --> Deploy["Deploy\nRailway auto-deploy"]
-    Deploy --> Health["Health check\n/health · /ping"]
+    Commit["git push<br/>master"] --> Build["Build<br/>tsc / vite build"]
+    Build --> Types["Typecheck<br/>tsc --noEmit"]
+    Types --> Tests["Vitest<br/>123 tests (63 back · 60 plugin)"]
+    Tests --> Coverage["Coverage gate<br/>≥ 80%"]
+    Coverage --> Deploy["Deploy<br/>Railway auto-deploy"]
+    Deploy --> Health["Health check<br/>/health · /ping"]
 
     style Coverage fill:#dcfce7,stroke:#16a34a
     style Deploy fill:#dbeafe,stroke:#2563eb
