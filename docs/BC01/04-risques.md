@@ -11,16 +11,16 @@ quadrantChart
     quadrant-2 Majeurs - Surveiller de pres
     quadrant-3 Mineurs - Accepter
     quadrant-4 A surveiller
-    R01 Versioning natif Figma: [0.38, 0.92]
-    R02 Rupture API Plugin: [0.46, 0.86]
-    R03 Adoption faible: [0.60, 0.78]
-    R05 Dependance infra: [0.40, 0.72]
-    R04 Quota cout OpenAI: [0.42, 0.55]
-    R06 Perte de donnees: [0.22, 0.95]
+    R03 Adoption faible: [0.62, 0.94]
+    R01 Versioning natif Figma: [0.40, 0.92]
+    R02 Rupture API Plugin: [0.60, 0.74]
+    R05 Dependance infra: [0.38, 0.74]
+    R04 Quota cout OpenAI: [0.40, 0.55]
+    R06 Perte de donnees: [0.20, 0.95]
 ```
 
-> Échelle 1-5 normalisée sur l'axe. **Criticité = Probabilité × Impact.**
-> R03 (adoption, 3 × 4 = 12) est le risque le plus critique — devant les risques techniques.
+> Échelle 1-5 normalisée sur l'axe. **Criticité = Probabilité × Impact.** Chaque risque occupe une case distincte (pas de superposition).
+> R03 (adoption, 3 × 5 = 15) est le risque le plus critique — devant les risques techniques.
 
 ---
 
@@ -28,9 +28,9 @@ quadrantChart
 
 | ID | Risque | Probabilité | Impact | Criticité | Mitigation |
 |----|--------|:-----------:|:------:|-----------|------------|
-| R03 | Adoption faible au lancement | 3 | 4 | 🔴 Élevée (12) | Early adopter actif (mai 2026) · plugin public Figma Community · onboarding à venir |
+| R03 | Adoption faible au lancement | 3 | 5 | 🔴 Élevée (15) | Early adopter actif (mai 2026) · plugin public Figma Community · onboarding à venir |
+| R02 | Rupture / changement de l'API Plugin Figma | 3 | 4 | 🔴 Élevée (12) | APIs stables documentées uniquement · veille active du changelog Figma (déjà vécu : `exportAsync`, sprint 2) |
 | R01 | Figma sort un versioning natif | 2 | 5 | 🔴 Élevée (10) | Différenciation prix (Branches 45 $/mois/user vs DG Free) · diff 0,01px · AI Patch Note |
-| R02 | Rupture / changement de l'API Plugin Figma | 2 | 5 | 🔴 Élevée (10) | APIs stables documentées uniquement · veille active du changelog Figma |
 | R05 | Dépendance infra (Railway / Supabase) | 2 | 4 | 🟠 Haute (8) | Health checks `/health` · `/ping` + UptimeRobot 5 min · rollback Railway en 1 clic |
 | R04 | Quota / coût OpenAI dépassé | 2 | 3 | 🟡 Moyenne (6) | Rate limiting backend · fallback `ai_summary = null` si quota atteint |
 | R06 | Perte de données (snapshot manquant) | 1 | 5 | 🟡 Moyenne (5) | Sauvegarde Storage + INSERT atomique · `snapshot_json` nullable géré par `resolveSnapshot()` |
