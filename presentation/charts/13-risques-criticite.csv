@@ -1,0 +1,7 @@
+Risque,Probabilité,Impact
+R01 Versioning natif Figma,2,5
+R02 Rupture API Plugin,2,5
+R03 Adoption faible,3,4
+R04 Quota / coût OpenAI,2,3
+R05 Dépendance infra,2,4
+R06 Perte de données,1,5

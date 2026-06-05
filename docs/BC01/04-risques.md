@@ -7,34 +7,35 @@ quadrantChart
     title Risques actifs - Probabilite vs Impact
     x-axis Faible probabilite --> Forte probabilite
     y-axis Faible impact --> Fort impact
-    quadrant-1 Risques critiques - Traiter en priorite
-    quadrant-2 Risques majeurs - Surveiller
-    quadrant-3 Risques mineurs - Accepter
-    quadrant-4 Risques a surveiller
-    Figma sort feature native: [0.38, 0.90]
-    Figma change API Plugin: [0.22, 0.88]
-    Adoption faible au lancement: [0.35, 0.72]
-    OpenAI quota depasse: [0.52, 0.48]
-    Railway downtime: [0.18, 0.62]
-    Supabase free tier pause: [0.30, 0.55]
-    Latence reseau plugin: [0.48, 0.32]
-    Bug diff faux positif: [0.30, 0.55]
+    quadrant-1 Critiques - Traiter en priorite
+    quadrant-2 Majeurs - Surveiller de pres
+    quadrant-3 Mineurs - Accepter
+    quadrant-4 A surveiller
+    R01 Versioning natif Figma: [0.38, 0.92]
+    R02 Rupture API Plugin: [0.46, 0.86]
+    R03 Adoption faible: [0.60, 0.78]
+    R05 Dependance infra: [0.40, 0.72]
+    R04 Quota cout OpenAI: [0.42, 0.55]
+    R06 Perte de donnees: [0.22, 0.95]
 ```
+
+> Échelle 1-5 normalisée sur l'axe. **Criticité = Probabilité × Impact.**
+> R03 (adoption, 3 × 4 = 12) est le risque le plus critique — devant les risques techniques.
 
 ---
 
 ## Référentiel des risques actifs
 
 | ID | Risque | Probabilité | Impact | Criticité | Mitigation |
-|---|---|---|---|---|---|
-| R01 | Figma sort une feature native de versioning | Moyenne | Critique | 🔴 Élevée | Différenciation prix (Branches = 45$/mois/user, DG = Free) + précision 0.01px + AI Patch Note |
-| R02 | Figma modifie/supprime l'API Plugin | Faible | Critique | 🔴 Élevée | Utiliser uniquement les APIs stables documentées, surveiller changelogs Figma |
-| R03 | Adoption faible au lancement | Moyenne | Majeur | 🟠 Haute | Early adopter actif depuis mai 2026, plugin public Figma Community, onboarding à venir |
-| R05 | Bug diff faux positif | Faible | Majeur | 🟠 Haute | 123 tests Vitest (63 back · 60 plugin), tolérance ε=0.01px — risque réduit post-tests |
-| R06 | OpenAI quota dépassé / coût | Moyenne | Modéré | 🟡 Moyenne | Rate limiting backend, fallback `ai_summary = null` si quota dépassé |
-| R07 | Railway downtime | Faible | Modéré | 🟡 Moyenne | Health checks `/health`, monitoring Grafana, rollback Railway en 1 clic |
-| R08 | Supabase free tier pause automatique | Moyenne | Modéré | 🟡 Moyenne | Endpoint `/ping` + UptimeRobot toutes les 5min pour maintenir la base active |
-| R09 | Latence réseau plugin | Moyenne | Faible | 🟢 Basse | Feedback visuel loading, Supabase Storage réduit la taille des INSERTs PostgreSQL |
+|----|--------|:-----------:|:------:|-----------|------------|
+| R03 | Adoption faible au lancement | 3 | 4 | 🔴 Élevée (12) | Early adopter actif (mai 2026) · plugin public Figma Community · onboarding à venir |
+| R01 | Figma sort un versioning natif | 2 | 5 | 🔴 Élevée (10) | Différenciation prix (Branches 45 $/mois/user vs DG Free) · diff 0,01px · AI Patch Note |
+| R02 | Rupture / changement de l'API Plugin Figma | 2 | 5 | 🔴 Élevée (10) | APIs stables documentées uniquement · veille active du changelog Figma |
+| R05 | Dépendance infra (Railway / Supabase) | 2 | 4 | 🟠 Haute (8) | Health checks `/health` · `/ping` + UptimeRobot 5 min · rollback Railway en 1 clic |
+| R04 | Quota / coût OpenAI dépassé | 2 | 3 | 🟡 Moyenne (6) | Rate limiting backend · fallback `ai_summary = null` si quota atteint |
+| R06 | Perte de données (snapshot manquant) | 1 | 5 | 🟡 Moyenne (5) | Sauvegarde Storage + INSERT atomique · `snapshot_json` nullable géré par `resolveSnapshot()` |
+
+> **Indicateurs de contrôle** : health checks `/health` et `/ping` · monitoring Grafana · taux d'erreur API · latence des endpoints · couverture de tests ≥ 80 %.
 
 ---
 
@@ -43,17 +44,17 @@ quadrantChart
 ```mermaid
 flowchart TD
     A["Risque détecté"] --> B{"Criticité ?"}
-    B -->|"🔴 Élevée"| C["Traitement immédiat\n< 4h"]
-    B -->|"🟠 Haute"| D["Traitement planifié\n< 24h"]
-    B -->|"🟡 Moyenne"| E["Backlog prioritaire\n< 1 semaine"]
-    B -->|"🟢 Basse"| F["Backlog standard\nProchain sprint"]
+    B -->|"🔴 Élevée"| C["Traitement immédiat<br/>< 4h"]
+    B -->|"🟠 Haute"| D["Traitement planifié<br/>< 24h"]
+    B -->|"🟡 Moyenne"| E["Backlog prioritaire<br/>< 1 semaine"]
+    B -->|"🟢 Basse"| F["Backlog standard<br/>Prochain sprint"]
 
-    C --> G["Hotfix branch\n+ PR review\n+ deploy Railway"]
+    C --> G["Hotfix branch<br/>+ PR review<br/>+ deploy Railway"]
     D --> G
-    E --> H["Issue GitHub\n+ estimation\n+ sprint planning"]
+    E --> H["Issue GitHub<br/>+ estimation<br/>+ sprint planning"]
     F --> H
 
-    G --> I["Tests non-régression\n+ monitoring 24h\n+ clôture incident"]
+    G --> I["Tests non-régression<br/>+ monitoring 24h<br/>+ clôture incident"]
     H --> I
 ```
 
