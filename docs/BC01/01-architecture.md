@@ -43,6 +43,14 @@ graph TB
     CI ==>|"deploy on push"| Core
 ```
 
+> **Légende** — ▭ service / composant · ⬡ service externe · `→` flux de données · `↔` échange bidirectionnel · couleurs = regroupement logique (Plugin / Backend / Data).
+>
+> **Formalisme** — vue type **C4 « Container »** : un conteneur = une unité déployable, ses services internes = modules. Le **backend Hono = 1 déploiement, 6 services modulaires** (Auth · BDD · Métriques · Notifications · IA · Paiements) — découpage prêt à extraire en microservices si la charge l'exige.
+>
+> **Sécurité** — Plugin → Backend en `HTTPS` + `X-API-Key` · Auth `JWT / OAuth` · webhooks Stripe signés.
+>
+> **Éco-conception** — propriétés natives Figma (zéro parsing SVG lourd) · snapshots déportés en Supabase Storage (PostgreSQL allégé) · modèle `gpt-4o-mini` (faible empreinte) · hébergement free tier (ressources minimales).
+
 ---
 
 ## 2. Diagramme de séquence — Capture d'un checkpoint
