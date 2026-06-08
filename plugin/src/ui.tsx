@@ -197,7 +197,7 @@ function AssetsScreen() {
             </div>
             {confirmId === a.id && (
               <div class="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <span class="text-xs text-red-400 flex-1">Supprimer "{a.name}" ?</span>
+                <span class="text-xs text-red-400 flex-1">Supprimer "{a.name}" et tout son historique ?</span>
                 <button class="text-xs text-gray-400 hover:text-white px-2 py-1" onClick={() => setConfirmId(null)}>Annuler</button>
                 <button class="text-xs text-red-400 hover:text-red-300 font-semibold px-2 py-1" onClick={() => confirmDelete(a.id)}>Supprimer</button>
               </div>

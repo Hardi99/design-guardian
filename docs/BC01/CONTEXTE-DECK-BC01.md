@@ -103,9 +103,9 @@ Les 11 compétences, **dans l'ordre à respecter**, avec leur livrable attendu e
 | **C1.1.2** Problème | Figma Branches = **45 $/mois/user** · fichier partagé à **5 designers** |
 | **C1.2.3** Risques | **8 risques** matérialisés et résolus · proba/impact (1-5) |
 | **C1.3.2** Comparatif | Prix d'entrée **0 € / 45 € / 29 €** · scores radar 0-5 |
-| **C1.4.1** Charge & planning | **~1 600 h** · **8 sprints** · répartition % (28/18/16…) |
+| **C1.4.1** Charge & planning | **~30 j-h** (~240 h) · **8 sprints** · Mars → Juin 2026 (~2 j/sem) |
 | **C1.4.2** Budget / qui paie | **0 €/mois** d'infra · Pro **12 €** · Team **39 €** · **540 $/an** économisés/designer |
-| **C1.5** Architecture | **6 microservices** · diff **0,01px** · IA **~0,001 $/checkpoint** |
+| **C1.5** Architecture | **6 services modulaires** (monolithe modulaire Hono) · diff **0,01px** · IA **~0,001 $/checkpoint** |
 | **C1.6** Solution | **0,01px** · **540 $/an** économisés · attribution par élément |
 | Démarche d'amélioration | **24 commits** en une session · **123 tests** · couverture **≥ 80 %** |
 | Projet réel | Plugin approuvé Figma **mai 2026** · early adopter **actif** |

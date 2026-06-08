@@ -1,102 +1,70 @@
 # C1.4.1 — Charge de travail & Planning — Design Guardian
 
-## Vue condensée — 1 barre par sprint (version slide / Canva)
-
-```mermaid
-%%{init: {'theme':'dark', 'themeVariables': {'background':'transparent'}}}%%
-gantt
-    title Design Guardian — Planning projet (Oct 2024 → Juin 2026)
-    dateFormat YYYY-MM-DD
-    axisFormat %b %y
-    todayMarker off
-
-    section Cadrage
-        S0 · Besoin · faisabilité · archi      :done, 2024-10-01, 2024-10-28
-    section Fondations
-        S1 · Railway · Supabase · schéma BDD   :done, 2024-10-28, 2024-11-25
-    section Plugin MVP
-        S2 · Snapshot natif · 1er checkpoint   :done, 2024-11-25, 2024-12-23
-    section Diff Engine
-        S3 · DiffService · 63 tests backend    :done, 2025-01-06, 2025-02-10
-    section IA & Viewer
-        S4 · AI Patch Note · Diff Viewer       :done, 2025-02-10, 2025-03-17
-    section Features
-        S5 · Branches · Gold · Restore         :done, 2025-03-17, 2025-04-28
-    section Qualité & Infra
-        S6 · CI/CD · Prometheus · Grafana      :done, 2025-05-05, 2025-06-02
-    section Production
-        S7 · Migration Storage · Figma Store   :done, 2026-04-01, 2026-04-25
-        Approbation Figma Community            :milestone, 2026-05-08, 0d
-    section Soutenance
-        S8 · Refacto plugin · 60 tests · deck  :active, 2026-05-08, 2026-06-07
-        Oral BC01                              :milestone, 2026-06-13, 0d
-```
+> **Compétence ÉLIMINATOIRE.** Le critère exige : fonctions **hiérarchisées** (principales / secondaires / complémentaires) + charge exprimée en **jour-homme**.
+> **Découpage deck = 3 slides, 1 idée énorme par slide** (lisible à 3 m) :
+> - **14a — Charge en jour-homme** (le chiffre + barres) ← coche « charge en j-h »
+> - **14b — Fonctions hiérarchisées (MoSCoW)** (tableau 4 colonnes) ← coche « fonctions hiérarchisées »
+> - **14c — Planning** (Gantt condensé 8 sprints, PNG) ← illustration
 
 ---
 
-## Diagramme de Gantt détaillé — Sprints du projet
+## Slide 14a — Charge en jour-homme
+
+> **≈ 30 jours-homme** · ~240 h · développeur solo · ~3,5 mois (Mars → Juin 2026, ~2 j/semaine les week-ends)
+
+Répartition par phase (source : `presentation/charts/12-charge-barres.csv`) :
+
+| Phase | Sprints | **Jour-homme** |
+|---|---|:---:|
+| Diff engine + IA | S3–S4 | **8 j-h** |
+| Branches + CI/CD + Monitoring | S5–S6 | **8 j-h** |
+| Storage + Store + polish | S7–S8 | **7 j-h** |
+| Cadrage + fondations + plugin MVP | S0–S2 | **7 j-h** |
+| **Total** | **8 sprints** | **≈ 30 j-h** |
+
+> **Méthode d'estimation** : ~15 semaines × ~2 jours/semaine (week-ends) = ~30 j-h, ventilés par phase selon la complexité (le Diff engine + l'IA concentrent le plus d'effort).
+> **Détail par composant** (camembert ci-dessous, version dossier) : Plugin 28 % · Diff 18 % · Backend 16 % · SVG 11 % · Infra 10 % · Doc 9 % · Scalabilité 8 %.
+
+---
+
+## Slide 14c — Planning (Gantt condensé)
+
+> Rendre sur **mermaid.live → export PNG** (ou preview VS Code), puis insérer comme image.
+
+## Vue condensée — 1 barre par sprint (version slide / Canva)
 
 ```mermaid
 gantt
-    title Design Guardian - Planning Projet Oct 2024 - Juin 2026
+    title Design Guardian — Planning (Jan → Juin 2026)
     dateFormat YYYY-MM-DD
-    excludes weekends
+    axisFormat %d %b
 
-    section Sprint 0 Cadrage
-        Analyse du besoin et contexte          :done, s0a, 2024-10-01, 2024-10-14
-        Etude de faisabilite technique         :done, s0b, 2024-10-07, 2024-10-21
-        Architecture cible et choix stack      :done, s0c, 2024-10-14, 2024-10-28
-
-    section Sprint 1 Fondations
-        Setup Railway et Supabase              :done, s1a, 2024-10-28, 2024-11-11
-        Schema BDD versions et branches        :done, s1b, 2024-11-04, 2024-11-18
-        Plugin scaffold create-figma-plugin    :done, s1c, 2024-11-11, 2024-11-25
-
-    section Sprint 2 Plugin MVP
-        Extraction snapshot natif Figma        :done, s2a, 2024-11-25, 2024-12-09
-        Abandon exportAsync, proprietes natives :done, s2b, 2024-12-02, 2024-12-16
-        Premier checkpoint fonctionnel         :done, s2c, 2024-12-09, 2024-12-23
-
-    section Sprint 3 Diff Engine
-        DiffService algorithme geometrique     :done, s3a, 2025-01-06, 2025-01-27
-        63 tests backend Vitest                :done, s3b, 2025-01-20, 2025-02-10
-        Fix Zod schema champs silencieux       :done, s3c, 2025-01-27, 2025-02-03
-
-    section Sprint 4 IA et Viewer
-        AI Patch Note via OpenAI               :done, s4a, 2025-02-10, 2025-02-24
-        Diff Viewer Split / Overlay / Nodes    :done, s4b, 2025-02-17, 2025-03-10
-        Fix SVG data URI vers inline           :done, s4c, 2025-03-03, 2025-03-17
-
-    section Sprint 5 Features avancees
-        Branches isolation via pages Figma     :done, s5a, 2025-03-17, 2025-04-07
-        Gold status et Timeline                :done, s5b, 2025-03-31, 2025-04-21
-        Restore version                        :done, s5c, 2025-04-14, 2025-04-28
-
-    section Sprint 6 Qualite et Infra
-        CI/CD GitHub Actions                   :done, s6a, 2025-05-05, 2025-05-19
-        Prometheus et Grafana                  :done, s6b, 2025-05-12, 2025-05-26
-        Dependabot et CHANGELOG                :done, s6c, 2025-05-19, 2025-06-02
-        Cahier de recettes REC-XXX             :done, s6d, 2025-10-01, 2025-11-15
-
-    section Sprint 7 Scalabilite et Production
-        Migration 008 Snapshots vers Storage   :done, s7a, 2026-04-01, 2026-04-15
-        Fix Railway build tsc dependencies     :done, s7b, 2026-04-15, 2026-04-20
-        Fix isolation figma.fileKey            :done, s7c, 2026-04-20, 2026-04-25
-        Soumission Figma Community             :done, s7d, 2026-04-01, 2026-04-10
-        Approbation Figma Community            :milestone, figmaok, 2026-05-08, 0d
-        Premier utilisateur early adopter      :done, s7e, 2026-05-08, 2026-05-08
-
-    section Sprint 8 Soutenance BC01 BC03
-        Diagrammes architecture Mermaid        :done, s8a, 2026-05-08, 2026-05-09
-        Refacto plugin et 60 tests Vitest      :done, s8h, 2026-06-01, 2026-06-04
-        Planning et roadmap                    :active, s8b, 2026-05-09, 2026-05-12
-        Parties prenantes et risques           :s8c, 2026-05-12, 2026-05-16
-        Backlog MoSCoW et story points         :s8d, 2026-05-12, 2026-05-19
-        Deck BC01 15-20 slides                 :s8e, 2026-05-19, 2026-06-02
-        Video Sprint Review 10-15 min          :s8f, 2026-05-26, 2026-06-07
-        Preparation oral et repetitions        :s8g, 2026-06-02, 2026-06-07
-        Oral BC01 Soutenance M2                :milestone, sout, 2026-06-13, 0d
+    section Exploration
+    Cadrage · exploration SaaS           :done, 2026-01-12, 2026-02-27
+    Pivot SaaS vers Plugin               :milestone, 2026-03-02, 0d
+    section Cadrage
+    S0 · Cadrage · faisabilité · archi   :done, 2026-03-02, 2026-03-09
+    section Fondations
+    S1 · Railway · Supabase · BDD        :done, 2026-03-09, 2026-03-20
+    section Plugin MVP
+    S2 · Snapshot natif · checkpoint     :done, 2026-03-20, 2026-04-03
+    section Diff Engine
+    S3 · DiffService · 63 tests          :done, 2026-04-03, 2026-04-17
+    section IA & Viewer
+    S4 · AI Patch Note · Diff Viewer     :done, 2026-04-17, 2026-05-01
+    section Features
+    S5 · Branches · Gold · Restore       :done, 2026-05-01, 2026-05-11
+    section Qualité & Infra
+    S6 · CI/CD · Prometheus · Grafana    :done, 2026-05-11, 2026-05-18
+    section Production
+    S7 · Migration Storage · Figma Store :done, 2026-05-18, 2026-05-25
+    Approbation Figma Community          :milestone, 2026-05-25, 0d
+    section Soutenance
+    S8 · Refacto · 60 tests · deck       :active, 2026-05-25, 2026-06-12
+    Oral BC01                            :milestone, 2026-06-13, 0d
 ```
+
+> **Thème sombre pour l'export** : utiliser l'onglet **Config** de mermaid.live (`theme: dark`), puis export PNG ×2.
 
 ---
 
@@ -115,7 +83,21 @@ pie title Répartition charge de travail (en %)
 
 ---
 
-## Fonctionnalités — Hiérarchie MoSCoW
+## Slide 14b — Fonctions hiérarchisées (MoSCoW)
+
+> Tableau 4 colonnes à reconstruire **nativement dans Canva** (plus lisible que le mindmap).
+
+| 🟥 MUST (principales) | 🟦 SHOULD (secondaires) | 🟨 COULD (complémentaires) | ⬜ WON'T (hors MVP) |
+|---|---|---|---|
+| Capture checkpoint | Gold status (approval) | Figma REST API SVG pixel-perfect | SDK public |
+| Diff géométrique ε=0,01px | Diff Viewer Split/Overlay/Nodes | Modèle éco. (Stripe) | Export diff PDF |
+| AI Patch Note | Restore version | Diff texte mot par mot | Notifications Slack |
+| Timeline des versions | Migration Supabase Storage | Onboarding tutoriel | Multi-sélection nodes |
+| Branches via pages Figma | | | |
+
+---
+
+## Fonctionnalités — Hiérarchie MoSCoW (mindmap — version dossier)
 
 ```mermaid
 mindmap
@@ -133,7 +115,7 @@ mindmap
       Supabase Storage migration
     Could Have
       Figma REST API SVG pixel-perfect
-      Modèle économique Lemon Squeezy
+      Modèle économique Stripe
       Diff texte mot par mot
       Onboarding tutoriel
     Won't Have MVP
