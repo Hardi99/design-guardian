@@ -15,14 +15,13 @@ quadrantChart
     Commanditaire formation: [0.60, 0.90]
     Figma Platform: [0.35, 0.88]
     Designer early adopter: [0.95, 0.55]
-    UX Designers: [0.84, 0.30]
-    Communaute Figma: [0.75, 0.28]
-    Packaging Designers: [0.65, 0.22]
-    Illustrateurs vectoriels: [0.58, 0.20]
-    OpenAI: [0.18, 0.52]
-    Railway / Supabase: [0.12, 0.45]
-    Figma Branches concurrent: [0.30, 0.65]
+    Designers UX Packaging Illustrateurs: [0.72, 0.25]
+    Dependances techniques: [0.15, 0.45]
 ```
+
+> **Porteur du projet** : le candidat M2 (rôle **développeur-architecte**) conçoit, développe et déploie le plugin — non plotté car il est l'auteur de la cartographie.
+> **6 points** pour la lisibilité : les 3 profils de designers fusionnés en *« Designers »*, et OpenAI · Railway · Supabase en *« Dépendances techniques »*.
+> Le concurrent **Figma Branches** n'est **pas** une partie prenante → traité en **C1.3.2 (étude comparative)**.
 
 ---
 
@@ -41,23 +40,47 @@ quadrantChart
 |---|---|---|---|
 | **Commanditaire formation** | École / organisme de formation — valide le projet M2 | Respect du cahier des charges BC01-BC04, livrables complets | Évaluation en cours |
 | **Figma Platform** | Fournit l'API Plugin, contrôle la distribution via le Plugin Store | Respect des règles du Plugin Store, politique réseau (`networkAccess`), pas de violation CGU | Approuvé mai 2026 ✅ |
-| **Figma Branches (concurrent)** | Concurrent direct à 45$/mois/user — plan Organization uniquement | — (surveillance concurrentielle) | Design Guardian disponible Free |
 
 ### Quadrant 3 — Surveiller (Faible intérêt + Faible influence)
 
 | Acteur | Rôle | Attentes | Statut |
 |---|---|---|---|
-| **OpenAI** | Fournit l'API LLM pour l'AI Patch Note (`gpt-4o-mini`) | SLA, quotas, pricing stables | API stable — dépendance externe |
-| **Railway / Supabase** | Infrastructure hébergement + BDD + Storage | Disponibilité, free tier suffisant pour MVP | Railway green ✅ — Supabase Storage actif ✅ |
+| **Dépendances techniques** (OpenAI · Railway · Supabase) | API LLM (`gpt-4o-mini`) + hébergement + BDD/Storage | SLA, quotas, pricing stables · free tier suffisant pour le MVP | API stable ✅ · Railway green ✅ · Supabase actif ✅ |
 
 ### Quadrant 4 — Informer (Fort intérêt + Faible influence)
 
 | Acteur | Rôle | Attentes | Statut |
 |---|---|---|---|
-| **UX Designers** | Utilisateurs finaux principaux | Diff précis, branches accessibles, prix Free/Pro | Cible principale |
-| **Communauté Figma** | Utilisateurs découvrant le plugin via Figma Community | Installation simple, onboarding clair | Disponible publiquement ✅ |
-| **Packaging Designers** | Utilisateurs vectoriels spécialisés | Support nodes vectoriels, diff vectorPaths | Cible validée par early adopter |
-| **Illustrateurs vectoriels** | Cible élargie identifiée | Diff vectorPaths précis au pixel | Cible secondaire |
+| **Designers** (UX/UI · packaging · illustrateurs vectoriels) | Utilisateurs finaux — caractéristiques détaillées ci-dessous | Diff précis au pixel, branches accessibles, prix Free/Pro | Cible principale, validée par l'early adopter |
+
+---
+
+## Rôles & caractéristiques des futurs utilisateurs
+
+> La matrice **positionne** les acteurs ; ce tableau détaille **rôle + niveau d'implication + caractéristiques** — la partie de C1.1.1 que le nuage de points ne montre pas. **Slide compagnon de la matrice.**
+
+### Rôle & niveau d'implication (synthèse)
+
+| Acteur | Rôle | Niveau d'implication |
+|---|---|---|
+| **Jury M2** | Évalue et valide la certification | Gérer de près |
+| **Commanditaire formation** | Valide le projet M2 (cahier des charges) | Satisfaire |
+| **Designer early adopter** | 1er utilisateur réel — feedback terrain | Gérer de près |
+| **Figma Platform** | Fournit l'API Plugin + distribution Store | Satisfaire |
+| **Designers** (finaux) | Utilisent le plugin au quotidien | Informer |
+| **Dépendances techniques** | Infra + IA (OpenAI/Railway/Supabase) | Surveiller |
+
+### Caractéristiques des utilisateurs finaux (personas)
+
+| Profil | Contexte d'usage | Caractéristiques | Besoin clé |
+|---|---|---|---|
+| **UX/UI designer** *(cible principale)* | Équipe, fichiers Figma partagés, itérations rapides | Non-développeur · vit **dans Figma** · collabore à plusieurs | Savoir **qui a changé quoi**, branches accessibles |
+| **Packaging designer** | Print / packaging vectoriel, nodes complexes | Exigence de précision matérielle | Diff sur **`vectorPaths`** |
+| **Illustrateur vectoriel** | Créations vectorielles détaillées | Sensibilité géométrique forte | Précision **0,01px** |
+| **Brand / design system** | Cohérence de marque, gouvernance visuelle | Besoin de validation/contrôle | Historique + **Gold status** (approval) |
+
+> **Profil commun** : **non-développeur**, travaille **dans Figma**, découvre via **Figma Community**.
+> → C'est ce qui justifie un **plugin natif** (friction zéro) plutôt qu'un SaaS externe.
 
 ---
 

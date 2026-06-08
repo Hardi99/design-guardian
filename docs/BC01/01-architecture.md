@@ -53,6 +53,29 @@ graph TB
 
 ---
 
+## 1bis. Sécurité · Éco-conception · Extensibilité (vue C1.5 — slide 18)
+
+> Ces 3 blocs couvrent les exigences C1.5 que ni le schéma macro ni les diagrammes de séquence ne montrent : **architecture sécurisée**, **impact environnemental**, **maintenable & extensible**.
+
+### 🔒 Sécurité
+- Plugin → Backend en **HTTPS + `X-API-Key`**
+- Auth **JWT / OAuth** · token stocké dans `figma.clientStorage`
+- Webhooks **Stripe signés** · **RLS Supabase** (row-level security)
+
+### 🌱 Éco-conception
+- **Propriétés natives** Figma → zéro parsing SVG lourd (moins de CPU)
+- Snapshots déportés en **Supabase Storage** → PostgreSQL allégé
+- **`gpt-4o-mini`** (petit modèle) · hébergement **free tier** (pas de sur-provisionnement)
+
+### 🧩 Maintenable & extensible
+- **6 services modulaires** (Auth · BDD · Métriques · Notifications · IA · Paiements)
+- Monolithe modulaire → **prêt à extraire en microservices** si la charge monte
+- **TypeScript bout en bout** · séparation Service / Controller · arbre `parent_id` (CTE récursifs)
+
+> **💳 Roadmap paiement (réponse à l'objection TVA EU)** : **Stripe** pour le MVP (intégration rapide, webhooks signés). Passage à un **Merchant of Record** (Lemon Squeezy / Paddle) prévu pour la **commercialisation**, afin d'**automatiser la TVA EU** — Stripe ne gère pas la TVA en tant que MoR. → Choix MVP assumé, évolution produit anticipée.
+
+---
+
 ## 2. Diagramme de séquence — Capture d'un checkpoint
 
 ```mermaid

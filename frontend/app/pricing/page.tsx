@@ -25,7 +25,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "8",
+    price: "12",
     period: "/ mois",
     description: "Pour les designers sérieux.",
     cta: "Passer à Pro",
@@ -44,8 +44,8 @@ const plans = [
   },
   {
     name: "Team",
-    price: "20",
-    period: "/ user / mois",
+    price: "39",
+    period: "/ mois",
     description: "Pour les équipes design.",
     cta: "Contacter l'équipe",
     ctaHref: "mailto:contact@design-guardian.io",
@@ -151,7 +151,7 @@ export default function PricingPage() {
           </div>
 
           <p className="text-center text-muted-foreground text-sm mt-10">
-            Paiement sécurisé · TVA européenne incluse automatiquement · Annulation à tout moment
+            Paiement sécurisé via Stripe · Annulation à tout moment
           </p>
         </section>
       </div>

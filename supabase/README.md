@@ -41,38 +41,15 @@ ne voie que ses propres données.
 
 ## Étape 4 : Créer le bucket Storage
 
-### Option A : Via Dashboard (Recommandé)
+Le bucket actif est **`snapshots`** (snapshots JSON + rendus du plugin).
 
-1. Va dans **Storage** dans le dashboard
-2. Clique **New Bucket**
-3. Configure :
-   - **Name** : `svg-files`
-   - **Public** : Non (décoché)
-   - **File size limit** : 10MB
-   - **Allowed MIME types** : `image/svg+xml`
-4. Clique **Create bucket**
+1. Dans **SQL Editor**, exécute `migrations/008_snapshot_storage.sql` — il crée le bucket `snapshots` (privé, 5MB, `application/json`) **et** ses policies.
 
-### Option B : Via SQL
+> ⚠️ L'ancien bucket `svg-files` (config dans `storage.sql`) appartenait à la version SaaS upload-SVG, abandonnée. Ne plus le créer.
 
-1. Dans **SQL Editor**
-2. Copie-colle le contenu de `storage.sql`
-3. Clique **Run**
+## Étape 5 : Policies Storage
 
-## Étape 5 : Configurer les policies Storage
-
-Si tu as utilisé l'Option A (Dashboard) :
-
-1. Va dans **Storage > svg-files > Policies**
-2. Clique **New Policy**
-3. Ajoute les policies suivantes :
-
-**Policy 1 : Upload**
-- Name: `Users can upload SVG files`
-- Operation: INSERT
-- Target roles: authenticated
-- Policy: (configure via SQL)
-
-Ou simplement exécute la partie policies de `storage.sql` dans SQL Editor.
+Les policies du bucket `snapshots` sont **incluses** dans `migrations/008_snapshot_storage.sql` (déjà exécuté à l'étape 4) — rien de plus à faire.
 
 ## Étape 6 : Configurer les variables d'environnement
 
@@ -125,9 +102,8 @@ Un profil devrait être créé automatiquement dans la table `profiles`.
 
 ### Test 3 : Vérifier le Storage
 
-1. Va dans **Storage > svg-files**
-2. Essaie d'uploader un fichier SVG
-3. Devrait fonctionner avec le bon MIME type
+1. Va dans **Storage > snapshots**
+2. Les snapshots JSON y apparaissent après un checkpoint depuis le plugin
 
 ## Structure des données
 
@@ -174,15 +150,10 @@ created_at (timestamp)
 
 ## Storage Path Convention
 
-Les fichiers SVG sont stockés avec le chemin :
+Bucket `snapshots` — snapshots JSON (et rendus `*_render.json`) :
 ```
-{project_id}/{asset_id}/v{version_number}.svg
-```
-
-Exemple :
-```
-a1b2c3d4-e5f6.../x1y2z3.../v1.svg
-a1b2c3d4-e5f6.../x1y2z3.../v2.svg
+{asset_id}/{branch}/v{version_number}.json
+{asset_id}/{branch}/v{version_number}_render.json
 ```
 
 ## Dépannage
@@ -193,7 +164,7 @@ a1b2c3d4-e5f6.../x1y2z3.../v2.svg
 - Utilise la service_key côté backend pour bypasser RLS
 
 ### Erreur "Bucket not found"
-- Crée le bucket `svg-files` dans Storage
+- Vérifie que le bucket `snapshots` existe (migration 008)
 - Vérifie le nom (sensible à la casse)
 
 ### Erreur "Invalid MIME type"

@@ -195,5 +195,5 @@ CREATE TRIGGER update_assets_updated_at
 -- ============================================
 -- Next steps:
 -- 1. Run policies.sql for Row Level Security
--- 2. Create "svg-files" bucket in Storage
--- 3. Configure Storage policies
+-- 2. Run migrations/008_snapshot_storage.sql → crée le bucket actif 'snapshots' + ses policies
+--    (l'ancien bucket 'svg-files' du SaaS upload-SVG est obsolète, voir storage.sql)
