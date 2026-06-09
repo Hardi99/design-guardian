@@ -16,6 +16,7 @@ interface Props {
 
 export function CheckoutButton({ plan, label, href, className }: Props) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
 
   if (href) {
@@ -24,23 +25,29 @@ export function CheckoutButton({ plan, label, href, className }: Props) {
 
   const handleClick = async () => {
     setLoading(true);
+    setError('');
     try {
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
+        setLoading(false);
         router.push('/login?next=/pricing');
         return;
       }
       const url = await apiClient.createCheckout(plan);
       window.location.href = url;
     } catch {
+      setError('Le paiement n’a pas pu démarrer. Réessayez.');
       setLoading(false);
     }
   };
 
   return (
-    <button onClick={handleClick} disabled={loading} className={className}>
-      {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : label}
-    </button>
+    <div>
+      <button onClick={handleClick} disabled={loading} className={className}>
+        {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : label}
+      </button>
+      {error && <p className="mt-2 text-xs text-red-400 text-center">{error}</p>}
+    </div>
   );
 }
