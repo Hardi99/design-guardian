@@ -1,130 +1,93 @@
-# Spec — Unification d'identité plugin ↔ webapp + checkout par compte
+# Spec — Checkout par compte (Phase 1) + pont plugin↔webapp différé (Phase 2)
 
 > **Date** : 2026-06-09
-> **Statut** : design validé, prêt pour plan d'implémentation
-> **Contexte cours** : Web Services (services Auth + Paiements). Boucle « voir mes projets → payer ».
+> **Statut** : design validé, prêt pour plan d'implémentation de la **Phase 1**
+> **Contexte cours** : Web Services (services Auth + Paiements). Exigence « un service IA + **le vendre aux utilisateurs** ».
 
 ---
 
-## 1. Problème
+## 0. Décision de périmètre (la plus importante)
 
-Aujourd'hui, le plugin Figma et la webapp Next.js vivent dans **deux espaces d'identité disjoints** qui ne se croisent jamais :
+Le besoin se décompose en **deux livrables d'ambition très différente**. Seule la Phase 1 est dans le scope courant.
 
-| Surface | Identité utilisée | Clé |
+| | **Phase 1 — Checkout par compte** | **Phase 2 — Pont plugin↔SaaS** |
 |---|---|---|
-| Plugin | `figma.currentUser` (`id`, `name`, `photoUrl` — **pas d'email**) + `X-API-Key` par projet | `figma_file_key` |
-| Webapp | User Supabase (magic-link email) → UUID | `auth.users.id` |
+| Touche le plugin ? | **Non** | Oui (device-code, écran login, `clientStorage`…) |
+| Nécessaire pour le **cours** | **Oui** (« vendre aux utilisateurs ») | Non |
+| Nécessaire pour le **produit réel** | — | Oui (payer → débloquer le plugin, « voir mes projets ») |
+| Poids | Léger (webapp + backend paiements) | Lourd (~70 % de l'effort, risque plugin) |
+| Quand | **Maintenant** | **Différée** — déclencheur explicite (voir §8) |
 
-Conséquences mesurées dans le code :
+**Justification du report de la Phase 2** : l'exigence du cours est un *paiement fonctionnel sur le frontend React*. Un utilisateur se logge sur la webapp (magic-link, déjà en place), crée un projet côté web, s'abonne → `profiles.plan = pro`. La boucle « vendre aux utilisateurs » est **complète et démontrable sans toucher au plugin**. Le pont plugin↔SaaS (faire apparaître les projets créés *dans le plugin* et débloquer le plugin après paiement) est une **complétude produit**, pas une exigence cours. On le construit quand un besoin réel l'impose (§8), pas avant — principe YAGNI.
 
-- **`projects.owner_id` est `null`** sur tous les projets créés par le plugin. L'auto-init (`backend/src/controllers/projects.controller.ts:42`) insère `{ figma_file_key, name }` sans owner.
-- **La webapp n'envoie aucun `Authorization: Bearer`** (`frontend/lib/api/client.ts`) alors que `/api/projects` exige `authMiddleware`. Le dashboard ne peut donc pas réellement lister de projets (401). Le `owner_id` passé en query est ignoré par le backend (il lit `userId` du JWT).
-- **Le checkout est plugin-only** : `POST /api/payments/checkout` s'authentifie par `X-API-Key` + `projectId` (`backend/src/controllers/payments.controller.ts:32`). La webapp n'a pas cette clé.
-- **L'abonnement est indexé par projet** (`projects.plan`, `projects.stripe_customer_id`) — incohérent avec la grille tarifaire publiée (`/pricing` : Free = « 1 projet », Pro = « **projets illimités** »), qui suppose un abonnement **par compte**.
+**Limite assumée de la Phase 1** : un utilisateur qui paie sur le web ne voit pas (encore) son statut Pro *dans le plugin* — le plugin reste indexé par projet (`projects.plan`). Acceptable pour la démo cours : le paiement marche, l'abonnement est enregistré, la webapp reflète Pro.
 
-**Pourquoi pas un matching par email** (option écartée) : `figma.currentUser` n'expose pas l'email (limite plateforme Figma). Le seul moyen de l'obtenir serait un OAuth Figma complet (`/v1/me`), qui ajoute un 2ᵉ fournisseur d'identité et oblige quand même à matcher sur l'email — fragile (mails compte Figma ≠ login web possibles, aucune preuve de possession, mails changent). Rejeté.
+---
 
-## 2. Objectif
+## 1. Problème (constaté dans le code)
 
-Une **identité unique** (Supabase `auth.users`) pour les deux surfaces, jointe partout par **`projects.owner_id`**. Résultat attendu :
+- **La webapp n'envoie aucun `Authorization: Bearer`** (`frontend/lib/api/client.ts`) alors que `/api/projects` exige `authMiddleware`. Le dashboard ne peut donc pas réellement lister/créer de projets (401). Le `owner_id` passé en query est ignoré (le backend lit `userId` du JWT).
+- **Aucun checkout web** : `POST /api/payments/checkout` s'authentifie par `X-API-Key` + `projectId` (`backend/src/controllers/payments.controller.ts:32`), pensé pour le plugin. Or le plugin **ne fait jamais de checkout** (aucun appel Stripe côté plugin) → cette route est de fait inutilisée. La page `/pricing` affiche « Stripe » mais les 3 CTA pointent vers `/login`.
+- **L'abonnement est indexé par projet** (`projects.plan`, `projects.stripe_customer_id`) — incohérent avec la grille publiée (`/pricing` : Free = « 1 projet », Pro = « **projets illimités** »), qui suppose un abonnement **par compte**. Indexer par projet crée un customer Stripe par fichier Figma : faux.
 
-1. L'utilisateur s'appaire dans le plugin (code d'appairage) → ses projets reçoivent `owner_id`.
-2. Login email sur la webapp → il voit les projets créés depuis le plugin.
-3. « Passer à Pro » → paiement Stripe **au niveau du compte** → tous ses projets passent Pro.
+## 2. Objectif (Phase 1)
 
-Hors scope (évolutions notées, pas faites) : OAuth ×3 fournisseurs, table `subscriptions` normalisée, flux SMS/2FA.
+Rendre le **paiement réel et au niveau du compte** depuis la webapp :
+
+1. La webapp s'authentifie correctement auprès du backend (Bearer) → dashboard fonctionnel.
+2. « Passer à Pro » lance un vrai **Stripe Checkout par compte** → `profiles.plan = pro`.
+3. Modèle Stripe propre : **un customer par utilisateur**.
+
+Hors scope Phase 1 : tout le plugin, le device-code, le stamping `owner_id`. (→ Phase 2, §7.)
 
 ## 3. Décisions figées
 
 | # | Décision | Choix |
 |---|---|---|
-| D1 | Login dans le plugin | **Code d'appairage (device-code flow)** |
-| D2 | Token plugin après appairage | **JWT signé par le backend** (`{ sub: user_id, typ: 'plugin' }`), vérifié par middleware |
-| D3 | Portée de l'abonnement | **Par compte** (pas par projet) |
-| D4 | Source de vérité du plan | **`profiles.plan`** (+ colonnes Stripe sur `profiles`). `projects.plan` déprécié, laissé en place |
-| D5 | Périmètre du livrable | Identité unifiée **+** checkout par compte (boucle complète) |
+| D1 | Portée de l'abonnement | **Par compte** (pas par projet) |
+| D2 | Source de vérité du plan | **`profiles.plan`** (+ colonnes Stripe sur `profiles`). `projects.plan` déprécié, laissé en place |
+| D3 | Auth checkout web | **`authMiddleware`** (JWT Supabase web), pas d'`X-API-Key` |
+| D4 | Périmètre courant | **Phase 1 uniquement** ; Phase 2 différée avec déclencheur (§8) |
+| D5 | (Phase 2, pour mémoire) Login plugin / token | Device-code · JWT plugin signé (`X-Plugin-Token`) — *non implémenté maintenant* |
 
 ---
 
-## 4. Architecture
+## 4. Architecture — Phase 1
 
-### 4.1 Modèle d'identité
+### 4.1 Auth webapp → backend (correctif de fond)
 
-- **Source unique** : `auth.users` (Supabase). `profiles.id = auth.users.id`, `profiles.email` miroir.
-- **Clé de jointure universelle** : `projects.owner_id → profiles.id`.
-- La webapp est déjà un user Supabase. Le plugin le **devient** via l'appairage (D1).
+- `apiClient` injecte `Authorization: Bearer <access_token>` (depuis `supabase.auth.getSession()`) sur tous les appels authentifiés ; suppression du `owner_id` en query (ignoré côté backend).
+- Corrige immédiatement le listing **et** la création de projets côté webapp (`projects.controller.ts` `POST /` pose déjà `owner_id = c.get('userId')`).
 
-### 4.2 Flux d'appairage device-code (nouveau)
-
-```
-Plugin                         Backend                        Webapp (user loggé)
-  │  POST /auth/device/start      │                                  │
-  │ ────────────────────────────▶ │  crée device_links               │
-  │ ◀──────────────────────────── │  { device_code, user_code,       │
-  │   device_code (secret),        │    expires_in: 600 }             │
-  │   user_code (court, humain)    │                                  │
-  │                                │                                  │
-  │  affiche user_code + ouvre ───────────────────────────────────▶  │  /link
-  │                                │   POST /auth/device/claim        │
-  │                                │ ◀─────────────────────────────── │  { user_code } + JWT
-  │                                │  user_id ← JWT, status=claimed   │
-  │  POST /auth/device/poll (×n)   │                                  │
-  │ ────────────────────────────▶ │  si claimed → JWT plugin signé   │
-  │ ◀──────────────────────────── │  { plugin_token }, status=consumed│
-  │  stocke plugin_token dans clientStorage                          │
-```
-
-Détails :
-- `user_code` : court et lisible (ex. 6 caractères base32 sans ambiguïté, `XXXX-XX`). `device_code` : aléatoire long (secret, jamais affiché).
-- `expires_at` = +10 min. Le poll renvoie `pending` tant que non réclamé, `expired` après échéance, le token une seule fois (puis `consumed`).
-- Poll : intervalle ~2 s côté plugin, arrêt après expiration.
-
-### 4.3 Token plugin (D2)
-
-- À la consommation du poll, le backend signe un **JWT** `{ sub: user_id, typ: 'plugin', iat }` avec un secret backend (`PLUGIN_JWT_SECRET`), expiration longue (ex. 90 j).
-- Nouveau middleware **`pluginUserMiddleware`** : vérifie ce JWT (header **`X-Plugin-Token`**, distinct du `Authorization: Bearer` du JWT web pour éviter toute collision) et pose `c.set('userId', sub)`.
-- Le plugin stocke le token dans `figma.clientStorage` (clé `dg_plugin_token`), géré **dans `main.ts`** (double-thread), transmis à `ui.tsx` par `postMessage`.
-
-### 4.4 Remplissage de `owner_id` (D1 → projets)
-
-- `auto-init` accepte optionnellement le token plugin. Si présent et valide :
-  - à la **création** d'un projet → `owner_id = userId` ;
-  - si un projet existe déjà pour ce `figma_file_key` avec `owner_id IS NULL` → **rattrapage** : on pose `owner_id = userId`.
-- **Projets orphelins existants** : réclamés **organiquement** à la réouverture du fichier Figma par l'utilisateur appairé (auto-init tourne à chaque ouverture). Pas de migration de masse.
-- Garde : si un projet a déjà un `owner_id ≠ userId`, on **ne réécrit pas** (évite le vol de projet).
-
-### 4.5 Abonnement par compte (D3/D4)
+### 4.2 Abonnement par compte (D1/D2)
 
 - `plan`, `stripe_customer_id`, `stripe_subscription_id` portés par **`profiles`** (un customer Stripe par personne).
-- `pluginMiddleware` (data plugin, auth par api_key) : résout le plan via `project.owner_id → profiles.plan`. `owner_id null` → `free`.
-- Webhook Stripe : écrit `profiles.plan` via **`metadata.user_id`** (au lieu de `projects` via `project_id`).
-- `projects.plan` : laissé en place mais **ignoré** (pas de migration destructive).
+- Webhook Stripe : écrit `profiles.plan` via **`metadata.user_id`** (au lieu de `projects` via `project_id`). La branche `project_id` historique est laissée mais marquée *legacy* (jamais déclenchée puisque le plugin ne checkout pas).
+- `projects.plan` : conservé, **ignoré**. Pas de migration destructive.
 
-### 4.6 Auth webapp → backend (correctif trou A)
+### 4.3 Checkout par compte (D3)
 
-- `apiClient` injecte `Authorization: Bearer <access_token>` (depuis `supabase.auth.getSession()`) sur les appels authentifiés ; suppression du `owner_id` en query (ignoré).
-- Corrige le listing du dashboard du même coup.
-
-### 4.7 Checkout par compte (trou C)
-
-- Helper partagé `createCheckoutForUser(userId, plan, interval, urls)` dans `stripe.service.ts`.
-- Nouvelle route `POST /api/payments/checkout` en **`authMiddleware` (JWT web)**, body `{ plan, interval }` — **pas de `project_id`**.
-  - Récupère/crée le `stripe_customer_id` sur `profiles`.
+- Helper partagé `createCheckoutForUser(userId, plan, interval, urls)` dans `stripe.service.ts` :
+  - récupère/crée `profiles.stripe_customer_id` (upsert défensif si la ligne `profiles` manque) ;
   - `metadata: { user_id, plan }` sur la session **et** la subscription.
-- Page `/pricing` : « Passer à Pro » → non connecté → `/login?next=/pricing` ; connecté → appel checkout → `window.location.href = session.url`.
-- Page retour `success_url` = `/dashboard?checkout=success` (message de confirmation ; le webhook fait le reste).
-- Route `/portal` migre aussi sur `profiles.stripe_customer_id` + auth JWT.
+- Route **`POST /api/payments/checkout`** réécrite en **`authMiddleware`**, body `{ plan, interval }` — **pas de `project_id`**.
+- Route **`POST /api/payments/portal`** : même bascule (auth JWT + `profiles.stripe_customer_id`).
+- Pas de sélection de projet : l'abonnement est sur le compte → l'edge « 0 ou plusieurs projets » disparaît.
+
+### 4.4 Frontend pricing
+
+- `apiClient.createCheckout(plan, interval)` → `POST /api/payments/checkout` → `{ url }`.
+- `/pricing` : « Passer à Pro » → non connecté → `/login?next=/pricing` ; connecté → `createCheckout('pro','month')` puis `window.location.href = session.url`.
+- Retour `success_url = /dashboard?checkout=success` → message de confirmation (le webhook a déjà mis `profiles.plan`).
+- Team reste `mailto:` (inchangé).
 
 ---
 
-## 5. Modèle de données — migration `009_account_identity_billing.sql`
+## 5. Modèle de données — migration `009_account_billing.sql` (Phase 1)
 
-Défensive (`IF NOT EXISTS`, `DROP NOT NULL`) car les colonnes Stripe et `owner_id` nullable ont été appliquées hors migrations trackées.
+Défensive (`IF NOT EXISTS`) car les colonnes Stripe ont été appliquées hors migrations trackées (drift prod).
 
 ```sql
--- owner_id nullable (projets plugin non appairés)
-ALTER TABLE projects ALTER COLUMN owner_id DROP NOT NULL;
-
 -- Abonnement porté par le compte
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'
@@ -132,76 +95,69 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
   ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 
--- Appairage device-code
-CREATE TABLE IF NOT EXISTS device_links (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  device_code  TEXT UNIQUE NOT NULL,
-  user_code    TEXT UNIQUE NOT NULL,
-  user_id      UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  status       TEXT NOT NULL DEFAULT 'pending'
-                 CHECK (status IN ('pending','claimed','consumed','expired')),
-  expires_at   TIMESTAMPTZ NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_device_links_user_code   ON device_links(user_code);
-CREATE INDEX IF NOT EXISTS idx_device_links_device_code ON device_links(device_code);
+CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer ON profiles(stripe_customer_id);
 ```
 
-`projects.plan`, `projects.stripe_customer_id`, `projects.stripe_subscription_id` : conservés, non utilisés.
+`projects.plan` / `projects.stripe_customer_id` / `projects.stripe_subscription_id` : conservés, non utilisés.
+**Pré-requis à vérifier** : une ligne `profiles` existe bien à l'inscription (trigger `auth.users → profiles`). Sinon, l'upsert de `createCheckoutForUser` la crée.
 
 ---
 
-## 6. Découpage en composants
+## 6. Découpage en composants — Phase 1
 
-| Composant | Fichier(s) | Rôle | Dépend de |
-|---|---|---|---|
-| Migration | `supabase/migrations/009_*.sql` | schéma device_links + profiles billing | — |
-| Service appairage | `backend/src/services/device-link.service.ts` | start/claim/poll, génération codes, JWT plugin | supabase, jwt |
-| Controller appairage | `backend/src/controllers/auth-device.controller.ts` | routes `/api/auth/device/*` | service ci-dessus, authMiddleware |
-| Middleware plugin-user | `backend/src/middleware/plugin-user.middleware.ts` | vérifie JWT plugin → `userId` | jwt |
-| Auto-init MAJ | `projects.controller.ts` | stamping `owner_id` si token plugin | plugin-user mw |
-| pluginMiddleware MAJ | `plugin.middleware.ts` | plan résolu via owner | — |
-| Service Stripe MAJ | `stripe.service.ts` | `createCheckoutForUser`, customer sur profile | — |
-| Payments MAJ | `payments.controller.ts` | route checkout JWT, webhook par user_id, portal | authMiddleware |
-| apiClient MAJ | `frontend/lib/api/client.ts` | Bearer token, méthode `createCheckout` | supabase client |
-| Page link | `frontend/app/(dashboard)/link/page.tsx` | saisie user_code → claim | apiClient |
-| Pricing MAJ | `frontend/app/pricing/page.tsx` | CTA → checkout | apiClient |
-| UI plugin appairage | `plugin/src/ui.tsx`, `main.ts`, `store.ts` | écran connexion + poll + stockage token | — |
+| Composant | Fichier(s) | Rôle |
+|---|---|---|
+| Migration | `supabase/migrations/009_account_billing.sql` | billing sur `profiles` |
+| Service Stripe MAJ | `backend/src/services/stripe.service.ts` | `createCheckoutForUser`, customer sur profile |
+| Payments MAJ | `backend/src/controllers/payments.controller.ts` | route checkout JWT, portal JWT, webhook par `user_id` |
+| apiClient MAJ | `frontend/lib/api/client.ts` | header Bearer + méthode `createCheckout` |
+| Pricing MAJ | `frontend/app/pricing/page.tsx` | CTA → checkout |
+| Dashboard | `frontend/app/(dashboard)/dashboard/page.tsx` | bannière `?checkout=success` |
+
+Le plugin n'est **pas** touché.
 
 ---
 
-## 7. Stratégie de test (Vitest, ≥80 %)
+## 7. Stratégie de test — Phase 1 (Vitest, ≥80 %)
 
 **Backend**
-- device-link service : génération codes uniques ; claim (succès, mauvais code, expiré) ; poll (pending → token → consumed, double consommation refusée).
-- plugin-user middleware : token valide/invalide/expiré.
-- auto-init : stamping owner_id (création + rattrapage null) ; refus de réécriture si owner différent.
-- checkout web : garde d'auth JWT ; metadata user_id ; customer créé/réutilisé sur profile.
-- webhook : `checkout.session.completed` met `profiles.plan` par user_id ; `subscription.deleted` repasse free.
-
-**Plugin**
-- store : transitions appairage (idle → pending → linked) ; persistance token.
-- boucle poll : arrêt sur token, arrêt sur expiration.
+- `createCheckoutForUser` : customer créé puis réutilisé ; upsert profile si absent ; metadata `user_id` correct.
+- route checkout : garde d'auth JWT (401 sans token) ; refus du plan `free`.
+- webhook : `checkout.session.completed` met `profiles.plan` par `user_id` ; `customer.subscription.deleted` repasse `free` ; signature invalide → 400.
 
 **Webapp**
-- apiClient attache le Bearer ; gère l'absence de session.
+- `apiClient` attache le Bearer ; gère l'absence de session.
 - CTA pricing : redirige vers login si déconnecté, vers Stripe si connecté.
 
 ---
 
-## 8. Risques & points d'attention
+## 8. Phase 2 — différée (pont plugin↔SaaS)
 
-- **Double-thread Figma** : `clientStorage` uniquement dans `main.ts`, HTTP uniquement dans `ui.tsx` (règle projet). Le token transite par `postMessage`.
-- **Manifest** : ne pas ajouter de permission ; vérifier que les domaines backend sont dans `allowedDomains` du manifest pour les appels HTTP du plugin.
-- **Schéma Zod** : tout nouveau champ d'entrée doit être ajouté au schéma Zod correspondant (un schéma trop strict supprimait silencieusement des champs — historique projet).
-- **Sécurité device-code** : `device_code` secret jamais exposé à la webapp ; `user_code` court mais à usage unique et expirant ; rate-limit sur `/poll` et `/start`.
-- **Drift migrations** : la 009 est défensive car la prod a divergé des migrations trackées.
-- **Rétro-compat** : le flux data plugin (X-API-Key) reste inchangé ; l'appairage est additif.
+> **Ne pas implémenter maintenant.** Documentée pour mémoire et pour le plan futur.
+
+**Déclencheur explicite** : à activer uniquement quand un besoin réel l'impose — typiquement *« un utilisateur abonné doit voir son statut Pro débloqué dans le plugin »* ou *« voir dans la webapp les projets créés depuis le plugin »* (ex. l'early-adopter qui teste le produit).
+
+**Contenu prévu** :
+- **Appairage device-code** : table `device_links` (`device_code` secret, `user_code` court à usage unique, `user_id`, `status`, `expires_at` +10 min). Routes `/api/auth/device/{start,claim,poll}`. Le `/poll` renvoie un **JWT plugin signé** (`{ sub: user_id, typ: 'plugin' }`, header `X-Plugin-Token`), stocké dans `figma.clientStorage`.
+- **Stamping `owner_id`** : `auto-init` accepte le token plugin → pose `owner_id = userId` à la création et rattrape les projets `owner_id IS NULL` du même `figma_file_key`. Pas de réécriture si `owner_id` différent (anti-vol). Migration : `ALTER TABLE projects ALTER COLUMN owner_id DROP NOT NULL` (défensif).
+- **Plan résolu par compte côté plugin** : `pluginMiddleware` résout le plan via `project.owner_id → profiles.plan` (au lieu de `projects.plan`).
+- **UI plugin** : écran « Connexion » (poll), respect du double-thread (`clientStorage` dans `main.ts`, HTTP dans `ui.tsx`). Page webapp `/link` (saisie `user_code` → claim).
+
+**Pourquoi pas l'email Figma** (tranché) : `figma.currentUser` n'expose pas l'email (limite plateforme). L'obtenir exigerait un OAuth Figma complet (2ᵉ IdP) et obligerait quand même à matcher sur l'email — fragile (mails divergents, aucune preuve de possession). Le device-code prouve le lien sans email.
 
 ---
 
-## 9. Évolutions futures (hors scope)
+## 9. Risques & points d'attention — Phase 1
+
+- **Schéma Zod** : tout nouveau champ d'entrée (`plan`, `interval`) doit être ajouté au schéma Zod de la route (un schéma trop strict supprimait silencieusement des champs — historique projet).
+- **Ligne `profiles` manquante** : sécuriser par upsert dans `createCheckoutForUser`.
+- **Route checkout legacy** (`X-API-Key`) : la remplacer par la version JWT ; vérifier qu'aucun appelant plugin ne l'utilisait (confirmé : le plugin ne checkout pas).
+- **Webhook** : tester en local avec la CLI Stripe (signature) ; `STRIPE_WEBHOOK_SECRET` requis.
+- **Drift migrations** : la 009 est défensive car la prod a divergé des migrations trackées.
+
+---
+
+## 10. Évolutions futures (au-delà de Phase 1/2)
 
 - Table `subscriptions` normalisée (statut, période, historique) pour la commercialisation réelle.
-- OAuth ×3 fournisseurs (exigence cours) — réutilisera l'identité Supabase posée ici.
-- « Sign in with Figma » (OAuth Figma) comme alternative à l'appairage si l'email Figma devient nécessaire.
+- OAuth ×3 fournisseurs (exigence cours BC02 recettes) — réutilisera l'identité Supabase.
