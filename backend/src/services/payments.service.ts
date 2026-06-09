@@ -26,12 +26,16 @@ export async function createUserCheckoutSession(
   if (!priceId) return { ok: false, error: `Price not configured for ${p.plan}:${p.interval}`, status: 503 };
 
   const supabase = getSupabaseClient();
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, email, stripe_customer_id')
     .eq('id', p.userId)
     .single();
 
+  // PGRST116 = "no rows" → 404 ; toute autre erreur = défaillance DB → 503
+  if (profileError && profileError.code !== 'PGRST116') {
+    return { ok: false, error: 'Database error', status: 503 };
+  }
   if (!profile) return { ok: false, error: 'Profile not found', status: 404 };
 
   const customerId = await getOrCreateUserCustomer(
@@ -39,7 +43,10 @@ export async function createUserCheckoutSession(
   );
 
   if (!profile.stripe_customer_id) {
-    await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', p.userId);
+    const { error: writeErr } = await supabase
+      .from('profiles').update({ stripe_customer_id: customerId }).eq('id', p.userId);
+    // Ne bloque pas le checkout (la session est valide) mais trace le risque de customer orphelin
+    if (writeErr) console.error('[payments] failed to persist stripe_customer_id:', writeErr.message);
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -64,12 +71,15 @@ export async function createUserPortalSession(
   const stripe = getStripe();
   if (!stripe) return { ok: false, error: 'Stripe not configured', status: 503 };
 
-  const { data: profile } = await getSupabaseClient()
+  const { data: profile, error: profileError } = await getSupabaseClient()
     .from('profiles')
     .select('stripe_customer_id')
     .eq('id', p.userId)
     .single();
 
+  if (profileError && profileError.code !== 'PGRST116') {
+    return { ok: false, error: 'Database error', status: 503 };
+  }
   if (!profile?.stripe_customer_id) {
     return { ok: false, error: 'No active subscription found', status: 404 };
   }
@@ -82,19 +92,21 @@ export async function createUserPortalSession(
   return { ok: true, url: session.url };
 }
 
-export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
-  const supabase = getSupabaseClient();
+// Met à jour le profil et LÈVE en cas d'erreur DB : le webhook renverra alors 500,
+// ce qui pousse Stripe à retenter (évite une dérive silencieuse de l'état d'abonnement).
+async function patchProfile(userId: string, patch: Record<string, unknown>): Promise<void> {
+  const { error } = await getSupabaseClient().from('profiles').update(patch).eq('id', userId);
+  if (error) throw new Error(`Failed to update profile ${userId}: ${error.message}`);
+}
 
+export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.user_id;
       const plan = (session.metadata?.plan ?? 'pro') as PlanId;
       if (!userId) break;
-      await supabase.from('profiles').update({
-        plan,
-        stripe_subscription_id: session.subscription as string,
-      }).eq('id', userId);
+      await patchProfile(userId, { plan, stripe_subscription_id: session.subscription as string });
       paymentsTotal.inc({ event: 'subscription_started', plan });
       break;
     }
@@ -104,7 +116,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       const userId = sub.metadata?.user_id;
       if (!userId) break;
       const plan = (sub.metadata?.plan ?? 'pro') as PlanId;
-      await supabase.from('profiles').update({ plan }).eq('id', userId);
+      await patchProfile(userId, { plan });
       paymentsTotal.inc({ event: 'subscription_updated', plan });
       break;
     }
@@ -113,10 +125,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
       if (!userId) break;
-      await supabase.from('profiles').update({
-        plan: 'free',
-        stripe_subscription_id: null,
-      }).eq('id', userId);
+      await patchProfile(userId, { plan: 'free', stripe_subscription_id: null });
       paymentsTotal.inc({ event: 'subscription_cancelled', plan: 'free' });
       break;
     }

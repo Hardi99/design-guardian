@@ -31,9 +31,11 @@ vi.mock('../services/metrics.service.js', () => ({
 }));
 
 import { getOrCreateUserCustomer } from '../services/stripe.service.js';
-import { createUserCheckoutSession } from '../services/payments.service.js';
-import { createUserPortalSession } from '../services/payments.service.js';
-import { applyStripeEvent } from '../services/payments.service.js';
+import {
+  createUserCheckoutSession,
+  createUserPortalSession,
+  applyStripeEvent,
+} from '../services/payments.service.js';
 
 // ─── Tests Task 2 ─────────────────────────────────────────────────────────────
 
@@ -180,5 +182,14 @@ describe('applyStripeEvent', () => {
     } as unknown as Stripe.Event;
     await applyStripeEvent(event);
     expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('lève si la mise à jour DB échoue (→ 500 → Stripe retente)', async () => {
+    mockUpdateEq.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+    const event = {
+      type: 'checkout.session.completed',
+      data: { object: { subscription: 'sub_1', metadata: { user_id: 'user-1', plan: 'pro' } } },
+    } as unknown as Stripe.Event;
+    await expect(applyStripeEvent(event)).rejects.toThrow('Failed to update profile');
   });
 });
