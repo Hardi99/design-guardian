@@ -32,6 +32,7 @@ vi.mock('../services/metrics.service.js', () => ({
 
 import { getOrCreateUserCustomer } from '../services/stripe.service.js';
 import { createUserCheckoutSession } from '../services/payments.service.js';
+import { createUserPortalSession } from '../services/payments.service.js';
 
 // ─── Tests Task 2 ─────────────────────────────────────────────────────────────
 
@@ -92,6 +93,18 @@ describe('createUserCheckoutSession', () => {
       userId: 'ghost', plan: 'pro', interval: 'monthly',
       successUrl: 'https://app/ok', cancelUrl: 'https://app/no',
     });
+    expect(r).toMatchObject({ ok: false, status: 404 });
+  });
+});
+
+// ─── Tests Task 5 ─────────────────────────────────────────────────────────────
+
+describe('createUserPortalSession', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('renvoie 404 si pas de stripe_customer_id', async () => {
+    mockSingle.mockResolvedValue({ data: { id: 'user-1', stripe_customer_id: null }, error: null });
+    const r = await createUserPortalSession({ userId: 'user-1', returnUrl: 'https://app' });
     expect(r).toMatchObject({ ok: false, status: 404 });
   });
 });

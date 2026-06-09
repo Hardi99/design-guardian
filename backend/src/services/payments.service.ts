@@ -52,3 +52,30 @@ export async function createUserCheckoutSession(
 
   return { ok: true, url: session.url, sessionId: session.id };
 }
+
+export interface PortalParams { userId: string; returnUrl: string; }
+export type PortalOk = { ok: true; url: string };
+
+export async function createUserPortalSession(
+  p: PortalParams,
+): Promise<PortalOk | ServiceError> {
+  const stripe = getStripe();
+  if (!stripe) return { ok: false, error: 'Stripe not configured', status: 503 };
+
+  const { data: profile } = await getSupabaseClient()
+    .from('profiles')
+    .select('stripe_customer_id')
+    .eq('id', p.userId)
+    .single();
+
+  if (!profile?.stripe_customer_id) {
+    return { ok: false, error: 'No active subscription found', status: 404 };
+  }
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: profile.stripe_customer_id,
+    return_url: p.returnUrl,
+  });
+
+  return { ok: true, url: session.url };
+}
