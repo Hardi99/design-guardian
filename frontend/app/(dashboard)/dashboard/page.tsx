@@ -21,7 +21,16 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const supabase = createClient();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') === 'success') {
+      setCheckoutSuccess(true);
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, []);
 
   useEffect(() => {
     loadProjects();
@@ -96,6 +105,13 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+      {checkoutSuccess && (
+        <Alert className="mb-6 border-green-500/40">
+          <AlertDescription>
+            🎉 Abonnement activé. Votre compte est maintenant Pro.
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-display text-3xl font-bold mb-2">Dashboard</h1>

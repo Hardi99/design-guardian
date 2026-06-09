@@ -1,4 +1,5 @@
 import type { AnalysisResult } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -66,9 +67,18 @@ class APIClient {
     this.baseURL = baseURL;
   }
 
+  private async authHeaders(): Promise<Record<string, string>> {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   // Projects
-  async getProjects(ownerId: string): Promise<Project[]> {
-    const res = await fetch(`${this.baseURL}/api/projects?owner_id=${ownerId}`);
+  async getProjects(_ownerId?: string): Promise<Project[]> {
+    const res = await fetch(`${this.baseURL}/api/projects`, {
+      headers: await this.authHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch projects');
     const data = await res.json();
     return data.projects;
@@ -81,11 +91,11 @@ class APIClient {
     return data.project;
   }
 
-  async createProject(name: string, ownerId: string): Promise<Project> {
+  async createProject(name: string, _ownerId?: string): Promise<Project> {
     const res = await fetch(`${this.baseURL}/api/projects`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, owner_id: ownerId }),
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ name }),
     });
     if (!res.ok) throw new Error('Failed to create project');
     const data = await res.json();
@@ -195,6 +205,23 @@ class APIClient {
     const res = await fetch(`${this.baseURL}/api/fonts/${versionId}/glyphs`);
     if (!res.ok) throw new Error('Failed to fetch glyphs');
     return await res.json();
+  }
+
+  async createCheckout(plan: 'pro' | 'team', interval: 'monthly' | 'yearly' = 'monthly'): Promise<string> {
+    const origin = window.location.origin;
+    const res = await fetch(`${this.baseURL}/api/payments/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({
+        plan,
+        interval,
+        success_url: `${origin}/dashboard?checkout=success`,
+        cancel_url: `${origin}/pricing`,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to start checkout');
+    const data = await res.json();
+    return data.url as string;
   }
 }
 
