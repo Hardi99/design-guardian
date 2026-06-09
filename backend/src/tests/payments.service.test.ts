@@ -33,6 +33,7 @@ vi.mock('../services/metrics.service.js', () => ({
 import { getOrCreateUserCustomer } from '../services/stripe.service.js';
 import { createUserCheckoutSession } from '../services/payments.service.js';
 import { createUserPortalSession } from '../services/payments.service.js';
+import { applyStripeEvent } from '../services/payments.service.js';
 
 // ─── Tests Task 2 ─────────────────────────────────────────────────────────────
 
@@ -106,5 +107,49 @@ describe('createUserPortalSession', () => {
     mockSingle.mockResolvedValue({ data: { id: 'user-1', stripe_customer_id: null }, error: null });
     const r = await createUserPortalSession({ userId: 'user-1', returnUrl: 'https://app' });
     expect(r).toMatchObject({ ok: false, status: 404 });
+  });
+});
+
+// ─── Tests Task 6 ─────────────────────────────────────────────────────────────
+
+describe('applyStripeEvent', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('checkout.session.completed → profiles.plan = pro par user_id', async () => {
+    const event = {
+      type: 'checkout.session.completed',
+      data: { object: { subscription: 'sub_1', metadata: { user_id: 'user-1', plan: 'pro' } } },
+    } as unknown as Stripe.Event;
+
+    await applyStripeEvent(event);
+
+    expect(mockFrom).toHaveBeenCalledWith('profiles');
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: 'pro', stripe_subscription_id: 'sub_1' }),
+    );
+    expect(mockUpdateEq).toHaveBeenCalledWith('id', 'user-1');
+  });
+
+  it('customer.subscription.deleted → profiles.plan = free', async () => {
+    const event = {
+      type: 'customer.subscription.deleted',
+      data: { object: { metadata: { user_id: 'user-1', plan: 'pro' } } },
+    } as unknown as Stripe.Event;
+
+    await applyStripeEvent(event);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: 'free', stripe_subscription_id: null }),
+    );
+    expect(mockUpdateEq).toHaveBeenCalledWith('id', 'user-1');
+  });
+
+  it('ignore un event sans user_id', async () => {
+    const event = {
+      type: 'checkout.session.completed',
+      data: { object: { metadata: {} } },
+    } as unknown as Stripe.Event;
+    await applyStripeEvent(event);
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

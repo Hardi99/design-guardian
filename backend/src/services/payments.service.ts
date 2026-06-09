@@ -1,5 +1,7 @@
+import type Stripe from 'stripe';
 import { getStripe, getPriceId, getOrCreateUserCustomer, type PlanId, type Interval } from './stripe.service.js';
 import { getSupabaseClient } from '../config/supabase.js';
+import { paymentsTotal } from './metrics.service.js';
 
 export type ServiceError = { ok: false; error: string; status: 400 | 404 | 503 };
 
@@ -78,4 +80,48 @@ export async function createUserPortalSession(
   });
 
   return { ok: true, url: session.url };
+}
+
+export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.metadata?.user_id;
+      const plan = (session.metadata?.plan ?? 'pro') as PlanId;
+      if (!userId) break;
+      await supabase.from('profiles').update({
+        plan,
+        stripe_subscription_id: session.subscription as string,
+      }).eq('id', userId);
+      paymentsTotal.inc({ event: 'subscription_started', plan });
+      break;
+    }
+
+    case 'customer.subscription.updated': {
+      const sub = event.data.object as Stripe.Subscription;
+      const userId = sub.metadata?.user_id;
+      if (!userId) break;
+      const plan = (sub.metadata?.plan ?? 'pro') as PlanId;
+      await supabase.from('profiles').update({ plan }).eq('id', userId);
+      paymentsTotal.inc({ event: 'subscription_updated', plan });
+      break;
+    }
+
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object as Stripe.Subscription;
+      const userId = sub.metadata?.user_id;
+      if (!userId) break;
+      await supabase.from('profiles').update({
+        plan: 'free',
+        stripe_subscription_id: null,
+      }).eq('id', userId);
+      paymentsTotal.inc({ event: 'subscription_cancelled', plan: 'free' });
+      break;
+    }
+
+    default:
+      break;
+  }
 }
