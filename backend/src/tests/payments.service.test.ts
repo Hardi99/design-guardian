@@ -80,6 +80,16 @@ describe('createUserCheckoutSession', () => {
     }));
   });
 
+  it('propage user_id/plan dans subscription_data.metadata', async () => {
+    await createUserCheckoutSession({
+      userId: 'user-1', plan: 'pro', interval: 'monthly',
+      successUrl: 'https://app/ok', cancelUrl: 'https://app/no',
+    });
+    expect(mockSessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      subscription_data: { metadata: { user_id: 'user-1', plan: 'pro' } },
+    }));
+  });
+
   it('refuse le plan free', async () => {
     const r = await createUserCheckoutSession({
       userId: 'user-1', plan: 'free' as 'pro', interval: 'monthly',
@@ -107,6 +117,13 @@ describe('createUserPortalSession', () => {
     mockSingle.mockResolvedValue({ data: { id: 'user-1', stripe_customer_id: null }, error: null });
     const r = await createUserPortalSession({ userId: 'user-1', returnUrl: 'https://app' });
     expect(r).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('crée une session portail quand un customer existe', async () => {
+    mockSingle.mockResolvedValue({ data: { stripe_customer_id: 'cus_1' }, error: null });
+    const r = await createUserPortalSession({ userId: 'user-1', returnUrl: 'https://app' });
+    expect(r).toMatchObject({ ok: true, url: 'https://portal' });
+    expect(mockPortalCreate).toHaveBeenCalledWith({ customer: 'cus_1', return_url: 'https://app' });
   });
 });
 
@@ -141,6 +158,18 @@ describe('applyStripeEvent', () => {
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ plan: 'free', stripe_subscription_id: null }),
     );
+    expect(mockUpdateEq).toHaveBeenCalledWith('id', 'user-1');
+  });
+
+  it('customer.subscription.updated → profiles.plan mis à jour par user_id', async () => {
+    const event = {
+      type: 'customer.subscription.updated',
+      data: { object: { metadata: { user_id: 'user-1', plan: 'team' } } },
+    } as unknown as Stripe.Event;
+
+    await applyStripeEvent(event);
+
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ plan: 'team' }));
     expect(mockUpdateEq).toHaveBeenCalledWith('id', 'user-1');
   });
 
