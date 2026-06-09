@@ -223,6 +223,17 @@ class APIClient {
     const data = await res.json();
     return data.url as string;
   }
+
+  async createPortalSession(): Promise<string> {
+    const res = await fetch(`${this.baseURL}/api/payments/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await this.authHeaders()) },
+      body: JSON.stringify({ return_url: `${window.location.origin}/dashboard` }),
+    });
+    if (!res.ok) throw new Error('Failed to open billing portal');
+    const data = await res.json();
+    return data.url as string;
+  }
 }
 
 export const apiClient = new APIClient(API_URL);
