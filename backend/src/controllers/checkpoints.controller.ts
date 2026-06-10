@@ -1,21 +1,18 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
-import { getEnv } from '../config/env.js';
 import { DiffService } from '../services/diff.service.js';
-import { OpenAIService } from '../services/openai.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
-import { checkpointsCreatedTotal, aiSummariesGeneratedTotal } from '../services/metrics.service.js';
+import { checkpointsCreatedTotal } from '../services/metrics.service.js';
+import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import { sendCheckpointNotification } from '../services/notification.service.js';
 import { createCheckpointSchema } from '../types/api.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
-import type { FigmaSnapshot } from '../types/figma.js';
+import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
 
 const checkpointsRouter = new Hono<ProjectEnv>();
 const diffService = new DiffService();
-let openai: OpenAIService;
-const getOpenAI = () => (openai ??= new OpenAIService(getEnv().OPENAI_API_KEY));
 
 const SNAPSHOTS_BUCKET = 'snapshots';
 
@@ -71,7 +68,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   // 1. Vérifier que l'asset appartient à ce projet
   const { data: asset, error: assetError } = await supabase
     .from('assets')
-    .select('id, project_id')
+    .select('id, project_id, name')
     .eq('id', body.asset_id)
     .eq('project_id', projectId)
     .single();
@@ -118,10 +115,10 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
   const nextVersion = prev ? prev.version_number + 1 : 1;
   const newPath = snapshotPath(body.asset_id, body.branch_name, nextVersion);
 
-  // 5. Diff + résumé IA
-  //    Le snapshot précédent est téléchargé depuis Storage, pas depuis PostgreSQL.
+  // 5. Diff (synchrone, rapide). La génération IA est différée APRÈS la réponse (voir plus bas).
   let analysisJson = null;
-  let aiSummary = null;
+  let aiSummary: string | null = null;
+  let pendingDelta: DeltaJSON | null = null;
 
   if (prev?.storage_path) {
     const prevSnapshot = await downloadSnapshot(prev.storage_path);
@@ -131,8 +128,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       analysisJson = delta;
 
       if (delta.totalChanges > 0) {
-        aiSummary = await getOpenAI().generatePatchNote(delta, body.author.name);
-        aiSummariesGeneratedTotal.inc({ status: 'success' });
+        pendingDelta = delta;          // génération IA différée (fire-and-forget après la réponse)
       } else {
         aiSummary = 'Aucune modification détectée.';
       }
@@ -153,7 +149,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     const { error: renderErr } = await getSupabaseStorage()
       .from(SNAPSHOTS_BUCKET)
       .upload(renderPath, renderBytes, { contentType: 'application/json', upsert: true });
-    console.log('[DG] render upload:', renderErr ? `FAILED: ${JSON.stringify(renderErr)}` : `OK → ${renderPath}`);
+    if (renderErr) { /* render best-effort — ignore l'échec d'upload du rendu */ }
   }
 
   // 7. Insertion en base — snapshot_json reste null, storage_path pointe vers Storage
@@ -184,19 +180,80 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
 
   checkpointsCreatedTotal.inc();
 
-  // Fire-and-forget — ne bloque pas la réponse si Resend est absent/hors ligne
-  if (body.notify_email) {
+  // Génération IA en arrière-plan (fire-and-forget, process long-running Railway).
+  // La réponse part immédiatement avec ai_summary = null ; le plugin récupère le résumé par polling.
+  if (pendingDelta) {
+    void generateAndStoreSummary({
+      versionId: version.id,
+      delta: pendingDelta,
+      authorName: body.author.name,
+      branchName: body.branch_name,
+      versionNumber: nextVersion,
+      projectName: asset.name ?? 'Design Guardian',
+      notifyEmail: body.notify_email ?? null,
+    });
+  } else if (body.notify_email) {
+    // Cas 0-changement / premier checkpoint : email best-effort avec le résumé constant/absent
     sendCheckpointNotification({
       to: body.notify_email,
       authorName: body.author.name,
-      projectName: body.figma_node_id ?? 'Design Guardian',
+      projectName: asset.name ?? 'Design Guardian',
       branchName: body.branch_name,
       versionNumber: nextVersion,
       aiSummary,
-    }).catch(() => { /* silent — notifications are best-effort */ });
+    }).catch(() => { /* best-effort */ });
   }
 
   return c.json<CheckpointResponse>({ version, analysis: analysisJson, ai_summary: aiSummary }, 201);
+});
+
+// GET /api/checkpoints/:id — récupère une version (pour le polling du Patch Note).
+// Ownership : la version doit appartenir à un asset du projet courant.
+checkpointsRouter.get('/:id', pluginMiddleware, async (c) => {
+  const id = c.req.param('id');
+  if (!id) return c.json<ErrorResponse>({ error: 'Checkpoint id is required' }, 400);
+
+  const { data, error } = await getSupabaseClient()
+    .from('versions')
+    .select('*, assets!inner(project_id)')
+    .eq('id', id)
+    .eq('assets.project_id', c.get('projectId'))
+    .single();
+
+  if (error || !data) return c.json<ErrorResponse>({ error: 'Checkpoint not found' }, 404);
+  return c.json({ version: data });
+});
+
+// POST /api/checkpoints/:id/regenerate — relance la génération du Patch Note
+// à partir de l'analysis_json déjà stocké (pas de re-diff). Filet en cas d'échec async.
+checkpointsRouter.post('/:id/regenerate', pluginMiddleware, async (c) => {
+  const id = c.req.param('id');
+  if (!id) return c.json<ErrorResponse>({ error: 'Checkpoint id is required' }, 400);
+
+  const { data: version, error } = await getSupabaseClient()
+    .from('versions')
+    .select('id, analysis_json, branch_name, version_number, author_name, assets!inner(project_id, name)')
+    .eq('id', id)
+    .eq('assets.project_id', c.get('projectId'))
+    .single();
+
+  if (error || !version) return c.json<ErrorResponse>({ error: 'Checkpoint not found' }, 404);
+  if (!version.analysis_json) return c.json<ErrorResponse>({ error: 'Nothing to regenerate' }, 400);
+
+  const assetRel = version.assets as unknown as { name: string | null };
+  const ok = await generateAndStoreSummary({
+    versionId: version.id,
+    delta: version.analysis_json as DeltaJSON,
+    authorName: version.author_name ?? 'Anonyme',
+    branchName: version.branch_name,
+    versionNumber: version.version_number,
+    projectName: assetRel?.name ?? 'Design Guardian',
+  });
+  if (!ok) return c.json<ErrorResponse>({ error: 'Regeneration failed' }, 502);
+
+  const { data: updated } = await getSupabaseClient()
+    .from('versions').select('*').eq('id', id).single();
+  return c.json({ version: updated });
 });
 
 export { checkpointsRouter };

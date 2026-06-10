@@ -326,6 +326,41 @@ export function getOpenApiSpec() {
           },
         },
       },
+      '/api/checkpoints/{id}': {
+        get: {
+          tags: ['Checkpoints'],
+          summary: 'Get a single checkpoint (AI patch-note polling)',
+          description: 'The AI patch note is generated asynchronously after a checkpoint is created. The plugin polls this endpoint until ai_summary is filled.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Version',
+              content: { 'application/json': { schema: { type: 'object', properties: { version: { $ref: '#/components/schemas/Version' } } } } },
+            },
+            '404': { description: 'Checkpoint not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/api/checkpoints/{id}/regenerate': {
+        post: {
+          tags: ['Checkpoints'],
+          summary: 'Regenerate the AI patch note',
+          description: 'Fallback when the async generation failed. Re-runs GPT-4o-mini on the already-stored analysis_json (no re-diff).',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Updated version',
+              content: { 'application/json': { schema: { type: 'object', properties: { version: { $ref: '#/components/schemas/Version' } } } } },
+            },
+            '400': { description: 'Nothing to regenerate', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '404': { description: 'Checkpoint not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          },
+        },
+      },
       '/api/branches/tree': {
         get: {
           tags: ['Versions'],
