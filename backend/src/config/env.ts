@@ -21,6 +21,9 @@ const envSchema = z.object({
   STRIPE_PRICE_PRO_YEARLY: z.string().default(''),
   STRIPE_PRICE_TEAM_MONTHLY: z.string().default(''),
   STRIPE_PRICE_TEAM_YEARLY: z.string().default(''),
+  // Sécurité — vides par défaut (comportement non-bloquant) ; à renseigner en prod.
+  CORS_ORIGINS: z.string().default(''),   // origines autorisées, séparées par des virgules ; vide = toutes
+  METRICS_TOKEN: z.string().default(''),  // si défini, /metrics exige ce bearer token
 });
 
 type Env = z.infer<typeof envSchema>;
