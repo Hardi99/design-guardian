@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { getSupabaseClient } from './config/supabase.js';
+import { getEnv } from './config/env.js';
 import { authRouter } from './controllers/auth.controller.js';
 import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
@@ -18,8 +19,13 @@ const startTime = Date.now();
 export function createApp() {
   const app = new Hono();
 
+  // CORS — restreint aux origines de CORS_ORIGINS si défini ; sinon toutes (défaut non-bloquant).
+  // Note : le plugin Figma émet depuis une origine `null`, d'où le défaut permissif tant qu'une
+  // allowlist explicite n'est pas configurée en prod.
+  const corsOrigins = getEnv().CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
+
   app.use('*', logger());
-  app.use('*', cors());
+  app.use('*', cors({ origin: corsOrigins.length > 0 ? corsOrigins : '*' }));
   app.use('*', metricsMiddleware);
 
   app.get('/', (c) =>
@@ -41,8 +47,13 @@ export function createApp() {
     return c.json({ status: 'ok' });
   });
 
-  // Prometheus metrics (no auth — scraped by Prometheus server)
+  // Prometheus metrics — protégé par METRICS_TOKEN si défini (sinon ouvert, défaut non-bloquant).
   app.get('/metrics', async (c) => {
+    const token = getEnv().METRICS_TOKEN;
+    if (token) {
+      const provided = c.req.header('Authorization')?.replace('Bearer ', '') ?? c.req.query('token');
+      if (provided !== token) return c.json({ error: 'Unauthorized' }, 401);
+    }
     c.header('Content-Type', registry.contentType);
     return c.text(await registry.metrics());
   });
