@@ -43,7 +43,7 @@ const figmaColorSchema = z.object({
   b: z.number().min(0).max(1),
   a: z.number().min(0).max(1),
 });
-const figmaFillSchema = z.object({
+export const figmaFillSchema = z.object({
   type: z.string(),
   color: figmaColorSchema.optional(),
   opacity: z.number().optional(),
@@ -53,6 +53,9 @@ const figmaFillSchema = z.object({
     color: figmaColorSchema,
   })).optional(),
   gradientAngle: z.number().optional(),
+  // Fills IMAGE — hash de référence + mode d'échelle (octets non stockés, cf. spec)
+  imageHash: z.string().optional(),
+  scaleMode: z.string().optional(),
 });
 const figmaStrokeSchema = z.object({
   type: z.string(),

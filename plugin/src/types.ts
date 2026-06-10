@@ -12,6 +12,9 @@ export interface FigmaFill {
   // Gradient
   gradientStops?: FigmaGradientStop[];
   gradientAngle?: number; // simplified: 0-360°
+  // Image (hash de référence — octets non stockés, cf. spec image-fills)
+  imageHash?: string;
+  scaleMode?: string; // 'FILL' | 'FIT' | 'CROP' | 'TILE'
 }
 
 export interface FigmaStroke { type: string; color?: FigmaColor; opacity?: number }
