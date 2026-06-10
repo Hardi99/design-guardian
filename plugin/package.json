@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "preact": "^10.24.0",
+    "preact": "^10.29.2",
     "zustand": "^5.0.13"
   },
   "devDependencies": {
