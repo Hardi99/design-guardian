@@ -133,7 +133,7 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
   if (props.has('cornerRadius') && 'cornerRadius' in node && snap.cornerRadius !== undefined)
     (node as CornerMixin).cornerRadius = snap.cornerRadius;
   if (props.has('strokeWeight') && 'strokeWeight' in node && snap.strokeWeight !== undefined)
-    (node as IndividualStrokesMixin).strokeWeight = snap.strokeWeight;
+    (node as MinimalStrokesMixin).strokeWeight = snap.strokeWeight;
 
   if (props.has('fills') && 'fills' in node) {
     const paints: Paint[] = [];
