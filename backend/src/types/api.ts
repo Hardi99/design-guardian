@@ -133,3 +133,17 @@ export interface ApproveVersionResponse { version: Version }
 
 export interface ErrorResponse   { error: string; details?: string }
 export interface SuccessResponse { message: string }
+
+// ── Paiements (abonnement par compte) ─────────────────────────────────────────
+export const checkoutSchema = z.object({
+  plan: z.enum(['pro', 'team']),
+  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+  success_url: z.string().url(),
+  cancel_url: z.string().url(),
+});
+export type CheckoutRequest = z.infer<typeof checkoutSchema>;
+
+export const portalSchema = z.object({
+  return_url: z.string().url(),
+});
+export type PortalRequest = z.infer<typeof portalSchema>;

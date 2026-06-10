@@ -93,3 +93,19 @@ export async function getOrCreateCustomer(
   });
   return customer.id;
 }
+
+// ── Customer par utilisateur (abonnement par compte) ──────────────────────────
+
+export async function getOrCreateUserCustomer(
+  stripe: Stripe,
+  userId: string,
+  email: string | null,
+  existingCustomerId: string | null,
+): Promise<string> {
+  if (existingCustomerId) return existingCustomerId;
+  const customer = await stripe.customers.create({
+    email: email ?? undefined,
+    metadata: { user_id: userId },
+  });
+  return customer.id;
+}

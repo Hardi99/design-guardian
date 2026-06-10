@@ -1,9 +1,21 @@
 import { Header } from "@/components/ui/header";
 import { LightBeams } from "@/components/ui/light-beams";
 import { Check, X } from "lucide-react";
-import Link from "next/link";
+import { CheckoutButton } from './CheckoutButton';
 
-const plans = [
+interface Plan {
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  cta: string;
+  ctaHref: string;
+  featured: boolean;
+  planId: 'pro' | 'team' | null;
+  features: { text: string; included: boolean }[];
+}
+
+const plans: Plan[] = [
   {
     name: "Free",
     price: "0",
@@ -12,6 +24,7 @@ const plans = [
     cta: "Commencer gratuitement",
     ctaHref: "/login",
     featured: false,
+    planId: null,
     features: [
       { text: "1 projet Figma", included: true },
       { text: "10 checkpoints max", included: true },
@@ -31,6 +44,7 @@ const plans = [
     cta: "Passer à Pro",
     ctaHref: "/login",
     featured: true,
+    planId: 'pro',
     features: [
       { text: "Projets illimités", included: true },
       { text: "Checkpoints illimités", included: true },
@@ -50,6 +64,7 @@ const plans = [
     cta: "Contacter l'équipe",
     ctaHref: "mailto:contact@design-guardian.io",
     featured: false,
+    planId: null,
     features: [
       { text: "Tout Pro", included: true },
       { text: "Multi-designers", included: true },
@@ -136,16 +151,14 @@ export default function PricingPage() {
                   ))}
                 </ul>
 
-                <Link
-                  href={plan.ctaHref}
-                  className={`block text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-85 ${
-                    plan.featured
-                      ? "bg-primary text-white"
-                      : "bg-muted text-foreground"
+                <CheckoutButton
+                  plan={(plan.planId ?? 'pro')}
+                  label={plan.cta}
+                  href={plan.planId ? undefined : plan.ctaHref}
+                  className={`block w-full text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-85 ${
+                    plan.featured ? "bg-primary text-white" : "bg-muted text-foreground"
                   }`}
-                >
-                  {plan.cta}
-                </Link>
+                />
               </div>
             ))}
           </div>
