@@ -8,6 +8,7 @@ import type { Asset, Version, Plan, Screen } from './store.js';
 import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
+import { pollPatchNote } from './patchNote.js';
 import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
@@ -369,13 +370,17 @@ function CheckpointScreen() {
 
   const [branchName, setBranchName] = useState(branch);
   const [loading,    setLoading]    = useState(false);
-  const [saved,      setSaved]      = useState<{ summary: string | null; changes: number } | null>(null);
+  const [saved,      setSaved]      = useState<{ summary: string | null; changes: number; versionId: string } | null>(null);
   const [err,        setErr]        = useState<string | null>(null);
+
+  const [patchNote,    setPatchNote]    = useState<string | null>(null);
+  const [patchState,   setPatchState]   = useState<'idle' | 'pending' | 'timeout'>('idle');
+  const [regenerating, setRegenerating] = useState(false);
 
   const save = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
-      const data = await api<{ ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
+      const data = await api<{ version: { id: string }; ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
         apiKey, '/api/checkpoints', {
           method: 'POST',
           body: JSON.stringify({
@@ -388,10 +393,41 @@ function CheckpointScreen() {
           }),
         }
       );
-      setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0 });
+      setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
   }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64]);
+
+  // Récupération asynchrone du AI Patch Note (généré en arrière-plan côté serveur).
+  useEffect(() => {
+    if (!saved) return;
+    if (saved.summary) { setPatchNote(saved.summary); setPatchState('idle'); return; }
+    if (saved.changes <= 0) { setPatchState('idle'); return; } // 0 changement : pas de génération
+    setPatchState('pending');
+    let cancelled = false;
+    pollPatchNote(
+      () => api<{ version: { ai_summary: string | null } }>(apiKey, `/api/checkpoints/${saved.versionId}`)
+              .then((d) => ({ ai_summary: d.version.ai_summary })),
+      { intervalMs: 2000, maxTries: 8 },
+    ).then((summary) => {
+      if (cancelled) return;
+      if (summary) { setPatchNote(summary); setPatchState('idle'); }
+      else setPatchState('timeout');
+    });
+    return () => { cancelled = true; };
+  }, [saved, apiKey]);
+
+  const regenerate = useCallback(async () => {
+    if (!saved) return;
+    setRegenerating(true);
+    try {
+      const d = await api<{ version: { ai_summary: string | null } }>(
+        apiKey, `/api/checkpoints/${saved.versionId}/regenerate`, { method: 'POST' });
+      if (d.version.ai_summary) { setPatchNote(d.version.ai_summary); setPatchState('idle'); }
+      else setPatchState('timeout');
+    } catch { setPatchState('timeout'); }
+    finally { setRegenerating(false); }
+  }, [apiKey, saved]);
 
   if (saved) return (
     <div class="flex flex-col h-screen bg-gray-950 text-white p-6">
@@ -399,7 +435,20 @@ function CheckpointScreen() {
         <p class="text-green-400 font-semibold">✦ Checkpoint sauvegardé</p>
         <div class="p-4 bg-gray-900 rounded-lg border border-gray-800 flex flex-col gap-1.5">
           <p class="text-xs text-gray-500 font-mono">{branchName}</p>
-          <p class="text-sm text-gray-200 leading-relaxed">{saved.summary ?? 'Aucune modification détectée.'}</p>
+          {patchNote ? (
+            <p class="text-sm text-gray-200 leading-relaxed">{patchNote}</p>
+          ) : saved.changes <= 0 ? (
+            <p class="text-sm text-gray-200 leading-relaxed">Aucune modification détectée.</p>
+          ) : patchState === 'pending' ? (
+            <p class="text-sm text-gray-400 leading-relaxed flex items-center gap-2"><Spinner /> Patch Note en cours…</p>
+          ) : (
+            <div class="flex flex-col gap-2">
+              <p class="text-sm text-gray-400">Patch Note indisponible.</p>
+              <button class="btn-secondary text-xs" onClick={regenerate} disabled={regenerating}>
+                {regenerating ? 'Régénération…' : 'Régénérer'}
+              </button>
+            </div>
+          )}
           {saved.changes > 0 && <p class="text-xs text-purple-400">{saved.changes} modification(s)</p>}
         </div>
       </div>
