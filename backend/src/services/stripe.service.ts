@@ -19,7 +19,6 @@ export interface Plan {
   name: string;
   price_monthly_eur: number | null;
   price_yearly_eur: number | null;
-  features: string[];
 }
 
 export const PLANS: Plan[] = [
@@ -28,40 +27,18 @@ export const PLANS: Plan[] = [
     name: 'Free',
     price_monthly_eur: null,
     price_yearly_eur: null,
-    features: [
-      '1 projet',
-      '5 checkpoints / jour',
-      'AI Patch Notes',
-      'Historique 30 jours',
-    ],
   },
   {
     id: 'pro',
     name: 'Pro',
     price_monthly_eur: 12,
     price_yearly_eur: 96,
-    features: [
-      'Projets illimités',
-      'Checkpoints illimités',
-      'AI Patch Notes',
-      'Historique illimité',
-      'Gold status',
-      'Export JSON',
-    ],
   },
   {
     id: 'team',
     name: 'Team',
     price_monthly_eur: 39,
     price_yearly_eur: 312,
-    features: [
-      'Tout Pro inclus',
-      'Collaboration temps réel',
-      'Branches illimitées',
-      'Merge de branches',
-      'Notifications email',
-      'Support prioritaire',
-    ],
   },
 ];
 
