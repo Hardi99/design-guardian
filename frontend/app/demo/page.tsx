@@ -94,7 +94,7 @@ export default function DemoPage() {
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Voyez comment Design Guardian détecte les changements géométriques
-              dans les fichiers SVG
+              au pixel près dans vos designs Figma
             </p>
           </div>
 
@@ -147,19 +147,29 @@ export default function DemoPage() {
               {/* CTA */}
               <div className="mt-12 text-center glow-border rounded-xl bg-card/50 p-8">
                 <h3 className="font-display text-2xl font-bold mb-4">
-                  Prêt à tester avec{' '}
-                  <span className="text-gradient">vos SVG</span> ?
+                  Prêt à versionner vos{' '}
+                  <span className="text-gradient">designs Figma</span> ?
                 </h3>
                 <p className="text-muted-foreground mb-6">
-                  Créez un compte gratuit pour uploader vos assets et suivre les
-                  changements avec l&apos;IA
+                  Installez le plugin Figma pour capturer et comparer vos
+                  checkpoints, avec l&apos;AI Patch Note.
                 </p>
-                <Link
-                  href="/login"
-                  className="btn-shine inline-flex items-center gap-2 rounded-lg px-8 py-4 font-semibold text-primary-foreground shadow-glow"
-                >
-                  Créer un compte gratuit
-                </Link>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <a
+                    href="https://www.figma.com/community/plugin/1621623685015334277"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-shine inline-flex items-center gap-2 rounded-lg px-8 py-4 font-semibold text-primary-foreground shadow-glow"
+                  >
+                    Installer le plugin
+                  </a>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-8 py-4 font-semibold hover:bg-card transition-colors"
+                  >
+                    Créer un compte
+                  </Link>
+                </div>
               </div>
             </div>
           )}
