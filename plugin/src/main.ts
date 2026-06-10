@@ -145,6 +145,8 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
         const r = ((f.gradientAngle ?? 0) * Math.PI) / 180;
         const cos = Math.cos(r), sin = Math.sin(r);
         paints.push({ type: f.type, gradientStops: f.gradientStops.map(s => ({ position: s.position, color: s.color })), gradientTransform: [[cos, sin, 0.5 * (1 - cos - sin)], [-sin, cos, 0.5 * (1 + sin - cos)]] as Transform, visible: f.visible ?? true, opacity: f.opacity ?? 1 } as GradientPaint);
+      } else if (f.type === 'IMAGE' && f.imageHash) {
+        paints.push({ type: 'IMAGE', imageHash: f.imageHash, scaleMode: (f.scaleMode as ImagePaint['scaleMode']) ?? 'FILL', visible: f.visible ?? true, opacity: f.opacity ?? 1 } as ImagePaint);
       }
     }
     if (paints.length > 0) (node as GeometryMixin).fills = paints;
@@ -427,6 +429,10 @@ function extractFills(node: SceneNode): FigmaFill[] {
         const gt = (f as { gradientTransform: number[][] }).gradientTransform;
         base.gradientAngle = Math.round(Math.atan2(gt[0][1], gt[0][0]) * (180 / Math.PI));
       }
+    }
+    if (f.type === 'IMAGE') {
+      base.imageHash = (f as ImagePaint).imageHash ?? undefined;
+      base.scaleMode = (f as ImagePaint).scaleMode;
     }
     return base;
   });
