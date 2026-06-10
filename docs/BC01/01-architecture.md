@@ -4,7 +4,8 @@
 
 ```mermaid
 graph TB
-    Designer(["👤 Designer<br/>Figma Desktop"])
+    Designer(["Designer<br/>Figma Desktop"])
+    Webapp["Webapp · Next.js / Vercel<br/>Landing · Pricing · Login · Dashboard · Checkout"]
 
     subgraph Plugin["Plugin Figma · Preact + Tailwind"]
         direction LR
@@ -27,12 +28,14 @@ graph TB
         Storage["Storage<br/>Snapshots JSON"]
     end
 
-    OpenAI["🤖 OpenAI<br/>GPT-4o-mini"]
-    StripeAPI["💳 Stripe"]
-    Monitoring["📊 Prometheus · Grafana"]
-    CI["⚙️ GitHub Actions<br/>CI/CD · Tests"]
+    OpenAI["OpenAI<br/>GPT-4o-mini"]
+    StripeAPI["Stripe"]
+    Monitoring["Prometheus · Grafana"]
+    CI["GitHub Actions<br/>CI/CD · Tests"]
 
     Designer -->|"API Figma<br/>(main thread)"| Main
+    Designer -->|"navigateur"| Webapp
+    Webapp -->|"HTTPS · JWT<br/>(checkout · portail · dashboard)"| Backend
     UIThread -->|"HTTPS · X-API-Key"| Backend
     Backend --> Data
     Core --> OpenAI
@@ -216,8 +219,8 @@ graph LR
     MainThread <-->|"figma.ui.postMessage<br/>figma.ui.onmessage"| UIThread
     HTTP -->|"HTTPS Railway"| BackendAPI["Backend<br/>Hono + Node.js<br/>Railway"]
 
-    style MainThread fill:#f0f9ff,stroke:#0ea5e9
-    style UIThread fill:#fef9f0,stroke:#f59e0b
+    style MainThread fill:#f0f9ff,stroke:#0ea5e9,color:#0c4a6e
+    style UIThread fill:#fef9f0,stroke:#f59e0b,color:#7c2d12
 ```
 
 > **Règle critique** : `figma.*` est accessible **uniquement** dans le main thread.
@@ -236,6 +239,6 @@ graph LR
     Coverage --> Deploy["Deploy<br/>Railway auto-deploy"]
     Deploy --> Health["Health check<br/>/health · /ping"]
 
-    style Coverage fill:#dcfce7,stroke:#16a34a
-    style Deploy fill:#dbeafe,stroke:#2563eb
+    style Coverage fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style Deploy fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
 ```
