@@ -101,9 +101,13 @@ return c.json({ version: data });
 
 ### 4.5 Plugin (`plugin/src/ui.tsx` + `store.ts`)
 
-- **HomeScreen** : pour une version `visible` avec `ai_summary === null`, afficher **« Patch Note en cours… »** (spinner) au lieu du résumé.
-- **Polling** (`usePatchNotePolling`, dans `ui.tsx`, HTTP uniquement) : pour chaque version à `ai_summary` null, `GET /api/checkpoints/:id` toutes les **2 s**, max **~8 essais (15 s)**. Dès `ai_summary` non null → maj de la ligne dans le state local des versions.
-- **Timeout** → état « Patch Note indisponible » + bouton **« Régénérer »** → `POST …/regenerate` → maj la ligne.
+**Détection du « pending »** : le plugin ne reçoit PAS `analysis_json` dans `GET /api/branches/tree` ; il ne peut donc pas distinguer « génération en cours » d'un « premier checkpoint sans delta » sur les versions historiques. → On **ne poll que la version qui vient d'être créée**, dont l'état est connu via la réponse du POST : `response.analysis?.totalChanges > 0 && !response.ai_summary` ⇒ génération en cours.
+
+- **CheckpointScreen / capture** : à la création, si la réponse indique « pending », marquer cette version comme telle dans le state.
+- **HomeScreen** : la version pending affiche **« Patch Note en cours… »** (spinner).
+- **Polling** (`usePatchNotePolling`, dans `ui.tsx`, HTTP uniquement) : `GET /api/checkpoints/:id` toutes les **2 s**, max **~8 essais (15 s)**, jusqu'à `ai_summary` non null → maj de la ligne dans le state local.
+- **Timeout** → « Patch Note indisponible » + bouton **« Régénérer »** → `POST …/regenerate` → maj la ligne.
+- Les versions historiques à `ai_summary` null (chargées depuis l'arbre) ne sont **pas** pollées (peuvent être de légitimes premiers checkpoints) — affichage neutre, pas de spinner.
 - Respect double-thread : tout HTTP dans `ui.tsx` ; aucun appel `figma.*` ajouté.
 
 ---
