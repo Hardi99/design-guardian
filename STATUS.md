@@ -1,13 +1,15 @@
 # Status d'avancement — Design Guardian
 
+> Pour le détail des dernières évolutions, voir `CHANGELOG.md` (≥ 1.5.0).
+
 ## BC02 — Tests & Documentation ✅ Complet
 
 | Item | Statut |
 |------|--------|
-| 63 tests unitaires (Vitest) | ✅ |
+| ≈142 tests unitaires (Vitest — 79 back + 63 plugin) | ✅ |
 | Cahier de recettes `docs/RECETTES.md` | ✅ |
 | Pipeline CI/CD `.github/workflows/ci.yml` | ✅ |
-| OpenAPI `docs/openapi.yaml` | ✅ |
+| OpenAPI (`openapi.ts` + Swagger UI `/api/docs`) | ✅ |
 | README complet (env vars, tests, deploy) | ✅ |
 
 ## BC04 — Maintenance & Exploitation ✅ Complet
@@ -41,7 +43,5 @@
 | BC01 | Diagrammes architecture Mermaid/Draw.io | 🔴 |
 | BC03 | Backlog MoSCoW + story points | 🔴 |
 | BC03 | Vidéo Sprint Review 10-15 min | 🔴 |
-| Microservices | Notifications (email/SMS) — stub ou démo | 🟡 |
-| Microservices | Paiements (Stripe/Lemon Squeezy) — stub ou démo | 🟡 |
 | BC03 | Gantt / roadmap | 🟡 |
 | Merge branches | Backlog post-soutenance | 🟢 |

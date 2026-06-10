@@ -6,6 +6,34 @@ Versioning [Semver](https://semver.org/lang/fr/).
 
 ---
 
+## [1.5.0] — 2026-06-10
+
+### Added
+- **Webapp dashboard compte/billing** — plan courant, « Gérer mon abonnement » (portail Stripe), CTA installer le plugin
+- **AI Patch Note asynchrone** — `GET /api/checkpoints/:id` (polling) + `POST /api/checkpoints/:id/regenerate` (filet) ; UI plugin « en cours… » + bouton Régénérer
+- **Checkout par compte** côté webapp — `apiClient` envoie le Bearer Supabase, bouton pricing fonctionnel
+
+### Changed
+- **Abonnement porté par le compte** (`profiles.plan`) et non plus par projet — cohérent avec la grille « projets illimités » ; routes paiement authentifiées par JWT web (`payments.service` extrait du controller)
+- **Capture non-bloquante** — l'appel OpenAI sort du chemin synchrone de `POST /api/checkpoints` (réponse immédiate, génération en arrière-plan)
+- **Pricing réconcilié** — une seule source (page pricing) ; `PLANS.features` marketing retiré du backend ; export reformulé « Rapport d'approbation (bientôt) »
+
+### Removed
+- **Flux upload-SVG mort** de la webapp (route `projects/[id]`, `useProject`, `DropZone`/`AssetCard`/`VersionCard`/`FontSpecimen`) — vestige du SaaS abandonné
+- **Code mort backend** — `getOrCreateCustomer` (par projet) + 6 fonctions `notification.service` orphelines
+
+### Security
+- **CORS configurable** (`CORS_ORIGINS` — allowlist si défini, sinon `*` car le plugin émet en origine `null`)
+- **`/metrics` protégeable** (`METRICS_TOKEN` — bearer requis si défini)
+- Erreurs Supabase **remontées** dans `payments.service` (plus de dérive silencieuse de facturation)
+
+### Fixed
+- **Typecheck plugin** rétabli — `@figma/plugin-typings` installé + référencé ; vrai bug corrigé (`strokeWeight` sur `MinimalStrokesMixin`)
+- **Régression hono 4.12** — `c.req.param('id')` typé `string | undefined` ; garde ajoutée (`assets.controller`)
+- Tri des PR Dependabot (12) + master CI verte
+
+---
+
 ## [1.4.0] — 2026-05-22
 
 ### Added

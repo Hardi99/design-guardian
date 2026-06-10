@@ -105,14 +105,21 @@ sequenceDiagram
     Storage-->>Backend: prev_snapshot
     Backend->>Backend: DiffService.compareSnapshots(prev, new)
     Note over Backend: flattenTree() → Map id/node<br/>Removed / Added / Modified<br/>Tolérance ε = 0.01px → DeltaJSON
-    Backend->>OpenAI: generatePatchNote(deltaJSON, author)
-    OpenAI-->>Backend: ai_summary (texte lisible)
     Backend->>Storage: UPLOAD {asset_id}/{branch}/v{new}.json + render_svg natif
     Storage-->>Backend: storage_path
-    Backend->>DB: INSERT versions {storage_path, analysis_json, ai_summary, parent_id}
+    Backend->>DB: INSERT versions {storage_path, analysis_json, ai_summary: null, parent_id}
     DB-->>Backend: {version_id}
-    Backend-->>PluginUI: {version, analysis, ai_summary}
-    PluginUI-->>Designer: Timeline mise à jour ✅
+    Backend-->>PluginUI: {version, analysis, ai_summary: null} — réponse immédiate
+    PluginUI-->>Designer: Checkpoint sauvegardé (Patch Note « en cours… »)
+    Note over Backend: Génération IA en arrière-plan<br/>(fire-and-forget — process long-running Railway)
+    Backend->>OpenAI: generatePatchNote(deltaJSON, author)
+    OpenAI-->>Backend: ai_summary (texte lisible)
+    Backend->>DB: UPDATE versions SET ai_summary
+    loop Polling ~2s (max ~15s)
+        PluginUI->>Backend: GET /api/checkpoints/{id}
+        Backend-->>PluginUI: { version.ai_summary }
+    end
+    PluginUI-->>Designer: AI Patch Note affiché ✅
 ```
 
 ---
