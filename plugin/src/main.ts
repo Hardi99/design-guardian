@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
+import { changedProps } from './restoreDiff.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -194,21 +195,34 @@ const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'stroke
 const RESTORE_PROPS_ROOT     = new Set(RESTORE_PROPS);
 const RESTORE_PROPS_CHILDREN = new Set([...RESTORE_PROPS, 'x', 'y', 'width', 'height']);
 
-// Full restore: walk the snapshot tree, match each node by ID, apply ALL its
-// properties. No reliance on the stored diff — guarantees the canvas reflects
-// the version completely (every node, every property). Preserves node identity.
-async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, isRoot: boolean): Promise<{ applied: number; skipped: number }> {
+// Aplatit un arbre de snapshot en Map id → snapshot du nœud (pour le live-diff).
+function flattenSnapshot(snap: NodeSnapshot, map: Map<string, NodeSnapshot>): void {
+  map.set(snap.id, snap);
+  for (const c of snap.children ?? []) flattenSnapshot(c, map);
+}
+
+// Restore « live-diff » : on parcourt l'arbre du snapshot, on matche chaque nœud
+// par ID, et on n'applique QUE les propriétés qui diffèrent de l'état actuel du
+// canvas (`currMap`). Couverture complète (toute prop peut être appliquée), mais
+// écritures minimales : un nœud inchangé est entièrement sauté. Si l'état courant
+// du nœud est introuvable, on retombe sur le set complet (sûr).
+async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: Map<string, NodeSnapshot>, isRoot: boolean): Promise<{ applied: number; skipped: number }> {
   let applied = 0, skipped = 0;
   try {
-    await applyDeltaProps(node, snap, isRoot ? RESTORE_PROPS_ROOT : RESTORE_PROPS_CHILDREN);
-    applied++;
+    const candidates = isRoot ? RESTORE_PROPS_ROOT : RESTORE_PROPS_CHILDREN;
+    const curr = currMap.get(node.id);
+    const toApply = curr ? changedProps(curr, snap, candidates) : candidates;
+    if (toApply.size > 0) {
+      await applyDeltaProps(node, snap, toApply);
+      applied++;
+    }
   } catch { skipped++; }
 
   if ('children' in node && snap.children) {
     for (const childSnap of snap.children) {
       const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
       if (match) {
-        const r = await applyFullSnapshot(match, childSnap, false);
+        const r = await applyFullSnapshot(match, childSnap, currMap, false);
         applied += r.applied; skipped += r.skipped;
       } else { skipped++; }
     }
@@ -236,9 +250,12 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
   const onCurrentPage = root !== null && isOnCurrentPage(root);
 
   if (onCurrentPage && root) {
-    // Same-branch: full restore by ID — every node, every property.
+    // Same-branch: restore live-diff — on ne réécrit que ce qui a bougé.
+    // currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
     try {
-      const result = await applyFullSnapshot(root, snapshot.root, true);
+      const currMap = new Map<string, NodeSnapshot>();
+      flattenSnapshot(extractSnapshot(root), currMap);
+      const result = await applyFullSnapshot(root, snapshot.root, currMap, true);
       figma.commitUndo();
       send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
     } catch (e) {
