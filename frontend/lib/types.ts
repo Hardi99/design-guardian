@@ -34,10 +34,3 @@ export interface AnalysisResult {
   changes: Change[];
   metadata: AnalysisMetadata;
 }
-
-export interface ComparisonResult {
-  svg1: string;
-  svg2: string;
-  analysis: AnalysisResult;
-  aiSummary: string;
-}
