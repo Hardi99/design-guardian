@@ -69,6 +69,7 @@ assetsRouter.post('/', pluginMiddleware, zValidator('json', createAssetSchema), 
 
 assetsRouter.delete('/:id', pluginMiddleware, async (c) => {
   const assetId = c.req.param('id');
+  if (!assetId) return c.json<ErrorResponse>({ error: 'Asset id is required' }, 400);
   const projectId = c.get('projectId');
   const supabase = getSupabaseClient();
 
