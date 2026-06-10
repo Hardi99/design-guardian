@@ -55,22 +55,6 @@ export function getPriceId(plan: PlanId, interval: Interval): string | null {
   return map[`${plan}:${interval}`] ?? null;
 }
 
-// ── Customer helpers ──────────────────────────────────────────────────────────
-
-export async function getOrCreateCustomer(
-  stripe: Stripe,
-  projectId: string,
-  existingCustomerId: string | null,
-  projectName: string,
-): Promise<string> {
-  if (existingCustomerId) return existingCustomerId;
-  const customer = await stripe.customers.create({
-    name: projectName,
-    metadata: { project_id: projectId },
-  });
-  return customer.id;
-}
-
 // ── Customer par utilisateur (abonnement par compte) ──────────────────────────
 
 export async function getOrCreateUserCustomer(
