@@ -33,7 +33,7 @@ const plans: Plan[] = [
       { text: "AI Patch Note", included: true },
       { text: "Historique illimité", included: false },
       { text: "Multi-branches", included: false },
-      { text: "Export rapports", included: false },
+      { text: "Rapport d'approbation", included: false },
     ],
   },
   {
@@ -53,7 +53,7 @@ const plans: Plan[] = [
       { text: "AI Patch Note", included: true },
       { text: "Historique complet", included: true },
       { text: "Gold Status & workflow QA", included: true },
-      { text: "Export rapports", included: false },
+      { text: "Rapport d'approbation", included: false },
     ],
   },
   {
@@ -69,7 +69,7 @@ const plans: Plan[] = [
       { text: "Tout Pro", included: true },
       { text: "Multi-designers", included: true },
       { text: "Permissions par rôle", included: true },
-      { text: "Export rapports PDF", included: true },
+      { text: "Rapport d'approbation (bientôt)", included: true },
       { text: "Support prioritaire", included: true },
       { text: "Dashboard équipe", included: true },
       { text: "SSO (bientôt)", included: true },
