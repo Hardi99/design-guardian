@@ -7,20 +7,23 @@ export interface Profile {
   avatar_url: string | null;
   figma_id: string | null;
   plan: 'free' | 'pro' | 'team';
+  // L'abonnement est porté par le compte (profile), pas par le projet — cf. payments.service.ts
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface Project {
   id: string;
   name: string;
   description: string | null;
-  owner_id: string;
+  owner_id: string | null;
   api_key: string;
   plan: 'free' | 'pro' | 'team';
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  notify_email: string | null;
+  figma_file_key: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface Asset {
@@ -30,6 +33,7 @@ export interface Asset {
   description: string | null;
   asset_type: 'logo' | 'icon' | 'packaging' | 'illustration' | 'ui' | 'other';
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface Version {
@@ -47,6 +51,8 @@ export interface Version {
   storage_path: string | null;         // path dans le bucket 'snapshots'
   analysis_json: DeltaJSON | null;
   ai_summary: string | null;
+  // Source de vérité de l'approbation = `status` (+ approved_at/by).
+  // Colonnes SQL legacy `is_approved` et `file_size` supprimées (migration security_perf_hardening).
   status: 'draft' | 'review' | 'approved';
   approved_by: string | null;
   approved_at: string | null;
