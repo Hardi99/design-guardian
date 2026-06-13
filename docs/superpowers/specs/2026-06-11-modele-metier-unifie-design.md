@@ -75,7 +75,7 @@ Plus aucune feature n'invente son identité. Toutes parlent `dg_id`.
 ## 5. Mécanique du `dg_id`
 
 ### 5.1 Stockage
-- `dg_id` = UUID v4, stocké via **`setPluginData(node, 'dg_id', uuid)`**.
+- `dg_id` = UUID v4, stocké via `setPluginData` (ou `setSharedPluginData` — voir 5.5) sous une **clé persistée gelée** (voir 5.5).
 - À côté, on stocke **`owner_node_id`** = le `node.id` Figma au moment du stamp (pour détecter les copies — voir 5.4) et **`last_author`** (id designer).
 - Budget : `pluginData` limité à **100 kB par entrée**, privé au plugin, encodage JSON. Nos quelques champs (~quelques centaines d'octets) sont **triviaux**. *(Fait vérifié — docs Figma `setPluginData`.)*
 
@@ -88,7 +88,20 @@ Plus aucune feature n'invente son identité. Toutes parlent `dg_id`.
 ### 5.4 Détection de collision (copier-coller / Ctrl+D)
 Une duplication utilisateur peut produire **deux nœuds avec le même `dg_id`**. Parade à la capture : si `owner_node_id ≠ node.id` courant **et** collision de `dg_id` détectée → c'est une copie → **re-mint** un `dg_id` neuf + maj `owner_node_id`.
 
-### 5.5 Faits API porteurs (vérifiés)
+### 5.5 Résilience au rebrand (le nom du plugin **va** changer)
+
+Le produit sera renommé. La clé persistée doit **survivre** au rebrand, sinon on orpheline tous les stamps des fichiers utilisateurs.
+
+- **Découplage obligatoire** entre le **nom commercial** et la **clé persistée** :
+  - **Identifiant de code** (variable `dgId`, le concept) = cosmétique → renommable librement (pur refactor).
+  - **Clé/namespace persisté** (la string écrite dans les fichiers Figma) = **constante gelée, brand-neutre**, définie à **un seul endroit**, **jamais modifiée**. ⚠️ Ne PAS la préfixer par la marque (éviter `dg_`).
+- **Choisir maintenant** une string neutre et stable (ex. un codename interne figé), documentée comme « protocole d'identité — ne jamais renommer ».
+- **Dette existante** : les clés actuelles `dg_file_id` / `dg_main_page_id` portent déjà le préfixe marque `dg_`. Au rebrand, **ne pas les renommer** (sinon perte) — ou les migrer explicitement. À traiter dans SP1.
+- **Niveau de couplage à l'ID plugin** :
+  - Changer le **nom d'affichage** du plugin = sans risque (`pluginData` est lié à l'**ID** plugin, pas au nom).
+  - Republier sous un **nouvel ID** plugin = `pluginData` illisible → préférer **`setSharedPluginData(NAMESPACE_GELÉ, …)`** (lisible quel que soit l'ID) pour la résilience maximale. Trade-off : lisible par d'autres plugins, mais un UUID `dg_id` n'est pas sensible. *(Sémantique `setSharedPluginData` à confirmer en SP1.)*
+
+### 5.6 Faits API porteurs (vérifiés)
 - `pluginData` : 100 kB/entrée, privé au plugin, JSON, effaçable via `""`. ✅
 - `clone()` : nouveau nœud (nouvel id) ; copie-pluginData **non documentée** → on propage nous-mêmes. ✅
 - `node.id` : stable pour la vie d'un nœud, **ne diverge qu'au clone/duplicate**. ✅
@@ -177,6 +190,9 @@ Cible réaliste court terme : **~1000 users** (~0,01 capture/s) → une **seule 
 - **Test empirique `clone()`+pluginData** (2 min dans le plugin : stamp → clone → relire). On propage de toute façon nous-mêmes, mais le résultat dit si la propagation explicite est *nécessaire* ou *redondante*.
 - Confirmer le **coût perf** d'un `setPluginData`/nœud à la capture sur un gros frame (O(n) écritures).
 - Décider le **format du champ `dg_id`** dans le schéma Zod (optionnel → requis).
+- **Geler la clé/namespace persisté** : choisir une string **brand-neutre** maintenant (cf. 5.5), à un seul endroit, marquée « ne jamais renommer ».
+- **Confirmer la sémantique `setSharedPluginData`** (lisibilité quel que soit l'ID plugin) → décide `setPluginData` vs `setSharedPluginData` pour la résilience au rebrand.
+- Décider le sort des clés legacy `dg_file_id` / `dg_main_page_id` (garder telles quelles vs migrer) au rebrand.
 
 ---
 
