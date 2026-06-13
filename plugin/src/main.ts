@@ -4,6 +4,7 @@
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps } from './restoreDiff.js';
+import { ensureNodeIdentity } from './figmaIdentity.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -361,6 +362,7 @@ function extractRotation(node: SceneNode): number {
 
 function extractSnapshot(node: SceneNode): NodeSnapshot {
   return {
+    dg_id: ensureNodeIdentity(node),
     id: node.id,
     name: node.name,
     type: node.type,
