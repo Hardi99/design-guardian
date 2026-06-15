@@ -131,6 +131,7 @@ Le produit sera renommé. La clé persistée doit **survivre** au rebrand, sinon
 - Intérieur des **instances de composants** (overrides) — `clone()` joue avec les masters (doc ambiguë).
 - **Variables/tokens**, **prototyping**, **contraintes**, **masques**, **booleans** — non capturés au snapshot.
 - **Position en auto-layout** : calculée, non assignable → on réconcilie l'**ordre**, pas le x/y (le restore le gère déjà).
+- **Rich text (style par plage)** — LIMITE CONNUE (constatée en test le 2026-06-14) : le snapshot capture le style texte au niveau **nœud** (une couleur, une police). Le texte Figma multi-couleur / multi-police (style par *plage de caractères*) tombe à `figma.mixed` → **non capturé → non restauré** (le contenu, espaces/newlines inclus, l'est). Vrai fix = capturer/restaurer par segment (`getStyledTextSegments` + `setRange*`) → **projet « fidélité rich-text » dédié**, post-SP1. Un garde-fou charge déjà toutes les polices du nœud avant mutation (évite le throw « unloaded font »).
 
 **Classes de conflit (merge)** : `changed/changed` (même prop, valeurs différentes), `deleted/modified`, `moved/moved` (reparent divergent). Résolution **manuelle visuelle**.
 
