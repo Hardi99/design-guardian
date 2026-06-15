@@ -54,3 +54,22 @@ Détection → Consignation (fiche `INC-XXX`) → Analyse → Correctif (branche
 | Support N1→N4 | 🟡 simulé (projet solo) |
 
 > **Reste infra (post-oral)** : déployer Loki, ajouter le prompt NPS in-app, instrumenter la rétention. Sur le **plan** (ce que BC04 évalue), le bloc est couvert.
+
+## 4. Durcissement sécurité & perf de la base (audit `get_advisors`)
+
+Audit du linter Supabase (`get_advisors` security + performance) le 2026-06-11, corrigé par la **migration `010_security_perf_hardening.sql`**.
+
+| Constat | Niveau | Correctif (migration 010) | Statut |
+|---|---|---|---|
+| Vue `version_tree` `SECURITY DEFINER` → **fuite cross-tenant** (contournait la RLS, lisible par `anon`) | 🔴 ERROR | `DROP VIEW` (inutilisée — l'arbre est reconstruit en code via `parent_id`) | ✅ |
+| 14 policies RLS ré-évaluant `auth.uid()` **par ligne** | 🟠 perf | `(select auth.uid())` (éval. une seule fois) — gain montée en charge | ✅ |
+| `search_path` mutable sur 3 fonctions (vecteur d'escalade) | 🟠 sécu | `SET search_path = ''` + qualification `public.*` | ✅ |
+| `handle_new_user` (SECURITY DEFINER) appelable en RPC par `anon` | 🟠 sécu | `REVOKE EXECUTE` | ✅ |
+| FK `versions.approved_by` non indexée | 🟠 perf | `CREATE INDEX` | ✅ |
+| Colonnes mortes `is_approved` / `file_size` | 🧹 dette | `DROP COLUMN` (`status` = source de vérité) | ✅ |
+
+**Résultat : 1 ERROR + 14 WARN perf → 0.**
+
+### Reste (post-oral / commercialisation)
+- 🟡 **Leaked password protection** (vérif HaveIBeenPwned) : **réservé au plan Supabase Pro+** — à activer au passage en Pro (Dashboard → Authentication). Mitigation gratuite en attendant : politique de mot de passe renforcée + auth principale OAuth Google (sans mot de passe). Cf. [[project_security_version_tree_leak]].
+- 🟡 **Exposition GraphQL des tables à `anon`** (8 WARN, discoverability du schéma — **pas une fuite**, RLS active) : optionnel, `REVOKE SELECT … FROM anon` sur `assets/profiles/projects/versions` (ne PAS révoquer `authenticated`, utilisé par la webapp).
