@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { timeAgo } from './utils.js'
+import { timeAgo, decodeBase64Utf8 } from './utils.js'
 
 const NOW = new Date('2026-05-25T12:00:00Z').getTime()
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -35,4 +35,20 @@ describe('timeAgo', () => {
   // ── Frontières exactes ──────────────────────────────────────────────────────
   it('60min - 1s → encore en minutes', () => expect(timeAgo(ago(min(60) - 1000))).toBe('il y a 59min'))
   it('60min      → bascule en heures',  () => expect(timeAgo(ago(min(60)))).toBe('il y a 1h'))
+})
+
+describe('decodeBase64Utf8', () => {
+  const b64 = (s: string) => Buffer.from(s, 'utf-8').toString('base64')
+
+  it('décode de l\'ASCII', () => expect(decodeBase64Utf8(b64('hi'))).toBe('hi'))
+
+  it('décode de l\'UTF-8 multioctet (là où atob seul corromprait)', () => {
+    const s = 'café résumé €'
+    expect(decodeBase64Utf8(b64(s))).toBe(s)
+  })
+
+  it('décode un SVG accentué (le cas W3)', () => {
+    const svg = '<text>déjà vu — ©</text>'
+    expect(decodeBase64Utf8(b64(svg))).toBe(svg)
+  })
 })
