@@ -30,3 +30,27 @@ export function ensureNodeIdentity(node: IdentifiableNode): string {
 export function readDgId(node: IdentifiableNode): string {
   return node.getPluginData(IDENTITY_KEY) || '';
 }
+
+/** Nœud arborescent (un nœud + ses enfants) — sous-ensemble structurel de SceneNode. */
+export interface BranchNode extends IdentifiableNode {
+  readonly children?: readonly BranchNode[];
+}
+
+/**
+ * Propage l'identité de l'arbre `original` vers l'arbre `clone` (créé par `node.clone()`,
+ * structurellement identique). Chaque nœud cloné reçoit le `dg_id` de son homologue
+ * (→ correspondance cross-branche) MAIS `owner = son propre id` : il *possède* la clé,
+ * donc `decideStamp` ne le prendra pas pour une copie à re-minter. Apparie par index.
+ */
+export function propagateIdentity(original: BranchNode, clone: BranchNode): void {
+  const dgId = ensureNodeIdentity(original); // garantit que l'original a un dg_id
+  try {
+    clone.setPluginData(IDENTITY_KEY, dgId);
+    clone.setPluginData(OWNER_KEY, clone.id);
+  } catch { /* viewer read-only */ }
+
+  const oc = original.children ?? [];
+  const cc = clone.children ?? [];
+  const n = Math.min(oc.length, cc.length);
+  for (let i = 0; i < n; i++) propagateIdentity(oc[i], cc[i]);
+}
