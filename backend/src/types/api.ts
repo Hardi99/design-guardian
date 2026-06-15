@@ -76,6 +76,7 @@ const figmaEffectSchema = z.object({
 });
 const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
   z.object({
+    dg_id: z.string().optional(),
     id: z.string(), name: z.string(), type: z.string(),
     x: z.number(), y: z.number(), width: z.number(), height: z.number(),
     opacity: z.number(),

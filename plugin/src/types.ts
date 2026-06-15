@@ -29,6 +29,7 @@ export interface FigmaEffect {
 }
 
 export interface NodeSnapshot {
+  dg_id?: string; // identité stable (cf. spec §5) — optionnel le temps de la migration
   id: string; name: string; type: string;
   x: number; y: number; width: number; height: number; opacity: number;
   visible?: boolean;

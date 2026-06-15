@@ -4,6 +4,7 @@
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps } from './restoreDiff.js';
+import { ensureNodeIdentity } from './figmaIdentity.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -108,6 +109,17 @@ async function restoreFont(t: TextNode, snap: NodeSnapshot): Promise<void> {
   }
 }
 
+// Charge TOUTES les polices présentes dans un nœud texte. Figma exige que chaque
+// police soit chargée avant de muter characters/fontName/fontSize — sinon "unloaded
+// font" → throw (W4 : restore multi-police). Résilient aux polices indisponibles.
+async function loadNodeFonts(t: TextNode): Promise<void> {
+  const len = t.characters.length;
+  const fonts: FontName[] = len > 0
+    ? t.getRangeAllFontNames(0, len)
+    : [typeof t.fontName !== 'symbol' && !Array.isArray(t.fontName) ? t.fontName as FontName : { family: 'Inter', style: 'Regular' }];
+  await Promise.all(fonts.map(f => figma.loadFontAsync(f).catch(() => { /* police indisponible — on ignore */ })));
+}
+
 // Single source of truth for applying a node's stored properties.
 // Restore passes the full set; every property the snapshot holds is covered here.
 async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<string>): Promise<void> {
@@ -172,6 +184,15 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
     (node as BlendMixin).effects = effects;
   }
 
+  // Sécurité multi-police (W4) : charger toutes les polices du nœud AVANT toute
+  // mutation texte, sinon Figma throw "unloaded font" et le restore du nœud échoue.
+  // LIMITE CONNUE : le snapshot ne stocke le style texte qu'au niveau nœud (1 couleur,
+  // 1 police). Le rich text (couleur/police PAR PLAGE) n'est pas capturé → non restauré.
+  // Vrai fix = getStyledTextSegments + setRange* (projet « fidélité rich-text » post-SP1).
+  if (node.type === 'TEXT' && (props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle') || props.has('characters') || props.has('fontSize'))) {
+    await loadNodeFonts(node as TextNode);
+  }
+
   // Font family / weight / style — must be restored before characters or fontSize
   if ((props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle')) && node.type === 'TEXT') {
     await restoreFont(node as TextNode, snap);
@@ -218,7 +239,7 @@ async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: M
       await applyDeltaProps(node, snap, toApply);
       applied++;
     }
-  } catch { skipped++; }
+  } catch (e) { skipped++; console.warn('[DG] restore: nœud sauté', node.id, node.type, e); }
 
   if ('children' in node && snap.children) {
     for (const childSnap of snap.children) {
@@ -361,6 +382,7 @@ function extractRotation(node: SceneNode): number {
 
 function extractSnapshot(node: SceneNode): NodeSnapshot {
   return {
+    dg_id: ensureNodeIdentity(node),
     id: node.id,
     name: node.name,
     type: node.type,
