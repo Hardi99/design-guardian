@@ -3,8 +3,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
-import { changedProps } from './restoreDiff.js';
-import { ensureNodeIdentity, propagateIdentity, type BranchNode } from './figmaIdentity.js';
+import { changedProps, pickMatch } from './restoreDiff.js';
+import { ensureNodeIdentity, propagateIdentity, readDgId, type BranchNode } from './figmaIdentity.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -242,8 +242,18 @@ async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: M
   } catch (e) { skipped++; console.warn('[DG] restore: nœud sauté', node.id, node.type, e); }
 
   if ('children' in node && snap.children) {
+    // Index une seule fois (O(n), corrige W5) : par dg_id (identité stable, marche
+    // cross-branche grâce à la propagation) + par node.id (repli legacy).
+    const liveChildren = (node as ChildrenMixin).children as readonly SceneNode[];
+    const byDgId = new Map<string, SceneNode>();
+    const byId = new Map<string, SceneNode>();
+    for (const c of liveChildren) {
+      const d = readDgId(c);
+      if (d) byDgId.set(d, c);
+      byId.set(c.id, c);
+    }
     for (const childSnap of snap.children) {
-      const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
+      const match = pickMatch(childSnap, byDgId, byId);
       if (match) {
         const r = await applyFullSnapshot(match, childSnap, currMap, false);
         applied += r.applied; skipped += r.skipped;
