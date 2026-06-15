@@ -4,7 +4,7 @@
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps } from './restoreDiff.js';
-import { ensureNodeIdentity } from './figmaIdentity.js';
+import { ensureNodeIdentity, propagateIdentity, type BranchNode } from './figmaIdentity.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -515,7 +515,11 @@ async function handleCreateBranch(branchName: string): Promise<void> {
   const newPage = figma.createPage();
   newPage.name = pageName;
   for (const node of figma.currentPage.selection) {
-    newPage.appendChild(node.clone());
+    const clone = node.clone();
+    newPage.appendChild(clone);
+    // Propage l'identité : le clone partage le dg_id de l'original (corrélation
+    // cross-branche) sans dépendre du comportement non documenté de clone()+pluginData.
+    propagateIdentity(node as unknown as BranchNode, clone as unknown as BranchNode);
   }
   figma.currentPage = newPage;
   send({ type: 'BRANCH_CREATED', branchName });
