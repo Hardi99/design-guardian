@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureNodeIdentity, readDgId, propagateIdentity, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, readDgId, propagateIdentity, findByDgId, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
 
 // Faux nœud minimal : implémente uniquement ce que l'adaptateur utilise.
 function fakeNode(id: string, data: Record<string, string> = {}): IdentifiableNode {
@@ -82,5 +82,22 @@ describe('propagateIdentity', () => {
     propagateIdentity(original, clone);
     expect(ccStore.el_uid).toBe('CHILD');
     expect(ccStore.el_owner).toBe('cc-1');
+  });
+});
+
+describe('findByDgId', () => {
+  it('trouve un nœud par dg_id à la racine', () => {
+    const n = fakeTree('a', { el_uid: 'X' });
+    expect(findByDgId([n], 'X')).toBe(n);
+  });
+
+  it('trouve un nœud imbriqué en profondeur', () => {
+    const target = fakeTree('c', { el_uid: 'DEEP' });
+    const root = fakeTree('a', { el_uid: 'ROOT' }, [fakeTree('b', {}, [target])]);
+    expect(findByDgId([root], 'DEEP')).toBe(target);
+  });
+
+  it('renvoie undefined si introuvable', () => {
+    expect(findByDgId([fakeTree('a', { el_uid: 'X' })], 'NOPE')).toBeUndefined();
   });
 });

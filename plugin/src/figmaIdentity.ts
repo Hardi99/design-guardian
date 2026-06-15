@@ -54,3 +54,18 @@ export function propagateIdentity(original: BranchNode, clone: BranchNode): void
   const n = Math.min(oc.length, cc.length);
   for (let i = 0; i < n; i++) propagateIdentity(oc[i], cc[i]);
 }
+
+/**
+ * Cherche dans `roots` (et leurs descendants) le premier nœud dont le `dg_id`
+ * correspond. Sert au restore cross-branche : retrouver, sur la page courante,
+ * le nœud homologue (même `dg_id` propagé au clone) du snapshot à restaurer.
+ */
+export function findByDgId(roots: readonly BranchNode[], dgId: string): BranchNode | undefined {
+  const stack: BranchNode[] = [...roots];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    if (readDgId(n) === dgId) return n;
+    if (n.children) stack.push(...n.children);
+  }
+  return undefined;
+}
