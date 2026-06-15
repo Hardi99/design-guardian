@@ -4,7 +4,7 @@
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps, pickMatch } from './restoreDiff.js';
-import { ensureNodeIdentity, propagateIdentity, readDgId, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -276,15 +276,21 @@ function isOnCurrentPage(node: SceneNode): boolean {
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
 async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
-  // getNodeByIdAsync can throw (not just return null) when the node doesn't exist
+  // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
+  //    getNodeByIdAsync peut throw (pas juste renvoyer null) si le nœud n'existe pas.
   let root: SceneNode | null = null;
   try { root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null; } catch {}
-  // Node exists on the current page (anywhere in the tree, not just a direct child)
-  const onCurrentPage = root !== null && isOnCurrentPage(root);
+  if (root && !isOnCurrentPage(root)) root = null;
 
-  if (onCurrentPage && root) {
-    // Same-branch: restore live-diff — on ne réécrit que ce qui a bougé.
-    // currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
+  // 2. Cross-branch (W2) : retrouver l'homologue sur la page courante par dg_id.
+  //    La propagation (P2) garantit que le clone porte le même dg_id qu'à la capture.
+  if (!root && snapshot.root.dg_id) {
+    root = (findByDgId(figma.currentPage.children as unknown as BranchNode[], snapshot.root.dg_id) as unknown as SceneNode | undefined) ?? null;
+  }
+
+  // 3. Racine trouvée sur la page courante → restore live-diff RÉEL (same- OU cross-branche).
+  //    currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
+  if (root) {
     try {
       const currMap = new Map<string, NodeSnapshot>();
       flattenSnapshot(extractSnapshot(root), currMap);
@@ -297,7 +303,8 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     return;
   }
 
-  // Cross-branch: use exportAsync SVG captured at checkpoint time — no reconstruction.
+  // 4. Dernier recours : aucun nœud homologue (dg_id absent / non trouvé) →
+  //    reconstruction depuis le SVG capturé au checkpoint.
   if (!renderSvgB64) {
     send({ type: 'ERROR', message: 'Pas de visuel stocké pour cette version. Recapturez un checkpoint.' });
     return;
