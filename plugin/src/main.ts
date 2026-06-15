@@ -5,6 +5,7 @@
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps, pickMatch } from './restoreDiff.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
+import { decodeBase64Utf8 } from './utils.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -310,7 +311,7 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     return;
   }
   try {
-    const svgString = atob(renderSvgB64);
+    const svgString = decodeBase64Utf8(renderSvgB64); // W3 : UTF-8 correct (accents) au lieu de atob/Latin-1
     const newNode = figma.createNodeFromSvg(svgString);
     newNode.name = snapshot.figmaNodeName;
 
