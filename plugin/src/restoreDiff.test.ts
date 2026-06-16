@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { changedProps } from './restoreDiff.js';
+import { changedProps, pickMatch } from './restoreDiff.js';
 import type { NodeSnapshot } from './types.js';
 
 // Snapshot minimal de base (champs non testés laissés à des valeurs neutres).
@@ -66,5 +66,27 @@ describe('changedProps', () => {
     const curr = snap({ name: 'A' });
     const prev = snap({ name: 'B' }); // 'name' n'est pas un candidat
     expect(changedProps(curr, prev, CANDIDATES).has('name')).toBe(false);
+  });
+});
+
+describe('pickMatch', () => {
+  it('priorité au dg_id', () => {
+    const byDgId = new Map([['D1', 'parDgId']]);
+    const byId = new Map([['I1', 'parId']]);
+    expect(pickMatch({ dg_id: 'D1', id: 'I1' }, byDgId, byId)).toBe('parDgId');
+  });
+
+  it('repli sur id si le dg_id est absent du map (legacy / nœud non stampé côté live)', () => {
+    const byId = new Map([['I1', 'parId']]);
+    expect(pickMatch({ dg_id: 'Dx', id: 'I1' }, new Map<string, string>(), byId)).toBe('parId');
+  });
+
+  it('repli sur id si le snapshot n\'a pas de dg_id', () => {
+    const byId = new Map([['I1', 'parId']]);
+    expect(pickMatch({ id: 'I1' }, new Map<string, string>(), byId)).toBe('parId');
+  });
+
+  it('undefined si aucun match', () => {
+    expect(pickMatch({ id: 'Ix' }, new Map<string, string>(), new Map<string, string>())).toBeUndefined();
   });
 });

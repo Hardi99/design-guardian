@@ -38,3 +38,17 @@ export function changedProps(
   }
   return changed;
 }
+
+/**
+ * Sélectionne le nœud live correspondant à un nœud du snapshot.
+ * Priorité au **`dg_id`** (identité stable, marche cross-branche), repli sur le
+ * **`node.id`** Figma (legacy / nœuds pas encore stampés). Logique pure ; les index
+ * `byDgId`/`byId` sont construits une seule fois côté appelant (O(n), corrige W5).
+ */
+export function pickMatch<T>(
+  snap: { dg_id?: string; id: string },
+  byDgId: Map<string, T>,
+  byId: Map<string, T>,
+): T | undefined {
+  return (snap.dg_id ? byDgId.get(snap.dg_id) : undefined) ?? byId.get(snap.id);
+}

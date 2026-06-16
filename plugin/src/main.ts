@@ -3,8 +3,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
-import { changedProps } from './restoreDiff.js';
-import { ensureNodeIdentity } from './figmaIdentity.js';
+import { changedProps, pickMatch } from './restoreDiff.js';
+import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
+import { decodeBase64Utf8 } from './utils.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -242,8 +243,18 @@ async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: M
   } catch (e) { skipped++; console.warn('[DG] restore: nœud sauté', node.id, node.type, e); }
 
   if ('children' in node && snap.children) {
+    // Index une seule fois (O(n), corrige W5) : par dg_id (identité stable, marche
+    // cross-branche grâce à la propagation) + par node.id (repli legacy).
+    const liveChildren = (node as ChildrenMixin).children as readonly SceneNode[];
+    const byDgId = new Map<string, SceneNode>();
+    const byId = new Map<string, SceneNode>();
+    for (const c of liveChildren) {
+      const d = readDgId(c);
+      if (d) byDgId.set(d, c);
+      byId.set(c.id, c);
+    }
     for (const childSnap of snap.children) {
-      const match = (node as ChildrenMixin).children.find(c => c.id === childSnap.id) as SceneNode | undefined;
+      const match = pickMatch(childSnap, byDgId, byId);
       if (match) {
         const r = await applyFullSnapshot(match, childSnap, currMap, false);
         applied += r.applied; skipped += r.skipped;
@@ -266,15 +277,21 @@ function isOnCurrentPage(node: SceneNode): boolean {
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
 async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
-  // getNodeByIdAsync can throw (not just return null) when the node doesn't exist
+  // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
+  //    getNodeByIdAsync peut throw (pas juste renvoyer null) si le nœud n'existe pas.
   let root: SceneNode | null = null;
   try { root = await figma.getNodeByIdAsync(snapshot.figmaNodeId) as SceneNode | null; } catch {}
-  // Node exists on the current page (anywhere in the tree, not just a direct child)
-  const onCurrentPage = root !== null && isOnCurrentPage(root);
+  if (root && !isOnCurrentPage(root)) root = null;
 
-  if (onCurrentPage && root) {
-    // Same-branch: restore live-diff — on ne réécrit que ce qui a bougé.
-    // currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
+  // 2. Cross-branch (W2) : retrouver l'homologue sur la page courante par dg_id.
+  //    La propagation (P2) garantit que le clone porte le même dg_id qu'à la capture.
+  if (!root && snapshot.root.dg_id) {
+    root = (findByDgId(figma.currentPage.children as unknown as BranchNode[], snapshot.root.dg_id) as unknown as SceneNode | undefined) ?? null;
+  }
+
+  // 3. Racine trouvée sur la page courante → restore live-diff RÉEL (same- OU cross-branche).
+  //    currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
+  if (root) {
     try {
       const currMap = new Map<string, NodeSnapshot>();
       flattenSnapshot(extractSnapshot(root), currMap);
@@ -287,13 +304,14 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
     return;
   }
 
-  // Cross-branch: use exportAsync SVG captured at checkpoint time — no reconstruction.
+  // 4. Dernier recours : aucun nœud homologue (dg_id absent / non trouvé) →
+  //    reconstruction depuis le SVG capturé au checkpoint.
   if (!renderSvgB64) {
     send({ type: 'ERROR', message: 'Pas de visuel stocké pour cette version. Recapturez un checkpoint.' });
     return;
   }
   try {
-    const svgString = atob(renderSvgB64);
+    const svgString = decodeBase64Utf8(renderSvgB64); // W3 : UTF-8 correct (accents) au lieu de atob/Latin-1
     const newNode = figma.createNodeFromSvg(svgString);
     newNode.name = snapshot.figmaNodeName;
 
@@ -515,7 +533,11 @@ async function handleCreateBranch(branchName: string): Promise<void> {
   const newPage = figma.createPage();
   newPage.name = pageName;
   for (const node of figma.currentPage.selection) {
-    newPage.appendChild(node.clone());
+    const clone = node.clone();
+    newPage.appendChild(clone);
+    // Propage l'identité : le clone partage le dg_id de l'original (corrélation
+    // cross-branche) sans dépendre du comportement non documenté de clone()+pluginData.
+    propagateIdentity(node as unknown as BranchNode, clone as unknown as BranchNode);
   }
   figma.currentPage = newPage;
   send({ type: 'BRANCH_CREATED', branchName });
