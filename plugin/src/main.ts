@@ -250,7 +250,10 @@ async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: M
     }
   } catch (e) { skipped++; console.warn('[DG] restore: nœud sauté', node.id, node.type, e); }
 
-  if ('children' in node && snap.children) {
+  // Les enfants d'une INSTANCE sont verrouillés par Figma (« cannot be overridden
+  // in an instance ») et suivent la transform de l'instance — déjà restaurée ci-dessus.
+  // On ne descend donc pas dedans : c'est correct (pas une perte) et ça évite des erreurs.
+  if ('children' in node && snap.children && node.type !== 'INSTANCE') {
     // Index une seule fois (O(n), corrige W5) : par dg_id (identité stable, marche
     // cross-branche grâce à la propagation) + par node.id (repli legacy).
     const liveChildren = (node as ChildrenMixin).children as readonly SceneNode[];
