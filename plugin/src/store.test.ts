@@ -82,6 +82,18 @@ describe('setAsset', () => {
     getState().setAsset(null)
     expect(getState().asset).toBeNull()
   })
+
+  it('réinitialise la branche à main (les branches sont par-asset, pas globales)', () => {
+    getState().setBranch('feat/x')
+    getState().setAsset({ id: 'a2', name: 'Autre', asset_type: 'ui' })
+    expect(getState().branch).toBe('main')
+  })
+
+  it('désélectionner réinitialise aussi la branche (évite la branche fantôme)', () => {
+    getState().setBranch('feat/x')
+    getState().setAsset(null)
+    expect(getState().branch).toBe('main')
+  })
 })
 
 describe('setBranch', () => {
