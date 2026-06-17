@@ -52,3 +52,34 @@ export function pickMatch<T>(
 ): T | undefined {
   return (snap.dg_id ? byDgId.get(snap.dg_id) : undefined) ?? byId.get(snap.id);
 }
+
+export type LayoutSizing = 'FIXED' | 'HUG' | 'FILL';
+
+export interface ResizePlan {
+  hSizing?: LayoutSizing;                      // mode de dimensionnement horizontal à poser (auto-layout)
+  vSizing?: LayoutSizing;                       // mode de dimensionnement vertical à poser (auto-layout)
+  resize?: { width: number; height: number };   // resize absolu à appliquer
+}
+
+/**
+ * Décide COMMENT redimensionner un nœud au restore (logique pure).
+ *
+ * - **Hors auto-layout** : resize absolu classique.
+ * - **En auto-layout** : la taille d'un enfant est régie par son *mode* (`FIXED`/`HUG`/`FILL`).
+ *   On restaure le mode capturé par axe, puis on demande le resize : Figma l'applique aux
+ *   axes `FIXED` et l'ignore sur `HUG`/`FILL` (recalculés). Corrige le bug « resize skippé en
+ *   auto-layout » (ex. logo figé qui ne revenait pas à sa taille).
+ * - **En auto-layout SANS info de sizing** (snapshot legacy) : on ne touche à rien (conservateur,
+ *   évite de casser un layout responsive dont on ignore les modes).
+ */
+export function planResize(
+  snap: { width: number; height: number; layoutSizingHorizontal?: LayoutSizing; layoutSizingVertical?: LayoutSizing },
+  inAutoLayout: boolean,
+): ResizePlan {
+  if (!inAutoLayout) return { resize: { width: snap.width, height: snap.height } };
+  if (snap.layoutSizingHorizontal === undefined && snap.layoutSizingVertical === undefined) return {};
+  const plan: ResizePlan = { resize: { width: snap.width, height: snap.height } };
+  if (snap.layoutSizingHorizontal !== undefined) plan.hSizing = snap.layoutSizingHorizontal;
+  if (snap.layoutSizingVertical !== undefined) plan.vSizing = snap.layoutSizingVertical;
+  return plan;
+}

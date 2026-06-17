@@ -36,6 +36,9 @@ export interface NodeSnapshot {
   rotation?: number;
   fills: FigmaFill[]; strokes: FigmaStroke[];
   strokeWeight?: number; cornerRadius?: number;
+  // Auto-layout : mode de dimensionnement de l'enfant (pour restaurer le resize en auto-layout)
+  layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
+  layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific

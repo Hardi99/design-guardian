@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { changedProps, pickMatch } from './restoreDiff.js';
+import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import type { NodeSnapshot } from './types.js';
 
 // Snapshot minimal de base (champs non testés laissés à des valeurs neutres).
@@ -88,5 +88,29 @@ describe('pickMatch', () => {
 
   it('undefined si aucun match', () => {
     expect(pickMatch({ id: 'Ix' }, new Map<string, string>(), new Map<string, string>())).toBeUndefined();
+  });
+});
+
+describe('planResize', () => {
+  it('hors auto-layout → resize absolu, pas de sizing', () => {
+    expect(planResize({ width: 100, height: 50 }, false)).toEqual({ resize: { width: 100, height: 50 } });
+  });
+
+  it('auto-layout, enfant FIXED/FIXED → pose FIXED + resize (cas du logo)', () => {
+    const snap = { width: 367, height: 118, layoutSizingHorizontal: 'FIXED' as const, layoutSizingVertical: 'FIXED' as const };
+    expect(planResize(snap, true)).toEqual({
+      hSizing: 'FIXED', vSizing: 'FIXED', resize: { width: 367, height: 118 },
+    });
+  });
+
+  it('auto-layout, axe HUG + axe FIXED → restaure chaque mode, resize (ignoré par Figma sur HUG)', () => {
+    const snap = { width: 200, height: 80, layoutSizingHorizontal: 'HUG' as const, layoutSizingVertical: 'FIXED' as const };
+    expect(planResize(snap, true)).toEqual({
+      hSizing: 'HUG', vSizing: 'FIXED', resize: { width: 200, height: 80 },
+    });
+  });
+
+  it('auto-layout, snapshot legacy sans info de sizing → ne touche à rien (conservateur)', () => {
+    expect(planResize({ width: 100, height: 50 }, true)).toEqual({});
   });
 });

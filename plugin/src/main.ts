@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
-import { changedProps, pickMatch } from './restoreDiff.js';
+import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 
@@ -138,8 +138,16 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
     (node as { x: number; y: number }).x = snap.x - parentAbsX;
     (node as { x: number; y: number }).y = snap.y - parentAbsY;
   }
-  if ((props.has('width') || props.has('height')) && !inAutoLayout && 'resize' in node)
-    (node as LayoutMixin).resize(snap.width, snap.height);
+  if ((props.has('width') || props.has('height')) && 'resize' in node) {
+    // En auto-layout, la taille dépend du mode de l'enfant (FIXED/HUG/FILL) : on restaure
+    // le mode puis on resize (Figma applique aux axes FIXED, ignore HUG/FILL). Hors auto-layout,
+    // resize absolu classique. Chaque écriture est guardée (modes parfois non assignables).
+    const plan = planResize(snap, inAutoLayout);
+    const n = node as unknown as Record<string, unknown>;
+    if (plan.hSizing && 'layoutSizingHorizontal' in node) { try { n.layoutSizingHorizontal = plan.hSizing; } catch { /* non assignable */ } }
+    if (plan.vSizing && 'layoutSizingVertical' in node)   { try { n.layoutSizingVertical = plan.vSizing; } catch { /* non assignable */ } }
+    if (plan.resize) { try { (node as LayoutMixin).resize(plan.resize.width, plan.resize.height); } catch { /* contraint par le layout */ } }
+  }
   if (props.has('opacity')  && 'opacity' in node) (node as BlendMixin).opacity = snap.opacity;
   if (props.has('visible'))                       node.visible = snap.visible ?? true;
   if (props.has('rotation') && 'rotation' in node && snap.rotation !== undefined)
@@ -242,7 +250,10 @@ async function applyFullSnapshot(node: SceneNode, snap: NodeSnapshot, currMap: M
     }
   } catch (e) { skipped++; console.warn('[DG] restore: nœud sauté', node.id, node.type, e); }
 
-  if ('children' in node && snap.children) {
+  // Les enfants d'une INSTANCE sont verrouillés par Figma (« cannot be overridden
+  // in an instance ») et suivent la transform de l'instance — déjà restaurée ci-dessus.
+  // On ne descend donc pas dedans : c'est correct (pas une perte) et ça évite des erreurs.
+  if ('children' in node && snap.children && node.type !== 'INSTANCE') {
     // Index une seule fois (O(n), corrige W5) : par dg_id (identité stable, marche
     // cross-branche grâce à la propagation) + par node.id (repli legacy).
     const liveChildren = (node as ChildrenMixin).children as readonly SceneNode[];
@@ -389,6 +400,20 @@ function safeStr(v: unknown): string | undefined {
   return typeof v === 'symbol' ? undefined : (v as string);
 }
 
+// Lecture guardée du mode de dimensionnement auto-layout. Le getter n'existe/ne
+// s'applique que sur un enfant direct d'un frame auto-layout (sinon throw) → try/catch.
+function extractLayoutSizing(
+  node: SceneNode,
+  key: 'layoutSizingHorizontal' | 'layoutSizingVertical',
+): 'FIXED' | 'HUG' | 'FILL' | undefined {
+  try {
+    const v = (node as unknown as Record<string, unknown>)[key];
+    return v === 'FIXED' || v === 'HUG' || v === 'FILL' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function extractRotation(node: SceneNode): number {
   // absoluteTransform row 0: [cos(θ), -sin(θ), tx] — note the negative sin
   // atan2(-sin(θ), cos(θ)) = -θ, so we negate to get the actual clockwise angle
@@ -415,6 +440,8 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     strokes:  extractStrokes(node),
     strokeWeight: safeNum('strokeWeight' in node ? (node as { strokeWeight: number | symbol }).strokeWeight : undefined),
     cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
+    layoutSizingHorizontal: extractLayoutSizing(node, 'layoutSizingHorizontal'),
+    layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
     characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,
