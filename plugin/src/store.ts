@@ -69,7 +69,9 @@ export const appStore = createStore<AppState>()((set) => ({
   setApiKey:      (apiKey)                 => set({ apiKey }),
   setPlan:        (plan)                   => set({ plan }),
   setAuthor:      (author)                 => set({ author }),
-  setAsset:       (asset)                  => set({ asset }),
+  // Changer d'asset réinitialise la branche : les branches sont PAR-asset, pas
+  // globales. Sans ça, un nouvel asset hérite de la branche de l'ancien (bug fantôme).
+  setAsset:       (asset)                  => set({ asset, branch: 'main' }),
   setBranch:      (branch)                 => set({ branch }),
   setSnapshot:    (snapshot, renderSvgB64) => set({ snapshot, renderSvgB64 }),
   setInitErr:     (initErr)                => set({ initErr }),
