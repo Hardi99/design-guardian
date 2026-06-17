@@ -86,6 +86,8 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     strokes: z.array(figmaStrokeSchema),
     strokeWeight: z.number().optional(),
     cornerRadius: z.number().optional(),
+    layoutSizingHorizontal: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
+    layoutSizingVertical: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
     effects: z.array(figmaEffectSchema).optional(),
     characters: z.string().optional(),
     fontSize: z.number().optional(),
