@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { DeltaJSON } from '../types/figma.js';
+import { rankDelta } from './significance.service.js';
 
 export class OpenAIService {
   private client: OpenAI;
@@ -41,33 +42,37 @@ export class OpenAIService {
   }
 
   private buildPrompt(delta: DeltaJSON, authorName: string): string {
+    const ranked = rankDelta(delta);
     const lines: string[] = [
       `Auteur du checkpoint : ${authorName}`,
       `Total changements : ${delta.totalChanges}`,
       '',
     ];
 
-    if (delta.modified.length > 0) {
-      lines.push('Éléments modifiés :');
-      for (const node of delta.modified.slice(0, 8)) {
-        const changeList = node.changes.map(c => `  - ${c.property} : ${c.delta ?? `${String(c.oldValue)} -> ${String(c.newValue)}`}`).join('\n');
+    if (ranked.notableModified.length > 0) {
+      lines.push('Changements notables :');
+      for (const node of ranked.notableModified.slice(0, 8)) {
+        const changeList = node.changes
+          .map(c => `  - ${c.property} : ${c.delta ?? `${String(c.oldValue)} -> ${String(c.newValue)}`}`)
+          .join('\n');
         lines.push(`• "${node.nodeName}" (${node.nodeType}) :\n${changeList}`);
       }
     }
 
-    if (delta.added.length > 0) {
-      lines.push(`\nÉléments ajoutés : ${delta.added.map(n => `"${n.nodeName}"`).join(', ')}`);
+    if (ranked.added.length > 0) {
+      lines.push(`\nÉléments ajoutés : ${ranked.added.map(n => `"${n.nodeName}"`).join(', ')}`);
     }
-
-    if (delta.removed.length > 0) {
-      lines.push(`\nÉléments supprimés : ${delta.removed.map(n => `"${n.nodeName}"`).join(', ')}`);
+    if (ranked.removed.length > 0) {
+      lines.push(`\nÉléments supprimés : ${ranked.removed.map(n => `"${n.nodeName}"`).join(', ')}`);
+    }
+    if (ranked.minorCount > 0) {
+      lines.push(`\nAjustements mineurs (sous-perceptuels) : ${ranked.minorCount} élément(s) — à mentionner groupés.`);
     }
 
     lines.push(
-      '\nGénère un patch note en français, style changelog, format :',
-      '@[Auteur] a modifié X propriété(s) :',
-      '- [propriété] : [ancienne valeur] -> [nouvelle valeur]',
-      'Maximum 5 lignes. Factuel et précis.',
+      '\nGénère un patch note en français, style changelog.',
+      'Mets en AVANT les changements notables ; regroupe les ajustements mineurs en UNE ligne du type "(+ N ajustements mineurs)".',
+      'Maximum 5 lignes. Factuel, ne jamais inventer.',
     );
 
     return lines.join('\n');

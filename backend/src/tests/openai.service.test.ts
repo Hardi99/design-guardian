@@ -160,3 +160,27 @@ describe('OpenAIService – prompt content', () => {
     expect(sysMsg).toContain('français');
   });
 });
+
+describe('OpenAIService – changelog hiérarchisé', () => {
+  it('le prompt met les notables avant le regroupement des mineurs', async () => {
+    mockCreate.mockClear();
+    mockCreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+    const svc = new OpenAIService('test-key');
+    const delta = makeDelta({
+      totalChanges: 2,
+      modified: [
+        makeModifiedNode('Header', [{ property: 'fills', oldValue: 'a', newValue: 'b' }]),       // notable
+        makeModifiedNode('Box',    [{ property: 'x', oldValue: 0, newValue: 0.3, delta: '+0.30px' }]), // minor
+      ],
+    });
+    await svc.generatePatchNote(delta, 'Alice');
+    const prompt = (mockCreate.mock.lastCall![0].messages as Array<{ role: string; content: string }>)
+      .find(m => m.role === 'user')!.content;
+
+    expect(prompt).toContain('Changements notables');
+    expect(prompt).toContain('Header');
+    expect(prompt).toMatch(/mineur/i);
+    // le notable apparaît avant le bloc mineur
+    expect(prompt.indexOf('Header')).toBeLessThan(prompt.search(/mineur/i));
+  });
+});
