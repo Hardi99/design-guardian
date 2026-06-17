@@ -1,4 +1,4 @@
-import type { PropertyChange } from '../types/figma.js';
+import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
 export type Significance = 'notable' | 'minor';
 
@@ -37,4 +37,32 @@ export function scoreChange(change: PropertyChange): Significance {
   const mag = magnitude(change);
   if (mag === null) return 'notable';
   return mag >= threshold ? 'notable' : 'minor';
+}
+
+export interface RankedDelta {
+  notableModified: NodeDelta[]; // nœuds modifiés avec ≥1 changement notable
+  minorModified: NodeDelta[];   // nœuds modifiés uniquement mineurs
+  added: NodeDelta[];           // toujours notables (pass-through)
+  removed: NodeDelta[];         // toujours notables (pass-through)
+  minorCount: number;           // = minorModified.length
+}
+
+/**
+ * Partitionne un DeltaJSON pour l'affichage hiérarchisé. NON-DESTRUCTIF :
+ * lit le delta sans le muter (le diff 0.01px reste intact ailleurs).
+ */
+export function rankDelta(delta: DeltaJSON): RankedDelta {
+  const notableModified: NodeDelta[] = [];
+  const minorModified: NodeDelta[] = [];
+  for (const n of delta.modified) {
+    const hasNotable = n.changes.some(c => scoreChange(c) === 'notable');
+    (hasNotable ? notableModified : minorModified).push(n);
+  }
+  return {
+    notableModified,
+    minorModified,
+    added: delta.added,
+    removed: delta.removed,
+    minorCount: minorModified.length,
+  };
 }
