@@ -2,6 +2,20 @@ import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
 export type Significance = 'notable' | 'minor';
 
+export interface LayoutContext {
+  layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
+  layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE';
+}
+
+// Un nœud est enfant de FLUX auto-layout (position recalculée par le moteur) ssi
+// il a un mode de sizing (Figma ne le renseigne que pour les enfants d'auto-layout)
+// ET n'est pas en position absolue (un enfant absolu garde une position authored).
+function isFlowChild(ctx: LayoutContext): boolean {
+  const hasSizing = ctx.layoutSizingHorizontal !== undefined || ctx.layoutSizingVertical !== undefined;
+  return hasSizing && ctx.layoutPositioning !== 'ABSOLUTE';
+}
+
 // Propriétés qualitatives : tout changement est notable (couleur, texte, structure…).
 const QUALITATIVE = new Set<string>([
   'fills', 'strokes', 'characters', 'visible', 'vectorPaths', 'effects',
@@ -30,7 +44,15 @@ function magnitude(c: PropertyChange): number | null {
  * Biais CONSERVATEUR : propriété inconnue ou valeurs illisibles → 'notable'
  * (dans le doute, on montre — on ne masque jamais un vrai changement).
  */
-export function scoreChange(change: PropertyChange): Significance {
+export function scoreChange(change: PropertyChange, ctx?: LayoutContext): Significance {
+  // Géométrie DÉRIVÉE (recalculée par l'auto-layout) → minor. Les changements authored
+  // (resize FIXED, enfant absolu) tombent dans la logique normale plus bas.
+  if (ctx) {
+    const p = change.property;
+    if ((p === 'x' || p === 'y') && isFlowChild(ctx)) return 'minor';
+    if (p === 'width'  && (ctx.layoutSizingHorizontal === 'FILL' || ctx.layoutSizingHorizontal === 'HUG')) return 'minor';
+    if (p === 'height' && (ctx.layoutSizingVertical   === 'FILL' || ctx.layoutSizingVertical   === 'HUG')) return 'minor';
+  }
   if (QUALITATIVE.has(change.property)) return 'notable';
   const threshold = SIGNIFICANCE_THRESHOLDS[change.property];
   if (threshold === undefined) return 'notable';

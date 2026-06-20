@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scoreChange, rankDelta } from '../services/significance.service.js';
+import type { LayoutContext } from '../services/significance.service.js';
 import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
 const ch = (over: Partial<PropertyChange>): PropertyChange =>
@@ -38,6 +39,36 @@ describe('scoreChange', () => {
 
   it('valeurs non numériques sur prop numérique → conservateur (notable)', () => {
     expect(scoreChange(ch({ property: 'x', oldValue: undefined, newValue: 5 }))).toBe('notable');
+  });
+});
+
+describe('scoreChange — géométrie dérivée (contexte auto-layout)', () => {
+  const flowChild: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO' };
+
+  it('x/y d\'un enfant de flux → minor (position recalculée)', () => {
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), flowChild)).toBe('minor');
+    expect(scoreChange(ch({ property: 'y', oldValue: 0, newValue: 80 }), flowChild)).toBe('minor');
+  });
+
+  it('width sur axe FILL/HUG → minor ; FIXED → notable (authored)', () => {
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'FILL' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'HUG' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'FIXED' })).toBe('notable');
+  });
+
+  it('height via layoutSizingVertical (idem)', () => {
+    expect(scoreChange(ch({ property: 'height', oldValue: 100, newValue: 300 }), { layoutSizingVertical: 'FILL' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'height', oldValue: 100, newValue: 300 }), { layoutSizingVertical: 'FIXED' })).toBe('notable');
+  });
+
+  it('enfant ABSOLU → x/y notable (position authored, pas dérivée)', () => {
+    const abs: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutPositioning: 'ABSOLUTE' };
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), abs)).toBe('notable');
+  });
+
+  it('sans contexte → comportement actuel (non-régression)', () => {
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }))).toBe('notable'); // ≥1px
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 0.2 }))).toBe('minor');  // <1px
   });
 });
 
