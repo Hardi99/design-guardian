@@ -44,7 +44,12 @@ export class DiffService {
 
       const changes = this.compareNodes(v1Node, v2Node);
       if (changes.length > 0) {
-        modified.push({ nodeId: id, nodeName: v2Node.name, nodeType: v2Node.type, changes });
+        modified.push({
+          nodeId: id, nodeName: v2Node.name, nodeType: v2Node.type, changes,
+          layoutSizingHorizontal: v2Node.layoutSizingHorizontal,
+          layoutSizingVertical: v2Node.layoutSizingVertical,
+          layoutPositioning: v2Node.layoutPositioning,
+        });
       }
     }
 
