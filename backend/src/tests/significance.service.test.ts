@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreChange, rankDelta } from '../services/significance.service.js';
+import { scoreChange, rankDelta, nodeIdsToRender } from '../services/significance.service.js';
 import type { LayoutContext } from '../services/significance.service.js';
 import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
@@ -132,5 +132,28 @@ describe('rankDelta — utilise le contexte layout du NodeDelta', () => {
     };
     const r = rankDelta(delta({ modified: [n] }));
     expect(r.notableModified.map(x => x.nodeName)).toEqual(['Logo']);
+  });
+});
+
+describe('nodeIdsToRender', () => {
+  const notable: NodeDelta = { nodeId: 'N', nodeName: 'N', nodeType: 'RECTANGLE', changes: [{ property: 'fill', oldValue: 'a', newValue: 'b' }] };
+  const derived: NodeDelta = {
+    nodeId: 'D', nodeName: 'D', nodeType: 'FRAME',
+    changes: [{ property: 'y', oldValue: 0, newValue: 63 }],
+    layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+  };
+
+  it('ne retient que les notables (+ added/removed), pas les nœuds dérivés', () => {
+    const d = delta({ modified: [notable, derived], added: [node('Add', [])], removed: [node('Rem', [])] });
+    const ids = nodeIdsToRender(d, 100);
+    expect(ids.has('N')).toBe(true);    // notable
+    expect(ids.has('Add')).toBe(true);  // added
+    expect(ids.has('Rem')).toBe(true);  // removed
+    expect(ids.has('D')).toBe(false);   // dérivé (cascade) → pas de crop
+  });
+
+  it('respecte le plafond dur (robuste même si beaucoup de notables)', () => {
+    const many = Array.from({ length: 10 }, (_, i) => node('n' + i, [{ property: 'fill', oldValue: 'a', newValue: 'b' }]));
+    expect(nodeIdsToRender(delta({ modified: many }), 3).size).toBe(3);
   });
 });

@@ -5,11 +5,15 @@ import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../s
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
-import type { FigmaSnapshot } from '../types/figma.js';
+import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
+import { nodeIdsToRender } from '../services/significance.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
 
 const SNAPSHOTS_BUCKET = 'snapshots';
+// Plafond dur de rendus SVG par-nœud dans la vue diff : protège l'endpoint d'un
+// gros delta (cascade auto-layout) qui générerait des centaines de SVG → OOM/500.
+const MAX_NODE_RENDERS = 60;
 
 /**
  * Résout le snapshot d'une version.
@@ -180,12 +184,16 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   }> = [];
 
   if (delta) {
+    // On ne génère un crop SVG que pour les nœuds NOTABLES (+ ajoutés/supprimés),
+    // plafonnés : un gros diff en cascade ne doit pas produire des centaines de SVG.
+    const renderIds = nodeIdsToRender(delta as unknown as DeltaJSON, MAX_NODE_RENDERS);
     for (const nd of delta.modified) {
+      const render = renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
-        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64),
-        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId, svgB64),
+        before_svg_b64: render ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
+        after_svg_b64:  render ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
       });
     }
     for (const nd of delta.added) {
@@ -193,14 +201,14 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added',
         before_svg_b64: null,
-        after_svg_b64:  toNodeSvgB64(currentSnap, nd.nodeId, svgB64),
+        after_svg_b64:  renderIds.has(nd.nodeId) ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
       });
     }
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed',
-        before_svg_b64: toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64),
+        before_svg_b64: renderIds.has(nd.nodeId) ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
         after_svg_b64:  null,
       });
     }
