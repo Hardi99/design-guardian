@@ -89,4 +89,5 @@ export type UIToMain =
   | { type: 'RESIZE'; width: number; height: number }
   | { type: 'CREATE_BRANCH'; branchName: string }
   | { type: 'SWITCH_BRANCH'; branchName: string }
-  | { type: 'RESTORE_TO_FIGMA'; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta };
+  | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
+  | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta };

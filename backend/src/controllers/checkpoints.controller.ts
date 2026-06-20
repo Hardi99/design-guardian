@@ -7,6 +7,7 @@ import { checkpointsCreatedTotal } from '../services/metrics.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import { sendCheckpointNotification } from '../services/notification.service.js';
 import { createCheckpointSchema } from '../types/api.js';
+import { isNodeMismatch } from '../services/node-match.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -86,18 +87,33 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     }
   }
 
-  // 2b. Node consistency — within a branch, all checkpoints must track the same Figma node
+  // 2b. Node consistency — au sein d'une branche, les checkpoints suivent le MÊME élément.
+  //     Identité par dg_id (stable) ; l'id Figma seul est volatil — le restore par clone
+  //     (#42) remplace le nœud par une copie aux nouveaux ids. Mismatch seulement si l'id
+  //     Figma diffère ET le dg_id aussi (sinon = même élément re-cloné).
   if (body.figma_node_id) {
     const { data: prevOnBranch } = await supabase
       .from('versions')
-      .select('figma_node_id')
+      .select('figma_node_id, storage_path')
       .eq('asset_id', body.asset_id)
       .eq('branch_name', body.branch_name)
       .not('figma_node_id', 'is', null)
       .limit(1)
       .maybeSingle();
     if (prevOnBranch?.figma_node_id && prevOnBranch.figma_node_id !== body.figma_node_id) {
-      return c.json<ErrorResponse>({ error: 'Node mismatch: this branch already tracks a different Figma element.' }, 409);
+      // ids Figma différents → on lève l'ambiguïté via le dg_id racine (rare : 1 download).
+      const incomingDgId = (body.snapshot_json as FigmaSnapshot).root.dg_id;
+      let prevDgId: string | undefined;
+      if (prevOnBranch.storage_path) {
+        const prevSnap = await downloadSnapshot(prevOnBranch.storage_path);
+        prevDgId = prevSnap?.root.dg_id;
+      }
+      if (isNodeMismatch(
+        { figmaNodeId: prevOnBranch.figma_node_id, dgId: prevDgId },
+        { figmaNodeId: body.figma_node_id, dgId: incomingDgId },
+      )) {
+        return c.json<ErrorResponse>({ error: 'Node mismatch: this branch already tracks a different Figma element.' }, 409);
+      }
     }
   }
 

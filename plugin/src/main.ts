@@ -4,6 +4,7 @@
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
+import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 
@@ -74,7 +75,8 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
-    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.snapshot, msg.render_svg_b64); break;
+    case 'STORE_HISTORY_CLONE': handleStoreHistoryClone(msg.nodeId, msg.versionId, msg.versionNumber); break;
+    case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.versionId, msg.snapshot, msg.render_svg_b64); break;
   }
 };
 
@@ -287,7 +289,47 @@ function isOnCurrentPage(node: SceneNode): boolean {
 
 // ─── Restore to Figma canvas ──────────────────────────────────────────────────
 
-async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
+// Restore LOSSLESS : re-clone le clone d'historique du checkpoint et remplace le nœud live.
+// Renvoie true si effectué, false si aucun clone (→ l'appelant fait le repli).
+function tryRestoreFromClone(versionId: string): boolean {
+  const page = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
+  if (!page) return false;
+  const cloneId = pickHistoryClone(readHistoryFrames(page), versionId);
+  if (!cloneId) return false;
+  const stored = page.children.find(c => c.id === cloneId);
+  if (!stored || !('clone' in stored)) return false;
+  try {
+    const assetDgId = stored.getPluginData('dg_history_asset');
+    const liveRoots = figma.currentPage.children as unknown as BranchNode[];
+    const live = (assetDgId ? findByDgId(liveRoots, assetDgId) : undefined) as unknown as SceneNode | undefined;
+    const fresh = (stored as SceneNode & { clone(): SceneNode }).clone();
+    fresh.locked = false;
+    // Nettoyer les tags d'historique sur la copie restaurée.
+    for (const k of ['dg_history_pending', 'dg_history_version', 'dg_history_asset', 'dg_history_vnum']) fresh.setPluginData(k, '');
+    if (live && live.parent) {
+      live.parent.appendChild(fresh);
+      (fresh as SceneNode & { x: number; y: number }).x = (live as SceneNode & { x: number }).x;
+      (fresh as SceneNode & { x: number; y: number }).y = (live as SceneNode & { y: number }).y;
+      propagateIdentity(live as unknown as BranchNode, fresh as unknown as BranchNode); // continuité dg_id
+      live.remove();
+    } else {
+      figma.currentPage.appendChild(fresh);
+    }
+    figma.currentPage.selection = [fresh];
+    figma.viewport.scrollAndZoomIntoView([fresh]);
+    return true;
+  } catch (e) {
+    console.log('[DG] restore par clone échec → repli', e);
+    return false;
+  }
+}
+
+async function handleRestoreToFigma(versionId: string | undefined, snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
+  // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
+  if (versionId && tryRestoreFromClone(versionId)) {
+    send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
+    return;
+  }
   // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
   //    getNodeByIdAsync peut throw (pas juste renvoyer null) si le nœud n'existe pas.
   let root: SceneNode | null = null;
@@ -355,6 +397,70 @@ async function handleRestoreToFigma(snapshot: FigmaSnapshot, renderSvgB64?: stri
   }
 }
 
+const HISTORY_PAGE = 'dg/_history';
+const HISTORY_KEEP_N = 5;
+
+function getOrCreateHistoryPage(): PageNode {
+  const existing = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
+  if (existing) return existing;
+  const page = figma.createPage();      // ne change PAS figma.currentPage
+  page.name = HISTORY_PAGE;
+  return page;
+}
+
+function readHistoryFrames(page: PageNode): HistoryFrameInfo[] {
+  return page.children.map(c => {
+    const vnum = c.getPluginData('dg_history_vnum');
+    return {
+      id: c.id,
+      versionId: c.getPluginData('dg_history_version') || undefined,
+      assetId: c.getPluginData('dg_history_asset') || undefined,
+      versionNumber: vnum ? Number(vnum) : undefined,
+    };
+  });
+}
+
+// Phase 2 : le checkpoint est sauvé → finaliser le clone pending (version id + vnum),
+// puis élaguer aux N derniers de l'asset.
+function handleStoreHistoryClone(nodeId: string, versionId: string, versionNumber: number): void {
+  const page = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
+  if (!page) return;
+  const pending = page.children.find(c => c.getPluginData('dg_history_pending') === nodeId);
+  if (!pending) return;
+  try {
+    pending.setPluginData('dg_history_version', versionId);
+    pending.setPluginData('dg_history_vnum', String(versionNumber));
+    pending.setPluginData('dg_history_pending', ''); // finalisé
+    const assetId = pending.getPluginData('dg_history_asset');
+    for (const id of framesToPrune(readHistoryFrames(page), assetId, HISTORY_KEEP_N)) {
+      const f = page.children.find(c => c.id === id);
+      if (f) f.remove();
+    }
+  } catch (e) {
+    console.log('[DG] history clone (finalize) échec', e);
+  }
+}
+
+// Phase 1 : fige l'état exact du nœud capturé en le clonant sur dg/_history,
+// taggé "pending". Finalisé (version id) seulement quand le checkpoint est sauvé.
+function storeHistoryClonePending(node: SceneNode): void {
+  if (!('clone' in node)) return;
+  try {
+    const page = getOrCreateHistoryPage();
+    // Nettoyer un pending orphelin du même nœud (capture précédente non sauvée).
+    for (const c of [...page.children]) {
+      if (c.getPluginData('dg_history_pending') === node.id) c.remove();
+    }
+    const clone = (node as SceneNode & { clone(): SceneNode }).clone();
+    page.appendChild(clone);
+    clone.setPluginData('dg_history_pending', node.id);
+    clone.setPluginData('dg_history_asset', readDgId(node) || node.id);
+    clone.locked = true;
+  } catch (e) {
+    console.log('[DG] history clone (pending) échec', e);
+  }
+}
+
 async function handleSnapshot(): Promise<void> {
   const [node] = figma.currentPage.selection;
   if (!node) { send({ type: 'ERROR', message: 'Sélectionne un élément dans Figma.' }); return; }
@@ -366,6 +472,8 @@ async function handleSnapshot(): Promise<void> {
     capturedAt: new Date().toISOString(),
     root: extractSnapshot(node),
   };
+
+  storeHistoryClonePending(node);
 
   // Pixel-perfect SVG via exportAsync — requires "exports" permission in manifest
   let render_svg_b64: string | undefined;

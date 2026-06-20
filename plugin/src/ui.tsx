@@ -380,7 +380,7 @@ function CheckpointScreen() {
   const save = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
-      const data = await api<{ version: { id: string }; ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
+      const data = await api<{ version: { id: string; version_number: number }; ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
         apiKey, '/api/checkpoints', {
           method: 'POST',
           body: JSON.stringify({
@@ -393,6 +393,8 @@ function CheckpointScreen() {
           }),
         }
       );
+      // Finalise le clone d'historique (capturé en pending au snapshot) → restore lossless.
+      send({ type: 'STORE_HISTORY_CLONE', nodeId: snapshot.figmaNodeId, versionId: data.version.id, versionNumber: data.version.version_number });
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
@@ -527,7 +529,7 @@ function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, vers
     dispatch({ type: 'APPLY_START' });
     try {
       const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${versionId}/snapshot`);
-      send({ type: 'RESTORE_TO_FIGMA', snapshot, render_svg_b64: svgB64 ?? undefined, delta: delta ?? undefined });
+      send({ type: 'RESTORE_TO_FIGMA', versionId, snapshot, render_svg_b64: svgB64 ?? undefined, delta: delta ?? undefined });
     } catch (e) { dispatch({ type: 'APPLY_ERROR', err: (e as Error).message }); }
   }, [apiKey, versionId, svgB64, delta]);
 }
