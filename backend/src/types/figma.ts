@@ -44,6 +44,7 @@ export interface FigmaEffect {
 
 // Snapshot of a single Figma node, extracted in main.ts via native Figma API
 export interface NodeSnapshot {
+  dg_id?: string; // identité stable (survit au restore par clone) — cf. node-match
   id: string;
   name: string;
   type: string;
