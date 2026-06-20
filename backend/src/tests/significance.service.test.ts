@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scoreChange, rankDelta } from '../services/significance.service.js';
+import type { LayoutContext } from '../services/significance.service.js';
 import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
 const ch = (over: Partial<PropertyChange>): PropertyChange =>
@@ -41,6 +42,36 @@ describe('scoreChange', () => {
   });
 });
 
+describe('scoreChange — géométrie dérivée (contexte auto-layout)', () => {
+  const flowChild: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO' };
+
+  it('x/y d\'un enfant de flux → minor (position recalculée)', () => {
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), flowChild)).toBe('minor');
+    expect(scoreChange(ch({ property: 'y', oldValue: 0, newValue: 80 }), flowChild)).toBe('minor');
+  });
+
+  it('width sur axe FILL/HUG → minor ; FIXED → notable (authored)', () => {
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'FILL' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'HUG' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'width', oldValue: 100, newValue: 300 }), { layoutSizingHorizontal: 'FIXED' })).toBe('notable');
+  });
+
+  it('height via layoutSizingVertical (idem)', () => {
+    expect(scoreChange(ch({ property: 'height', oldValue: 100, newValue: 300 }), { layoutSizingVertical: 'FILL' })).toBe('minor');
+    expect(scoreChange(ch({ property: 'height', oldValue: 100, newValue: 300 }), { layoutSizingVertical: 'FIXED' })).toBe('notable');
+  });
+
+  it('enfant ABSOLU → x/y notable (position authored, pas dérivée)', () => {
+    const abs: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutPositioning: 'ABSOLUTE' };
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), abs)).toBe('notable');
+  });
+
+  it('sans contexte → comportement actuel (non-régression)', () => {
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }))).toBe('notable'); // ≥1px
+    expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 0.2 }))).toBe('minor');  // <1px
+  });
+});
+
 const node = (name: string, changes: PropertyChange[]): NodeDelta =>
   ({ nodeId: name, nodeName: name, nodeType: 'RECTANGLE', changes });
 
@@ -78,5 +109,28 @@ describe('rankDelta', () => {
     const before = JSON.stringify(d);
     rankDelta(d);
     expect(JSON.stringify(d)).toBe(before);
+  });
+});
+
+describe('rankDelta — utilise le contexte layout du NodeDelta', () => {
+  it('un nœud dont tous les changements sont dérivés (enfant de flux) → minorModified', () => {
+    const n: NodeDelta = {
+      nodeId: 'Box', nodeName: 'Box', nodeType: 'FRAME',
+      changes: [{ property: 'y', oldValue: 0, newValue: 63 }, { property: 'x', oldValue: 0, newValue: 12 }],
+      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    };
+    const r = rankDelta(delta({ modified: [n] }));
+    expect(r.minorModified.map(x => x.nodeName)).toEqual(['Box']);
+    expect(r.notableModified).toHaveLength(0);
+  });
+
+  it('un resize FIXED reste notable malgré le contexte auto-layout', () => {
+    const n: NodeDelta = {
+      nodeId: 'Logo', nodeName: 'Logo', nodeType: 'RECTANGLE',
+      changes: [{ property: 'width', oldValue: 100, newValue: 300 }],
+      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    };
+    const r = rankDelta(delta({ modified: [n] }));
+    expect(r.notableModified.map(x => x.nodeName)).toEqual(['Logo']);
   });
 });
