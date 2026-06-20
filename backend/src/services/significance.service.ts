@@ -73,6 +73,22 @@ export interface RankedDelta {
  * Partitionne un DeltaJSON pour l'affichage hiérarchisé. NON-DESTRUCTIF :
  * lit le delta sans le muter (le diff 0.01px reste intact ailleurs).
  */
+/**
+ * Ids des nœuds pour lesquels générer un rendu SVG par-nœud (vue diff). On ne rend
+ * QUE les nœuds notables (+ ajoutés/supprimés), plafonné à `cap` : un gros diff en
+ * cascade auto-layout (centaines de décalages dérivés) ne doit PAS générer des
+ * centaines de SVG → protège l'endpoint diff de l'OOM/timeout.
+ */
+export function nodeIdsToRender(delta: DeltaJSON, cap: number): Set<string> {
+  const ranked = rankDelta(delta);
+  const ids = [
+    ...ranked.notableModified.map(n => n.nodeId),
+    ...ranked.added.map(n => n.nodeId),
+    ...ranked.removed.map(n => n.nodeId),
+  ];
+  return new Set(ids.slice(0, Math.max(0, cap)));
+}
+
 export function rankDelta(delta: DeltaJSON): RankedDelta {
   const notableModified: NodeDelta[] = [];
   const minorModified: NodeDelta[] = [];
