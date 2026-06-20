@@ -60,6 +60,10 @@ export interface NodeSnapshot {
   strokes: FigmaStroke[];
   strokeWeight?: number;
   cornerRadius?: number;
+  // Auto-layout (pour la significativité : distinguer géométrie authored vs dérivée)
+  layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
+  layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   effects?: FigmaEffect[];
   // TEXT-specific
   characters?: string;
@@ -96,6 +100,10 @@ export interface NodeDelta {
   nodeName: string;
   nodeType: string;
   changes: PropertyChange[];
+  // Contexte layout (recopié du snapshot v2) — pour la significativité géométrie dérivée
+  layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
+  layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE';
 }
 
 // The complete diff output — stored in analysis_json and sent to OpenAI

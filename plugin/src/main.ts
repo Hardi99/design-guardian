@@ -414,6 +414,17 @@ function extractLayoutSizing(
   }
 }
 
+// Lecture guardée du positionnement auto-layout ('AUTO' = dans le flux, 'ABSOLUTE' = libre).
+// Le getter peut throw hors auto-layout → try/catch. Sert à la significativité (géométrie dérivée).
+function extractLayoutPositioning(node: SceneNode): 'AUTO' | 'ABSOLUTE' | undefined {
+  try {
+    const v = (node as unknown as Record<string, unknown>).layoutPositioning;
+    return v === 'AUTO' || v === 'ABSOLUTE' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function extractRotation(node: SceneNode): number {
   // absoluteTransform row 0: [cos(θ), -sin(θ), tx] — note the negative sin
   // atan2(-sin(θ), cos(θ)) = -θ, so we negate to get the actual clockwise angle
@@ -442,6 +453,7 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
     layoutSizingHorizontal: extractLayoutSizing(node, 'layoutSizingHorizontal'),
     layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
+    layoutPositioning:      extractLayoutPositioning(node),
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
     characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,

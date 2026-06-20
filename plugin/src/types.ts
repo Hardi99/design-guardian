@@ -39,6 +39,7 @@ export interface NodeSnapshot {
   // Auto-layout : mode de dimensionnement de l'enfant (pour restaurer le resize en auto-layout)
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific
