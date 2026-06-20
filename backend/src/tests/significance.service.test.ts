@@ -111,3 +111,26 @@ describe('rankDelta', () => {
     expect(JSON.stringify(d)).toBe(before);
   });
 });
+
+describe('rankDelta — utilise le contexte layout du NodeDelta', () => {
+  it('un nœud dont tous les changements sont dérivés (enfant de flux) → minorModified', () => {
+    const n: NodeDelta = {
+      nodeId: 'Box', nodeName: 'Box', nodeType: 'FRAME',
+      changes: [{ property: 'y', oldValue: 0, newValue: 63 }, { property: 'x', oldValue: 0, newValue: 12 }],
+      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    };
+    const r = rankDelta(delta({ modified: [n] }));
+    expect(r.minorModified.map(x => x.nodeName)).toEqual(['Box']);
+    expect(r.notableModified).toHaveLength(0);
+  });
+
+  it('un resize FIXED reste notable malgré le contexte auto-layout', () => {
+    const n: NodeDelta = {
+      nodeId: 'Logo', nodeName: 'Logo', nodeType: 'RECTANGLE',
+      changes: [{ property: 'width', oldValue: 100, newValue: 300 }],
+      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    };
+    const r = rankDelta(delta({ modified: [n] }));
+    expect(r.notableModified.map(x => x.nodeName)).toEqual(['Logo']);
+  });
+});

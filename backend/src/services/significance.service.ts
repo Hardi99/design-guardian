@@ -77,7 +77,12 @@ export function rankDelta(delta: DeltaJSON): RankedDelta {
   const notableModified: NodeDelta[] = [];
   const minorModified: NodeDelta[] = [];
   for (const n of delta.modified) {
-    const hasNotable = n.changes.some(c => scoreChange(c) === 'notable');
+    const ctx: LayoutContext = {
+      layoutSizingHorizontal: n.layoutSizingHorizontal,
+      layoutSizingVertical: n.layoutSizingVertical,
+      layoutPositioning: n.layoutPositioning,
+    };
+    const hasNotable = n.changes.some(c => scoreChange(c, ctx) === 'notable');
     (hasNotable ? notableModified : minorModified).push(n);
   }
   return {
