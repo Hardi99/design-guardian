@@ -72,9 +72,11 @@ Le prompt ne demande plus qu'**une ligne** : un titre d'ensemble (« Refonte des
 - **Purs (TDD) — `change-format.service.test.ts`** : `formatChange` pour chaque type (`fill`→color hex conservés ; `fontWeight`→weight nommé ; `rotation` ; `x`+`y` fusion `move` ; inconnu→generic), `weightName`, `formatNodeChanges` (fusion + filtre mineurs).
 - **Glue** (endpoint passthrough, prompt court, rendu UI) : typecheck + vérif manuelle.
 
-## 5. Hors périmètre (assumé)
+## 5. Hors périmètre (assumé) — chantiers SUIVANTS, notés
+
 - **Nommer les couleurs** (« teal ») : non — hex précis (beta). Éventuel nom approché = bonus futur.
-- **Clustering « bloc déplacé »** (regrouper la cascade en « bloc déplacé ») : chantier séparé, complémentaire.
+- **Clustering « bloc déplacé »** (regrouper la cascade en « bloc déplacé », solution générale par delta identique) : chantier séparé, complémentaire.
+- **Rendu image de l'onglet Nodes** : aujourd'hui la vignette = SVG de la frame entière avec `viewBox` zoomé (les voisins bavent, lourd). Suivi dédié : (a) **isoler le nœud** via `generateSvgFromNode` (existe déjà), (b) **pas de vignette** pour les changements d'attribut pur (couleur/graisse) — le `ReadableChange` suffit, image réservée au structurel/positionnel.
 - **Swap Claude** : différé (la lisibilité ne dépend plus du modèle, c'est déterministe).
 
 ## 6. Non-goals
