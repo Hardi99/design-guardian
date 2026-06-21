@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatChange, weightName } from '../services/change-format.service.js';
-import type { PropertyChange } from '../types/figma.js';
+import { formatChange, weightName, formatNodeChanges } from '../services/change-format.service.js';
+import type { PropertyChange, NodeDelta } from '../types/figma.js';
 
 const ch = (o: Partial<PropertyChange>): PropertyChange => ({ property: 'x', oldValue: 0, newValue: 0, ...o });
 
@@ -37,5 +37,41 @@ describe('formatChange', () => {
   it('propriété inconnue → generic (jamais d\'invention)', () => {
     expect(formatChange(ch({ property: 'mystery', oldValue: 1, newValue: 2, delta: '1 → 2' })))
       .toEqual({ kind: 'generic', label: 'mystery', detail: '1 → 2' });
+  });
+});
+
+const nd = (over: Partial<NodeDelta>): NodeDelta =>
+  ({ nodeId: 'n', nodeName: 'n', nodeType: 'FRAME', changes: [], ...over });
+
+describe('formatNodeChanges', () => {
+  it('fusionne x + y en un seul move', () => {
+    const r = formatNodeChanges(nd({ changes: [
+      { property: 'x', oldValue: 0, newValue: 4 },
+      { property: 'y', oldValue: 0, newValue: -3 },
+    ] }));
+    expect(r).toEqual([{ kind: 'move', label: 'Position', dx: 4, dy: -3 }]);
+  });
+
+  it('fusionne width + height en un seul resize', () => {
+    const r = formatNodeChanges(nd({ changes: [
+      { property: 'width', oldValue: 100, newValue: 120 },
+      { property: 'height', oldValue: 50, newValue: 50 },
+    ] }));
+    expect(r).toEqual([{ kind: 'resize', label: 'Taille', dw: 20, dh: 0 }]);
+  });
+
+  it('ignore les changements mineurs (cascade : x/y d\'un enfant de flux)', () => {
+    const r = formatNodeChanges(nd({
+      changes: [{ property: 'y', oldValue: 0, newValue: -51 }],
+      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    }));
+    expect(r).toEqual([]); // dérivé → mineur → pas listé
+  });
+
+  it('garde une couleur (notable)', () => {
+    const r = formatNodeChanges(nd({ changes: [
+      { property: 'fill', oldValue: '#FFFFFF', newValue: '#FF0101' },
+    ] }));
+    expect(r).toEqual([{ kind: 'color', label: 'Couleur', from: '#FFFFFF', to: '#FF0101' }]);
   });
 });

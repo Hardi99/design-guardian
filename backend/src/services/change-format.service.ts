@@ -1,4 +1,5 @@
-import type { PropertyChange } from '../types/figma.js';
+import type { PropertyChange, NodeDelta } from '../types/figma.js';
+import { scoreChange, type LayoutContext } from './significance.service.js';
 
 export type ReadableChange =
   | { kind: 'color';      label: string; from: string; to: string }
@@ -39,4 +40,28 @@ export function formatChange(c: PropertyChange): ReadableChange {
     case 'visible':    return { kind: 'visibility', label: 'Visibilité', visible: c.newValue === true };
     default:           return { kind: 'generic', label: c.property, detail: c.delta ?? `${str(c.oldValue)} → ${str(c.newValue)}` };
   }
+}
+
+// Liste lisible des changements NOTABLES d'un nœud : fusionne x/y → move, width/height
+// → resize, ignore les mineurs (cascade auto-layout, via scoreChange #41).
+export function formatNodeChanges(nd: NodeDelta): ReadableChange[] {
+  const ctx: LayoutContext = {
+    layoutSizingHorizontal: nd.layoutSizingHorizontal,
+    layoutSizingVertical: nd.layoutSizingVertical,
+    layoutPositioning: nd.layoutPositioning,
+  };
+  const out: ReadableChange[] = [];
+  let dx = 0, dy = 0, hasMove = false;
+  let dw = 0, dh = 0, hasResize = false;
+  for (const c of nd.changes) {
+    if (scoreChange(c, ctx) === 'minor') continue;
+    if (c.property === 'x')      { dx = numDelta(c); hasMove = true; continue; }
+    if (c.property === 'y')      { dy = numDelta(c); hasMove = true; continue; }
+    if (c.property === 'width')  { dw = numDelta(c); hasResize = true; continue; }
+    if (c.property === 'height') { dh = numDelta(c); hasResize = true; continue; }
+    out.push(formatChange(c));
+  }
+  if (hasMove)   out.push({ kind: 'move', label: 'Position', dx, dy });
+  if (hasResize) out.push({ kind: 'resize', label: 'Taille', dw, dh });
+  return out;
 }
