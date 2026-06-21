@@ -669,7 +669,21 @@ function DiffScreen() {
                     <p class="text-gray-500 text-xs">Aucune modification visuelle détectée.</p>
                   </div>
                 )}
-                {data.node_diffs.map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} />)}
+                {data.block_moves && data.block_moves.length > 0 && (
+                  <div class="flex flex-col gap-1 mb-2">
+                    {data.block_moves.map((bm, i) => (
+                      <div key={i} class="px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg flex items-center gap-2 text-[11px]">
+                        <span class="text-purple-400">⤢</span>
+                        <span class="text-gray-200">Bloc {bm.name ? <span class="text-purple-300">« {bm.name} »</span> : ''} déplacé</span>
+                        <span class="text-gray-500 font-mono">{bm.dx !== 0 ? `${bm.dx > 0 ? '+' : ''}${bm.dx}px ` : ''}{bm.dy !== 0 ? `${bm.dy > 0 ? '+' : ''}${bm.dy}px` : ''}</span>
+                        <span class="text-gray-600 ml-auto">{bm.count} éléments</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {data.node_diffs
+                  .filter(nd => nd.kind !== 'modified' || (nd.readable && nd.readable.length > 0))
+                  .map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} />)}
               </div>
             ) : mode === 'split' ? (
               <div class="flex flex-1 overflow-hidden">

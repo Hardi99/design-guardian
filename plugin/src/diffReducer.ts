@@ -18,6 +18,8 @@ export type ReadableChange =
   | { kind: 'visibility'; label: string; visible: boolean }
   | { kind: 'generic';    label: string; detail: string }
 
+export interface BlockMove { name: string; dx: number; dy: number; count: number }
+
 export interface NodeDiffVisual {
   nodeId: string; nodeName: string; nodeType: string;
   changes: PropertyChange[];
@@ -33,6 +35,7 @@ export interface DiffData {
   svg_b64:      string | null
   prev_svg_b64: string | null
   node_diffs:   NodeDiffVisual[]
+  block_moves?: BlockMove[]
 }
 
 // ─── État du reducer ──────────────────────────────────────────────────────────
