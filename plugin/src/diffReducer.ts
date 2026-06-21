@@ -6,9 +6,22 @@ export interface PropertyChange { property: string; oldValue: unknown; newValue:
 export interface NodeDelta { nodeId: string; nodeName: string; nodeType: string; changes: PropertyChange[] }
 export interface DeltaJSON { modified: NodeDelta[]; added: NodeDelta[]; removed: NodeDelta[]; totalChanges: number }
 
+// Miroir du ReadableChange backend (langage designer).
+export type ReadableChange =
+  | { kind: 'color';      label: string; from: string; to: string }
+  | { kind: 'weight';     label: string; from: string; to: string }
+  | { kind: 'text';       label: string; from: string; to: string }
+  | { kind: 'rotation';   label: string; degrees: number }
+  | { kind: 'move';       label: string; dx: number; dy: number }
+  | { kind: 'resize';     label: string; dw: number; dh: number }
+  | { kind: 'opacity';    label: string; from: number; to: number }
+  | { kind: 'visibility'; label: string; visible: boolean }
+  | { kind: 'generic';    label: string; detail: string }
+
 export interface NodeDiffVisual {
   nodeId: string; nodeName: string; nodeType: string;
   changes: PropertyChange[];
+  readable?: ReadableChange[];
   kind: 'modified' | 'added' | 'removed';
   before_svg_b64: string | null;
   after_svg_b64: string | null;
