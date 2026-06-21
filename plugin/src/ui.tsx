@@ -894,7 +894,40 @@ function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
           <span class="text-[10px] text-gray-600">après</span>
         </div>
       </div>
-      {nd.changes.length > 0 && (
+      {(nd.readable && nd.readable.length > 0) ? (
+        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-1">
+          {nd.readable.map((r, i) => (
+            <div key={i} class="flex items-center gap-2 text-[11px]">
+              <span class="text-gray-400 w-16 flex-shrink-0">{r.label}</span>
+              <span class="text-gray-200 flex items-center gap-1.5 leading-tight">
+                {r.kind === 'color' ? (
+                  <>
+                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.from }} />
+                    <span class="font-mono text-gray-500">{r.from}</span>
+                    <span class="text-gray-600">→</span>
+                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.to }} />
+                    <span class="font-mono">{r.to}</span>
+                  </>
+                ) : (r.kind === 'weight' || r.kind === 'text') ? (
+                  <span><span class="text-gray-500">{r.from}</span> → {r.to}</span>
+                ) : r.kind === 'rotation' ? (
+                  <span>↻ {r.degrees > 0 ? '+' : ''}{r.degrees}°</span>
+                ) : r.kind === 'move' ? (
+                  <span>↔ {r.dx}px, {r.dy}px</span>
+                ) : r.kind === 'resize' ? (
+                  <span>⤢ {r.dw > 0 ? '+' : ''}{r.dw}px, {r.dh > 0 ? '+' : ''}{r.dh}px</span>
+                ) : r.kind === 'opacity' ? (
+                  <span>{r.from}% → {r.to}%</span>
+                ) : r.kind === 'visibility' ? (
+                  <span>{r.visible ? 'Affiché' : 'Masqué'}</span>
+                ) : (
+                  <span class="font-mono text-gray-500">{r.detail}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : nd.changes.length > 0 && (
         <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-0.5">
           {nd.changes.map((ch, i) => (
             <div key={i} class="flex items-start gap-2">

@@ -70,9 +70,8 @@ export class OpenAIService {
     }
 
     lines.push(
-      '\nGénère un patch note en français, style changelog.',
-      'Mets en AVANT les changements notables ; regroupe les ajustements mineurs en UNE ligne du type "(+ N ajustements mineurs)".',
-      'Maximum 5 lignes. Factuel, ne jamais inventer.',
+      '\nRésume ces changements en UNE seule ligne (un titre court, style « Refonte des couleurs du header »).',
+      'En français, factuel, ne jamais inventer de valeur. Pas de liste, pas de détails techniques — juste le titre.',
     );
 
     return lines.join('\n');

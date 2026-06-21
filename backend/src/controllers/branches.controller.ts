@@ -5,8 +5,9 @@ import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../s
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
-import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
+import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
 import { nodeIdsToRender } from '../services/significance.service.js';
+import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
 
@@ -180,6 +181,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   const nodeDiffs: Array<{
     nodeId: string; nodeName: string; nodeType: string;
     changes: unknown[]; kind: 'modified' | 'added' | 'removed';
+    readable: ReadableChange[];
     before_svg_b64: string | null; after_svg_b64: string | null;
   }> = [];
 
@@ -192,6 +194,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
+        readable: formatNodeChanges(nd as unknown as NodeDelta),
         before_svg_b64: render ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
         after_svg_b64:  render ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
       });
@@ -199,7 +202,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     for (const nd of delta.added) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
-        changes: [], kind: 'added',
+        changes: [], kind: 'added', readable: [],
         before_svg_b64: null,
         after_svg_b64:  renderIds.has(nd.nodeId) ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
       });
@@ -207,7 +210,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
-        changes: [], kind: 'removed',
+        changes: [], kind: 'removed', readable: [],
         before_svg_b64: renderIds.has(nd.nodeId) ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
         after_svg_b64:  null,
       });
