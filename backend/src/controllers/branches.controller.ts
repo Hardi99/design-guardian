@@ -8,6 +8,7 @@ import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
 import { nodeIdsToRender } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
+import { buildTreeMaps, detectBlockMoves } from '../services/block-moves.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
 
@@ -217,7 +218,11 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     }
   }
 
-  return c.json({ version: versionData, prev_version: prevVersion, svg_b64: svgB64, prev_svg_b64: prevSvgB64, node_diffs: nodeDiffs });
+  const blockMoves = (delta && currentSnap)
+    ? (() => { const { parent, name } = buildTreeMaps(currentSnap.root); return detectBlockMoves(delta as unknown as DeltaJSON, parent, name, 3); })()
+    : [];
+
+  return c.json({ version: versionData, prev_version: prevVersion, svg_b64: svgB64, prev_svg_b64: prevSvgB64, node_diffs: nodeDiffs, block_moves: blockMoves });
 });
 
 /**
