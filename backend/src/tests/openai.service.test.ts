@@ -178,9 +178,7 @@ describe('OpenAIService – changelog hiérarchisé', () => {
       .find(m => m.role === 'user')!.content;
 
     expect(prompt).toContain('Changements notables');
-    expect(prompt).toContain('Header');
-    expect(prompt).toMatch(/mineur/i);
-    // le notable apparaît avant le bloc mineur
-    expect(prompt.indexOf('Header')).toBeLessThan(prompt.search(/mineur/i));
+    expect(prompt).toContain('Header');                  // le nom du nœud notable reste fourni
+    expect(prompt.toLowerCase()).toContain('une seule ligne'); // on demande un titre d'UNE ligne
   });
 });
