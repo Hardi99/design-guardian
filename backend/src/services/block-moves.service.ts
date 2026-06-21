@@ -1,4 +1,5 @@
-import type { NodeSnapshot } from '../types/figma.js';
+import type { NodeSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
+import { scoreChange, type LayoutContext } from './significance.service.js';
 
 export interface BlockMove { name: string; dx: number; dy: number; count: number }
 
@@ -32,4 +33,55 @@ export function commonAncestor(ids: string[], parent: Map<string, string | null>
     if (chains.every(ch => ch.includes(cand))) return cand;
   }
   return '';
+}
+
+function ctxOf(nd: NodeDelta): LayoutContext {
+  return {
+    layoutSizingHorizontal: nd.layoutSizingHorizontal,
+    layoutSizingVertical: nd.layoutSizingVertical,
+    layoutPositioning: nd.layoutPositioning,
+  };
+}
+
+// (dx, dy) du nœud si c'est un déplacement DÉRIVÉ (x/y mineurs = cascade), sinon null.
+function derivedMove(nd: NodeDelta): { dx: number; dy: number } | null {
+  const ctx = ctxOf(nd);
+  let dx = 0, dy = 0, derived = false;
+  for (const c of nd.changes) {
+    if ((c.property === 'x' || c.property === 'y') && typeof c.newValue === 'number' && typeof c.oldValue === 'number') {
+      if (scoreChange(c, ctx) !== 'minor') return null; // un x/y notable → pas une cascade
+      if (c.property === 'x') dx = c.newValue - c.oldValue; else dy = c.newValue - c.oldValue;
+      derived = true;
+    }
+  }
+  return derived ? { dx, dy } : null;
+}
+
+export function detectBlockMoves(
+  delta: DeltaJSON,
+  parent: Map<string, string | null>,
+  name: Map<string, string>,
+  minCount: number,
+): BlockMove[] {
+  const groups = new Map<string, string[]>();
+  for (const nd of delta.modified) {
+    const m = derivedMove(nd);
+    if (!m) continue;
+    const dx = Math.round(m.dx), dy = Math.round(m.dy);
+    if (dx === 0 && dy === 0) continue;
+    const key = `${dx},${dy}`;
+    const arr = groups.get(key) ?? [];
+    arr.push(nd.nodeId);
+    groups.set(key, arr);
+  }
+  const out: BlockMove[] = [];
+  for (const [key, ids] of groups) {
+    if (ids.length < minCount) continue;
+    const idSet = new Set(ids);
+    const roots = ids.filter(id => { const p = parent.get(id); return !p || !idSet.has(p); });
+    const blockId = roots.length === 1 ? roots[0] : commonAncestor(roots, parent);
+    const [dx, dy] = key.split(',').map(Number);
+    out.push({ name: name.get(blockId) ?? '', dx, dy, count: ids.length });
+  }
+  return out.sort((a, b) => b.count - a.count);
 }
