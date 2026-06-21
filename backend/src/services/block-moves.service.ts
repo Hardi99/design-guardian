@@ -29,7 +29,9 @@ function ancestors(id: string, parent: Map<string, string | null>): string[] {
 export function commonAncestor(ids: string[], parent: Map<string, string | null>): string {
   if (ids.length === 0) return '';
   const chains = ids.map(id => ancestors(id, parent));
-  for (const cand of chains[0]) {
+  const first = chains[0];
+  if (!first) return '';
+  for (const cand of first) {
     if (chains.every(ch => ch.includes(cand))) return cand;
   }
   return '';
@@ -79,9 +81,9 @@ export function detectBlockMoves(
     if (ids.length < minCount) continue;
     const idSet = new Set(ids);
     const roots = ids.filter(id => { const p = parent.get(id); return !p || !idSet.has(p); });
-    const blockId = roots.length === 1 ? roots[0] : commonAncestor(roots, parent);
-    const [dx, dy] = key.split(',').map(Number);
-    out.push({ name: name.get(blockId) ?? '', dx, dy, count: ids.length });
+    const blockId = roots.length === 1 ? roots[0]! : commonAncestor(roots, parent);
+    const parts = key.split(',');
+    out.push({ name: name.get(blockId) ?? '', dx: Number(parts[0] ?? '0'), dy: Number(parts[1] ?? '0'), count: ids.length });
   }
   return out.sort((a, b) => b.count - a.count);
 }
