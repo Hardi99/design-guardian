@@ -181,6 +181,11 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     removed:  Array<{ nodeId: string; nodeName: string; nodeType: string }>;
   } | null;
 
+  // Les crops par-nœud (≈ une SVG entière chacun) ne sont générés QUE sur demande
+  // explicite (?thumbs=1). L'appel par défaut renvoie le changelog (texte) instantané ;
+  // le plugin recharge les vignettes en différé pour la vue Nodes.
+  const wantThumbs = c.req.query('thumbs') === '1';
+
   const nodeDiffs: Array<{
     nodeId: string; nodeName: string; nodeType: string;
     changes: unknown[]; kind: 'modified' | 'added' | 'removed';
@@ -193,7 +198,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     // plafonnés : un gros diff en cascade ne doit pas produire des centaines de SVG.
     const renderIds = nodeIdsToRender(delta as unknown as DeltaJSON, MAX_NODE_RENDERS);
     for (const nd of delta.modified) {
-      const render = renderIds.has(nd.nodeId);
+      const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
@@ -207,14 +212,14 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added', readable: [],
         before_svg_b64: null,
-        after_svg_b64:  renderIds.has(nd.nodeId) ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
+        after_svg_b64:  (wantThumbs && renderIds.has(nd.nodeId)) ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
       });
     }
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed', readable: [],
-        before_svg_b64: renderIds.has(nd.nodeId) ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
+        before_svg_b64: (wantThumbs && renderIds.has(nd.nodeId)) ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
         after_svg_b64:  null,
       });
     }
