@@ -129,7 +129,9 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       try {
         const node = findNodeById(snapshot.root, nodeId);
         if (!node) return null;
-        const pad = 16;
+        // Crop serré au bbox (petit pad anti-rognage des contours) : moins de pad = moins
+        // de voisins qui bavent. Le viewBox clippe déjà tout ce qui est hors fenêtre.
+        const pad = 2;
         const vb = `${node.x - snapshot.root.x - pad} ${node.y - snapshot.root.y - pad} ${node.width + pad * 2} ${node.height + pad * 2}`;
         const svgStr = Buffer.from(fullFrameB64, 'base64').toString('utf-8');
         const cropped = svgStr.replace(/<svg([^>]*)>/, (_m, attrs) =>
