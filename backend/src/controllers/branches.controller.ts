@@ -169,10 +169,17 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
   const currentSnap = await resolveSnapshot(versionData);
 
-  const [svgB64, prevSvgB64] = await Promise.all([
-    resolveRenderB64(versionData.storage_path, currentSnap),
-    resolveRenderB64(prevVersion?.storage_path ?? null, prevSnap),
-  ]);
+  // Frames entières ET crops par-nœud ne sont produits que sur demande (?thumbs=1) :
+  // l'appel par défaut renvoie le changelog (texte) instantané ; le plugin recharge
+  // le lourd (frames + vignettes) en différé. Défaut Nodes = zéro SVG.
+  const wantThumbs = c.req.query('thumbs') === '1';
+
+  const [svgB64, prevSvgB64] = wantThumbs
+    ? await Promise.all([
+        resolveRenderB64(versionData.storage_path, currentSnap),
+        resolveRenderB64(prevVersion?.storage_path ?? null, prevSnap),
+      ])
+    : [null, null];
 
   // Mini SVGs par nœud pour la vue node-diff
   const delta = versionData.analysis_json as {
@@ -180,11 +187,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     added:    Array<{ nodeId: string; nodeName: string; nodeType: string }>;
     removed:  Array<{ nodeId: string; nodeName: string; nodeType: string }>;
   } | null;
-
-  // Les crops par-nœud (≈ une SVG entière chacun) ne sont générés QUE sur demande
-  // explicite (?thumbs=1). L'appel par défaut renvoie le changelog (texte) instantané ;
-  // le plugin recharge les vignettes en différé pour la vue Nodes.
-  const wantThumbs = c.req.query('thumbs') === '1';
 
   const nodeDiffs: Array<{
     nodeId: string; nodeName: string; nodeType: string;

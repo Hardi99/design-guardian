@@ -66,7 +66,7 @@ export type DiffAction =
   | { type: 'APPLY_COMPLETE'; applied: number; skipped?: number }
   | { type: 'APPLY_ERROR';    err: string }
   | { type: 'SET_VIEW';       view: 'nodes' | 'frame' }
-  | { type: 'THUMBS_LOADED';  nodeDiffs: NodeDiffVisual[] }
+  | { type: 'HEAVY_LOADED';   data: DiffData }
   | { type: 'CLEAR_MSG' }
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -88,8 +88,9 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
     }
     case 'APPLY_ERROR':    return { ...state, applyingToFigma: false, err: action.err }
     case 'SET_VIEW':       return { ...state, view: action.view }
-    // Vignettes arrivées en différé → on les fusionne dans les node_diffs déjà affichés.
-    case 'THUMBS_LOADED':  return state.data ? { ...state, data: { ...state.data, node_diffs: action.nodeDiffs } } : state
+    // Le lourd (frames + vignettes) arrive en différé → fusion dans les données affichées.
+    case 'HEAVY_LOADED':   return state.data ? { ...state, data: { ...state.data,
+      svg_b64: action.data.svg_b64, prev_svg_b64: action.data.prev_svg_b64, node_diffs: action.data.node_diffs } } : state
     case 'CLEAR_MSG':      return { ...state, restoreMsg: null }
     default: return state
   }
