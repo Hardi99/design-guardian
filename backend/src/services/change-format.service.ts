@@ -1,5 +1,5 @@
 import type { PropertyChange, NodeDelta } from '../types/figma.js';
-import { scoreChange, type LayoutContext } from './significance.service.js';
+import { scoreChange, layoutContextOf } from './significance.service.js';
 
 export type ReadableChange =
   | { kind: 'color';      label: string; from: string; to: string }
@@ -45,11 +45,7 @@ export function formatChange(c: PropertyChange): ReadableChange {
 // Liste lisible des changements NOTABLES d'un nœud : fusionne x/y → move, width/height
 // → resize, ignore les mineurs (cascade auto-layout, via scoreChange #41).
 export function formatNodeChanges(nd: NodeDelta): ReadableChange[] {
-  const ctx: LayoutContext = {
-    layoutSizingHorizontal: nd.layoutSizingHorizontal,
-    layoutSizingVertical: nd.layoutSizingVertical,
-    layoutPositioning: nd.layoutPositioning,
-  };
+  const ctx = layoutContextOf(nd);
   const out: ReadableChange[] = [];
   let dx = 0, dy = 0, hasMove = false;
   let dw = 0, dh = 0, hasResize = false;

@@ -1,5 +1,5 @@
 import type { NodeSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
-import { scoreChange, type LayoutContext } from './significance.service.js';
+import { scoreChange, layoutContextOf } from './significance.service.js';
 
 export interface BlockMove { name: string; dx: number; dy: number; count: number }
 
@@ -37,17 +37,9 @@ export function commonAncestor(ids: string[], parent: Map<string, string | null>
   return '';
 }
 
-function ctxOf(nd: NodeDelta): LayoutContext {
-  return {
-    layoutSizingHorizontal: nd.layoutSizingHorizontal,
-    layoutSizingVertical: nd.layoutSizingVertical,
-    layoutPositioning: nd.layoutPositioning,
-  };
-}
-
 // (dx, dy) du nœud si c'est un déplacement DÉRIVÉ (x/y mineurs = cascade), sinon null.
 function derivedMove(nd: NodeDelta): { dx: number; dy: number } | null {
-  const ctx = ctxOf(nd);
+  const ctx = layoutContextOf(nd);
   let dx = 0, dy = 0, derived = false;
   for (const c of nd.changes) {
     if ((c.property === 'x' || c.property === 'y') && typeof c.newValue === 'number' && typeof c.oldValue === 'number') {
