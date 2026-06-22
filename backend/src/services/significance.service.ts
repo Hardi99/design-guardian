@@ -8,6 +8,16 @@ export interface LayoutContext {
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
 }
 
+// Extrait le contexte de layout d'un nœud du delta (source unique — évite la
+// reconstruction dupliquée dans significance/block-moves/change-format).
+export function layoutContextOf(nd: NodeDelta): LayoutContext {
+  return {
+    layoutSizingHorizontal: nd.layoutSizingHorizontal,
+    layoutSizingVertical: nd.layoutSizingVertical,
+    layoutPositioning: nd.layoutPositioning,
+  };
+}
+
 // Un nœud est enfant de FLUX auto-layout (position recalculée par le moteur) ssi
 // il a un mode de sizing (Figma ne le renseigne que pour les enfants d'auto-layout)
 // ET n'est pas en position absolue (un enfant absolu garde une position authored).
@@ -93,11 +103,7 @@ export function rankDelta(delta: DeltaJSON): RankedDelta {
   const notableModified: NodeDelta[] = [];
   const minorModified: NodeDelta[] = [];
   for (const n of delta.modified) {
-    const ctx: LayoutContext = {
-      layoutSizingHorizontal: n.layoutSizingHorizontal,
-      layoutSizingVertical: n.layoutSizingVertical,
-      layoutPositioning: n.layoutPositioning,
-    };
+    const ctx = layoutContextOf(n);
     const hasNotable = n.changes.some(c => scoreChange(c, ctx) === 'notable');
     (hasNotable ? notableModified : minorModified).push(n);
   }
