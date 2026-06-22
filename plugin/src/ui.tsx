@@ -488,7 +488,14 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
     api<DiffData>(apiKey, `/api/branches/versions/${versionId}`)
-      .then(data => dispatch({ type: 'LOAD_SUCCESS', data }))
+      .then(data => {
+        dispatch({ type: 'LOAD_SUCCESS', data });
+        // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
+        // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
+        api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
+          .then(full => dispatch({ type: 'THUMBS_LOADED', nodeDiffs: full.node_diffs }))
+          .catch(() => { /* vignettes optionnelles */ });
+      })
       .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
   }, [apiKey, versionId]);
 }
