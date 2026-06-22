@@ -493,8 +493,8 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
         // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
         // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
         api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
-          .then(full => dispatch({ type: 'THUMBS_LOADED', nodeDiffs: full.node_diffs }))
-          .catch(() => { /* vignettes optionnelles */ });
+          .then(full => dispatch({ type: 'HEAVY_LOADED', data: full }))
+          .catch(() => { /* frames + vignettes optionnelles */ });
       })
       .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
   }, [apiKey, versionId]);
@@ -571,7 +571,6 @@ function DiffScreen() {
 
   const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
   const [opacity, setOpacity] = useState(0.5);
-  const [blend, setBlend] = useState<'fade' | 'diff'>('fade');
 
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
@@ -710,34 +709,16 @@ function DiffScreen() {
                 </div>
               </div>
             ) : (
-              <div class={`flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative ${blend === 'diff' ? 'bg-black' : ''}`}>
-                {blend === 'fade' ? (
-                  <>
-                    {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
-                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
-                  </>
-                ) : (
-                  <>
-                    {data.prev_svg_b64 && <div class="absolute inset-0 p-4"><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
-                    {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ mixBlendMode: 'difference' }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
-                  </>
-                )}
-                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-gray-900/90 rounded-lg px-3 py-1.5">
-                  <div class="flex gap-1">
-                    <button aria-pressed={blend === 'fade'} class={`px-2 py-0.5 rounded text-xs transition-colors ${blend === 'fade' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setBlend('fade')}>Fondu</button>
-                    <button aria-pressed={blend === 'diff'} class={`px-2 py-0.5 rounded text-xs transition-colors ${blend === 'diff' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setBlend('diff')}>Différence</button>
-                  </div>
-                  {blend === 'fade' && (
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs text-gray-500">avant</span>
-                      <input type="range" min={0} max={1} step={0.01} value={opacity}
-                        aria-label="Opacité du calque précédent"
-                        onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
-                        class="w-24 accent-purple-500" />
-                      <span class="text-xs text-gray-500">après</span>
-                    </div>
-                  )}
-                  {blend === 'diff' && <span class="text-xs text-gray-500">Les zones modifiées s'illuminent</span>}
+              <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
+                {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
+                {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
+                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
+                  <span class="text-xs text-gray-500">avant</span>
+                  <input type="range" min={0} max={1} step={0.01} value={opacity}
+                    aria-label="Opacité du calque précédent"
+                    onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                    class="w-24 accent-purple-500" />
+                  <span class="text-xs text-gray-500">après</span>
                 </div>
               </div>
             )}
