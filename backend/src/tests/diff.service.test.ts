@@ -372,7 +372,8 @@ describe('matcher en couches (dg_id)', () => {
     const delta = diff.compareSnapshots(v1, v2);
     expect(delta.added).toHaveLength(0);
     expect(delta.removed).toHaveLength(0);
-    expect(delta.modified.some(m => m.nodeId === 'dg:leaf-1')).toBe(true);
+    // Matched by dg_id, but the emitted nodeId stays the raw v2 Figma id.
+    expect(delta.modified.some(m => m.nodeId === 'a2' && m.nodeName === 'Nouveau')).toBe(true);
   });
 
   it('reste robuste au réordonnancement (dg_id stable malgré index changé)', () => {
@@ -403,7 +404,7 @@ describe('matcher en couches (dg_id)', () => {
     const delta = diff.compareSnapshots(v1, v2);
     expect(delta.added).toHaveLength(0);
     expect(delta.removed).toHaveLength(0);
-    expect(delta.modified.some(m => m.nodeId === 'id:c1')).toBe(true);
+    expect(delta.modified.some(m => m.nodeId === 'c1')).toBe(true);
   });
 });
 
