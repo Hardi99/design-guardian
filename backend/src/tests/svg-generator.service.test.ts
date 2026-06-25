@@ -190,3 +190,68 @@ describe('generateSvgFromNode', () => {
     expect(svg).toContain('viewBox="0 0 50 50"');
   });
 });
+
+// ─── FRAME / GROUP (conteneurs + enfants) ───────────────────────────────────────
+
+describe('generateSvgFromSnapshot – FRAME with children', () => {
+  it('renders a <g> group with a background rect and renders children', () => {
+    const frame: NodeSnapshot = {
+      ...makeNode({ id: 'frame', name: 'Card', type: 'FRAME', width: 200, height: 120 }),
+      children: [
+        makeNode({ id: 'c1', name: 'Inner', type: 'RECTANGLE', x: 10, y: 10, width: 40, height: 40 }),
+      ],
+    };
+    const svg = generateSvgFromSnapshot(makeSnapshot(frame));
+    expect(svg).toContain('<g');
+    expect(svg).toContain('<rect'); // bg + child
+  });
+
+  it('skips invisible children', () => {
+    const frame: NodeSnapshot = {
+      ...makeNode({ id: 'frame', type: 'GROUP', fills: [] }),
+      children: [makeNode({ id: 'hidden', visible: false })],
+    };
+    const svg = generateSvgFromSnapshot(makeSnapshot(frame));
+    expect(svg).toContain('<g');
+    expect(svg).not.toContain('#ff0000'); // l'enfant invisible n'est pas rendu
+  });
+});
+
+// ─── VECTOR (vectorPaths) ───────────────────────────────────────────────────────
+
+describe('generateSvgFromSnapshot – VECTOR', () => {
+  it('renders <path> elements from vectorPaths', () => {
+    const svg = generateSvgFromSnapshot(makeSnapshot(makeNode({
+      type: 'VECTOR',
+      vectorPaths: [{ data: 'M0 0 L10 10 Z', windingRule: 'EVENODD' }],
+    })));
+    expect(svg).toContain('<path');
+    expect(svg).toContain('d="M0 0 L10 10 Z"');
+    expect(svg).toContain('fill-rule="evenodd"');
+  });
+
+  it('falls back to a <rect> when a VECTOR has no vectorPaths', () => {
+    const svg = generateSvgFromSnapshot(makeSnapshot(makeNode({ type: 'STAR' })));
+    expect(svg).toContain('<rect');
+  });
+});
+
+// ─── TEXT multi-ligne + échappement ─────────────────────────────────────────────
+
+describe('generateSvgFromSnapshot – TEXT multi-line & escaping', () => {
+  it('emits one <tspan> per line for multi-line text', () => {
+    const svg = generateSvgFromSnapshot(makeSnapshot(makeNode({
+      type: 'TEXT', characters: 'Ligne 1\nLigne 2', fontSize: 16,
+    })));
+    expect((svg.match(/<tspan/g) ?? []).length).toBe(2);
+  });
+
+  it('escapes XML special chars and non-ASCII characters', () => {
+    const svg = generateSvgFromSnapshot(makeSnapshot(makeNode({
+      type: 'TEXT', characters: '<a> & "é"', fontSize: 14,
+    })));
+    expect(svg).toContain('&lt;a&gt;');
+    expect(svg).toContain('&amp;');
+    expect(svg).toContain('&#xE9;'); // é encodé en entité hexadécimale
+  });
+});

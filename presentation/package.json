@@ -1,0 +1,13 @@
+{
+  "name": "design-guardian-deck",
+  "private": true,
+  "scripts": {
+    "dev": "slidev --open",
+    "build": "slidev build",
+    "export": "slidev export --format pdf --with-clicks"
+  },
+  "dependencies": {
+    "@slidev/cli": "latest",
+    "@slidev/theme-default": "latest"
+  }
+}

@@ -313,12 +313,28 @@
 
 ---
 
+## Périmètre des recettes (backend vs frontend)
+
+> Les fiches **REC-PAY-005/006** (Stripe Checkout + webhook) et **REC-NOTIF-003** (SMS) valident la **capacité backend** (endpoints + services, testés automatiquement). Le **câblage frontend complet** côté webapp (bouton checkout sur la page pricing, parcours « mot de passe oublié par SMS » de bout en bout) est en cours de finalisation — voir roadmap produit. La logique serveur, elle, est en place et couverte par les tests.
+
 ## Couverture tests automatisés
 
-| Service | Tests | Couverture |
-|---------|-------|------------|
-| `diff.service` | 29 cas | Géométrie, visuel, texte, vecteurs, structurel |
-| `openai.service` | 10 cas | Zero-change, fallback erreur, réponse AI, prompt |
-| `svg-generator.service` | 19 cas | Rect, Ellipse, Text, Gradients, findNodeById |
-| `plugin.middleware` | 5 cas | Missing header, invalid key, valid key + projectId |
-| **Total** | **63 tests** | **4 fichiers** |
+> Mesurée par Vitest (`npm run test:coverage`). **Quality Gate ≥ 80 %** appliqué nativement (seuil dans `vitest.config.ts`) et vérifié en CI (`.github/workflows/ci.yml`).
+
+**Backend — 104 tests / 9 fichiers · couverture services 84 % statements / 86 % lines / 87 % functions**
+
+| Service | Tests | Portée |
+|---------|-------|--------|
+| `diff.service` | 29 | Géométrie, visuel, texte, vecteurs, arbre, totalChanges |
+| `svg-generator.service` | 25 | Rect, Ellipse, Text (multi-ligne + échappement), Frame/Group, Vector, gradients, findNodeById |
+| `payments.service` | 13 | Checkout session, portail, webhooks Stripe (plan ↔ user_id) |
+| `openai.service` | 10 | Zero-change, fallback erreur, réponse AI, structure du prompt |
+| `notification.service` | 9 | Email Resend (succès/erreur), SMS Twilio (succès/échec/exception) |
+| `stripe.service` | 8 | `getStripe`, `getPriceId`, PLANS (prix 12/39), `getOrCreateUserCustomer` |
+| `plugin.middleware` | 5 | Header manquant, clé invalide, clé valide + projectId |
+| `checkpoint-ai.service` | 3 | Génération asynchrone du patch note |
+| `api-schema` | 2 | Validation des schémas Zod |
+
+**Plugin — 95 tests / 7 fichiers** (`store`, `diffReducer`, `patchNote`, `identity`, `restoreDiff`, `figmaIdentity`, `utils`)
+
+> **Total projet : 199 tests automatisés** (104 backend + 95 plugin), tous exécutés en CI à chaque push/PR sur `master`.

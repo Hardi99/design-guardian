@@ -28,7 +28,10 @@ jobs:
       - name: Type check
         run: bun run typecheck
 
-      - name: Unit tests + coverage
+      # Quality Gate : le seuil ≥80% (statements/lines/functions) est appliqué
+      # nativement par Vitest (coverage.thresholds dans vitest.config.ts).
+      # Cette step échoue automatiquement si la couverture passe sous 80%.
+      - name: Unit tests + coverage (Quality Gate ≥ 80%)
         run: bun run test:coverage
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
@@ -36,16 +39,6 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || 'placeholder' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'placeholder' }}
           NODE_ENV: test
-
-      - name: Quality Gate — coverage ≥ 80%
-        run: |
-          COVERAGE=$(cat coverage/coverage-summary.json | bun -e "
-            const d = await Bun.stdin.json();
-            const pct = d.total.statements.pct;
-            console.log(pct);
-            if (pct < 80) process.exit(1);
-          " 2>/dev/null || echo "skip")
-          echo "Coverage check: $COVERAGE%"
 
       - name: Build
         run: bun run build
@@ -69,6 +62,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
 
       - name: Build plugin
         run: npm run build

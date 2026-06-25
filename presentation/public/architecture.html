@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture — Design Guardian</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #041018;
+    color: #f0f9ff;
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ──────────────────────────────────── */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: rgba(4,16,24,0.88);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #0d2d47;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo {
+    width: 2rem;
+    height: 2rem;
+    background: #22d3ee;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.75rem;
+    color: #041018;
+    flex-shrink: 0;
+  }
+
+  .title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #e5e7eb;
+  }
+
+  .subtitle {
+    font-size: 0.7rem;
+    color: #4b5563;
+    margin-top: 1px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* ── Controls ───────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    background: #071a2e;
+    border: 1px solid #0d2d47;
+    border-radius: 0.5rem;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .btn:hover { background: #1f2937; color: #e5e7eb; }
+  .btn:active { transform: scale(0.95); }
+
+  .btn-close {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.2);
+    color: #f87171;
+  }
+  .btn-close:hover {
+    background: rgba(239,68,68,0.2);
+    color: #fca5a5;
+  }
+
+  .zoom-label {
+    font-size: 0.72rem;
+    color: #6b7280;
+    font-variant-numeric: tabular-nums;
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  .divider {
+    width: 1px;
+    height: 1.5rem;
+    background: #1f2937;
+    margin: 0 0.25rem;
+  }
+
+  /* ── Keyboard hint ──────────────────────────── */
+  .hint {
+    font-size: 0.65rem;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .key {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    background: #071a2e;
+    border: 1px solid #0d2d47;
+    border-radius: 0.25rem;
+    font-size: 0.6rem;
+    color: #4b5563;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Canvas ─────────────────────────────────── */
+  #canvas {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 4rem;
+    cursor: grab;
+    overflow: hidden;
+  }
+  #canvas:active { cursor: grabbing; }
+
+  #diagram-wrap {
+    transform-origin: 50% 50%;
+  }
+
+  /* ── Mermaid dark overrides ─────────────────── */
+  .mermaid {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mermaid svg {
+    background: transparent !important;
+    filter: drop-shadow(0 0 60px rgba(34,211,238,0.07));
+  }
+
+  /* ── Loading ────────────────────────────────── */
+  #loading {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #041018;
+    z-index: 200;
+    flex-direction: column;
+    gap: 1rem;
+    transition: opacity 0.3s;
+  }
+
+  .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 2px solid #1f2937;
+    border-top-color: #22d3ee;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-size: 0.8rem;
+    color: #4b5563;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Génération du diagramme…</div>
+</div>
+
+<header>
+  <div class="header-left">
+    <div class="logo">DG</div>
+    <div>
+      <div class="title">Architecture — Design Guardian</div>
+      <div class="subtitle">Scroll pour zoomer · Glisser pour déplacer · Double-clic pour reset</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="hint">
+      <span class="key">+</span><span class="key">−</span> zoom
+      <span class="key">R</span> reset
+      <span class="key">Esc</span> fermer
+    </div>
+    <div class="divider"></div>
+    <div class="controls">
+      <button class="btn" id="btn-zoom-out" title="Zoom arrière (−)">−</button>
+      <div class="zoom-label" id="zoom-label">100%</div>
+      <button class="btn" id="btn-zoom-in" title="Zoom avant (+)">+</button>
+      <button class="btn" id="btn-reset" title="Réinitialiser (R)">↺</button>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-close" id="btn-close" title="Fermer (Esc)">✕</button>
+  </div>
+</header>
+
+<div id="canvas">
+  <div id="diagram-wrap">
+    <div class="mermaid">
+graph TB
+    Designer(["👤 Designer\nFigma Desktop"])
+
+    subgraph Plugin["Plugin Figma · Preact + Tailwind"]
+        direction LR
+        Main["main.ts\nExtraction snapshot\nabsoluteTransform · fills\nvectorPaths · children"]
+        UIThread["ui.tsx\nInterface Preact\nTimeline · Diff · Checkpoint\nAppels HTTPS"]
+        Main <-->|"postMessage\nfigma.ui.postMessage()"| UIThread
+    end
+
+    subgraph Backend["API Backend · HonoJS · Railway"]
+        Auth["🔐 Auth\nOAuth Google/GitHub\nJWT · X-API-Key"]
+        Core["⚙️ Checkpoints + Diff\nDiffService ε=0.01px\nBranches · Assets · Projects"]
+        OpenAISvc["🤖 OpenAI Service\nGPT-4o-mini\nAI Patch Notes"]
+        SVGSvc["🎨 SVG Service\nReconstruction SVG inline\nSplit · Overlay · Nodes"]
+        PaySvc["💳 Stripe Service\nCheckout · Portal\nWebhooks signés"]
+        NotifSvc["📧 Notification Service\nResend email\nTwilio SMS"]
+        MetricsSvc["📊 Metrics Service\nPrometheus counters\n/metrics endpoint"]
+    end
+
+    subgraph Supabase["Persistance · Supabase"]
+        DB[("PostgreSQL\nprojects · assets\nversions (parent_id)")]
+        Storage["Storage\nSnapshots JSON\nasset_id/v_n.json"]
+    end
+
+    subgraph Monitoring["Supervision"]
+        Prometheus["Prometheus\nscrape /metrics 15s"]
+        Grafana["Grafana\nDashboard\nlocalhost:3000"]
+    end
+
+    subgraph CI["CI/CD"]
+        GH["GitHub Actions\nBuild · Typecheck\n63 tests · Coverage ≥80%\nDeploy Railway"]
+    end
+
+    OpenAI["OpenAI API\nGPT-4o-mini"]
+    StripeAPI["Stripe API\nCheckout · Portal"]
+    Resend["Resend API\nEmail transactionnel"]
+    Twilio["Twilio API\nSMS vérification"]
+
+    Designer -->|"API Figma\nmain thread uniquement"| Main
+    UIThread -->|"HTTPS · X-API-Key"| Auth
+    Auth --> Core
+    Core --> SVGSvc
+    Core --> OpenAISvc
+    OpenAISvc -->|"generatePatchNote(deltaJSON)"| OpenAI
+    Core -->|"INSERT metadata"| DB
+    Core -->|"UPLOAD / DOWNLOAD snapshot"| Storage
+    PaySvc -->|"Checkout · Portal"| StripeAPI
+    StripeAPI -->|"webhook HMAC-SHA256"| PaySvc
+    PaySvc -->|"plan update"| DB
+    NotifSvc -->|"email transactionnel"| Resend
+    NotifSvc -->|"SMS"| Twilio
+    Prometheus -->|"scrape"| MetricsSvc
+    Grafana -->|"query"| Prometheus
+    GH -->|"auto-deploy on push"| Backend
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#041018',
+      primaryColor: '#071a2e',
+      primaryTextColor: '#f0f9ff',
+      primaryBorderColor: '#0d2d47',
+      lineColor: '#5c8aa8',
+      secondaryColor: '#0b2236',
+      tertiaryColor: '#051520',
+      fontFamily: 'Inter, sans-serif',
+      fontSize: '16px',
+      clusterBkg: '#071628',
+      clusterBorder: '#0d2d47',
+      titleColor: '#f0f9ff',
+      edgeLabelBackground: '#041018'
+    },
+    flowchart: { curve: 'basis', padding: 20 }
+  });
+
+  mermaid.run().then(() => {
+    const wrap = document.getElementById('diagram-wrap');
+    const loading = document.getElementById('loading');
+    const zoomLabel = document.getElementById('zoom-label');
+
+    // Compute fit-to-screen scale from the rendered SVG size
+    const svgEl = wrap.querySelector('svg');
+    const svgW = svgEl.getBoundingClientRect().width  || 800;
+    const svgH = svgEl.getBoundingClientRect().height || 600;
+    const availW = window.innerWidth  * 0.88;
+    const availH = (window.innerHeight - 64) * 0.88;
+    const fitScale = Math.min(availW / svgW, availH / svgH, 4);
+
+    const pz = Panzoom(wrap, {
+      maxScale: 10,
+      minScale: 0.15,
+      step: 0.15,
+      canvas: true,
+    });
+
+    const canvas = document.getElementById('canvas');
+    canvas.addEventListener('wheel', pz.zoomWithWheel);
+
+    function updateLabel() {
+      zoomLabel.textContent = Math.round(pz.getScale() * 100) + '%';
+    }
+
+    function resetToFit() {
+      pz.zoom(fitScale, { animate: false });
+      pz.pan(0, 0, { animate: false });
+      updateLabel();
+    }
+
+    wrap.addEventListener('panzoomchange', updateLabel);
+
+    // Apply fit scale once layout has settled
+    requestAnimationFrame(() => { resetToFit(); });
+
+    document.getElementById('btn-zoom-in').addEventListener('click',  () => { pz.zoomIn();  updateLabel(); });
+    document.getElementById('btn-zoom-out').addEventListener('click', () => { pz.zoomOut(); updateLabel(); });
+    document.getElementById('btn-reset').addEventListener('click', resetToFit);
+    canvas.addEventListener('dblclick', resetToFit);
+    document.getElementById('btn-close').addEventListener('click', () => window.close());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') window.close();
+      if (e.key === '+' || e.key === '=') { pz.zoomIn();  updateLabel(); }
+      if (e.key === '-')                  { pz.zoomOut(); updateLabel(); }
+      if (e.key === 'r' || e.key === 'R') resetToFit();
+    });
+
+    loading.style.opacity = '0';
+    setTimeout(() => loading.style.display = 'none', 300);
+  }).catch(() => {
+    document.getElementById('loading').style.display = 'none';
+  });
+</script>
+</body>
+</html>

@@ -1,6 +1,35 @@
 # C1.1.1 — Cartographie des Parties Prenantes — Design Guardian
 
-## Matrice Influence / Intérêt
+> **But officiel C1.1.1** (grille) : *« cadrer l'environnement et le périmètre du projet »* → le **diagramme de contexte** ci-dessous répond directement à cette intention.
+> Acteurs exigés par la grille : **développeurs · architectes · administrateurs · clients · acteurs externes** (+ commanditaire). Tous présents ci-dessous.
+> Le **jury** (évaluateur de l'exercice M2) n'est **pas** un acteur du projet au sens de la grille → mentionné à part, hors diagramme.
+
+## Diagramme de contexte (cadrer l'environnement et le périmètre)
+
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'fontSize':'24px'}}}%%
+flowchart LR
+    EQ["ÉQUIPE PROJET<br/>Développeur · Architecte · Administrateur<br/>(candidat solo)"]
+    CMD["COMMANDITAIRE<br/>Formation M2"]
+    DG(("DESIGN GUARDIAN<br/>plugin de versioning Figma"))
+    U["UTILISATEURS / CLIENTS<br/>Designers UX · packaging · illustrateurs"]
+    EXT["ACTEURS EXTERNES<br/>Figma · OpenAI · Railway · Supabase"]
+    M["MARCHÉ / ALTERNATIVES<br/>Version History · Branches · Abstract"]
+
+    EQ -->|conçoit · développe · maintient| DG
+    CMD -->|commande · valide| DG
+    DG -->|utilisé par| U
+    DG -->|dépend de| EXT
+    DG -.se positionne contre.-> M
+
+    classDef default font-weight:bold,stroke-width:3px;
+```
+
+> **Les 5 familles d'acteurs de la grille** : 🛠️ équipe (dév/archi/admin) · 💼 commanditaire · 👥 clients/utilisateurs · ☁️ acteurs externes · 📊 marché (bonus). En solo, le candidat porte les 3 rôles techniques (dév · architecte · administrateur).
+
+---
+
+## Matrice Influence / Intérêt (détail acteurs — secondaire)
 
 ```mermaid
 quadrantChart
@@ -11,15 +40,16 @@ quadrantChart
     quadrant-2 Satisfaire - Tenir informe
     quadrant-3 Surveiller
     quadrant-4 Informer regulierement
-    Jury M2: [0.82, 0.95]
-    Commanditaire formation: [0.60, 0.90]
-    Figma Platform: [0.35, 0.88]
-    Designer early adopter: [0.95, 0.55]
+    Moi - dev-architecte: [0.95, 0.98]
+    Jury M2: [0.80, 0.91]
+    Commanditaire formation: [0.58, 0.87]
+    Figma Platform: [0.35, 0.85]
+    Designer early adopter: [0.92, 0.55]
     Designers UX Packaging Illustrateurs: [0.72, 0.25]
     Dependances techniques: [0.15, 0.45]
 ```
 
-> **Porteur du projet** : le candidat M2 (rôle **développeur-architecte**) conçoit, développe et déploie le plugin — non plotté car il est l'auteur de la cartographie.
+> **Porteur du projet** : le candidat M2 (rôle **développeur-architecte**) est plotté en **haut-droite** — intérêt **et** influence maximaux (c'est son projet et il le construit). Coche l'exigence C1.1.1 « identifier les développeurs/architectes ».
 > **6 points** pour la lisibilité : les 3 profils de designers fusionnés en *« Designers »*, et OpenAI · Railway · Supabase en *« Dépendances techniques »*.
 > Le concurrent **Figma Branches** n'est **pas** une partie prenante → traité en **C1.3.2 (étude comparative)**.
 
