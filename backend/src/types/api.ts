@@ -160,3 +160,13 @@ export const statusSchema = z.object({
   status: z.enum(['draft', 'review', 'approved']),
 });
 export type StatusRequest = z.infer<typeof statusSchema>;
+
+export const restoreSchema = z.object({
+  branch_name: z.string().min(1).max(100),
+  author: z.object({
+    figma_id: z.string(),
+    name: z.string(),
+    avatar_url: z.string().optional(),
+  }),
+});
+export type RestoreRequest = z.infer<typeof restoreSchema>;
