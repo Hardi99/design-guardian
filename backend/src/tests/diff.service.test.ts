@@ -356,6 +356,57 @@ describe('DiffService – structural changes', () => {
   });
 });
 
+// ─── Matcher en couches (dg_id) ───────────────────────────────────────────────
+
+describe('matcher en couches (dg_id)', () => {
+  it('reconnaît un nœud renommé+déplacé par dg_id (modified, pas add+remove)', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({
+      id: 'r1', dg_id: 'root-dg', type: 'FRAME',
+      children: [makeRoot({ id: 'a1', dg_id: 'leaf-1', name: 'Ancien', x: 0 })],
+    });
+    const v2 = makeSnapshot({
+      id: 'r2', dg_id: 'root-dg', type: 'FRAME',
+      children: [makeRoot({ id: 'a2', dg_id: 'leaf-1', name: 'Nouveau', x: 5 })],
+    });
+    const delta = diff.compareSnapshots(v1, v2);
+    expect(delta.added).toHaveLength(0);
+    expect(delta.removed).toHaveLength(0);
+    expect(delta.modified.some(m => m.nodeId === 'dg:leaf-1')).toBe(true);
+  });
+
+  it('reste robuste au réordonnancement (dg_id stable malgré index changé)', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({
+      id: 'r1', dg_id: 'root-dg', type: 'FRAME',
+      children: [
+        makeRoot({ id: 'a', dg_id: 'A', name: 'A' }),
+        makeRoot({ id: 'b', dg_id: 'B', name: 'B' }),
+      ],
+    });
+    const v2 = makeSnapshot({
+      id: 'r1', dg_id: 'root-dg', type: 'FRAME',
+      children: [
+        makeRoot({ id: 'b', dg_id: 'B', name: 'B' }),
+        makeRoot({ id: 'a', dg_id: 'A', name: 'A' }),
+      ],
+    });
+    const delta = diff.compareSnapshots(v1, v2);
+    expect(delta.added).toHaveLength(0);
+    expect(delta.removed).toHaveLength(0);
+  });
+
+  it('fallback legacy : sans dg_id, le matching par chemin/ id fonctionne encore', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 'r1', children: [makeRoot({ id: 'c1', name: 'Box', x: 0 })] });
+    const v2 = makeSnapshot({ id: 'r1', children: [makeRoot({ id: 'c1', name: 'Box', x: 10 })] });
+    const delta = diff.compareSnapshots(v1, v2);
+    expect(delta.added).toHaveLength(0);
+    expect(delta.removed).toHaveLength(0);
+    expect(delta.modified.some(m => m.nodeId === 'id:c1')).toBe(true);
+  });
+});
+
 // ─── totalChanges accounting ──────────────────────────────────────────────────
 
 describe('DiffService – totalChanges', () => {
