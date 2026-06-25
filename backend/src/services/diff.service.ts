@@ -28,29 +28,29 @@ export class DiffService {
     const added: NodeDelta[] = [];
     const removed: NodeDelta[] = [];
 
-    // Removed: in v1 but not in v2
-    for (const [id, node] of v1Map) {
-      if (!v2Map.has(id)) {
-        removed.push({ nodeId: id, nodeName: node.name, nodeType: node.type, changes: [] });
+    // Removed: in v1 but not in v2. nodeId = raw Figma id (downstream lookups key on it).
+    for (const [key, node] of v1Map) {
+      if (!v2Map.has(key)) {
+        removed.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
-    // Added: in v2 but not in v1
-    for (const [id, node] of v2Map) {
-      if (!v1Map.has(id)) {
-        added.push({ nodeId: id, nodeName: node.name, nodeType: node.type, changes: [] });
+    // Added: in v2 but not in v1.
+    for (const [key, node] of v2Map) {
+      if (!v1Map.has(key)) {
+        added.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
-    // Modified: in both, compare properties
-    for (const [id, v1Node] of v1Map) {
-      const v2Node = v2Map.get(id);
+    // Modified: in both, compare properties.
+    for (const [key, v1Node] of v1Map) {
+      const v2Node = v2Map.get(key);
       if (!v2Node) continue;
 
       const changes = this.compareNodes(v1Node, v2Node);
       if (changes.length > 0) {
         modified.push({
-          nodeId: id, nodeName: v2Node.name, nodeType: v2Node.type, changes,
+          nodeId: v2Node.id, nodeName: v2Node.name, nodeType: v2Node.type, changes,
           layoutSizingHorizontal: v2Node.layoutSizingHorizontal,
           layoutSizingVertical: v2Node.layoutSizingVertical,
           layoutPositioning: v2Node.layoutPositioning,
