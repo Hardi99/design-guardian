@@ -4,7 +4,10 @@ import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
-import { statusSchema } from '../types/api.js';
+import { statusSchema, restoreSchema } from '../types/api.js';
+import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
+import { DiffService } from '../services/diff.service.js';
+import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
@@ -14,38 +17,12 @@ import { buildTreeMaps, detectBlockMoves } from '../services/block-moves.service
 import { loadOwnedVersion } from '../services/ownership.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
+const diffService = new DiffService();
 
 const SNAPSHOTS_BUCKET = 'snapshots';
 // Plafond dur de rendus SVG par-nœud dans la vue diff : protège l'endpoint d'un
 // gros delta (cascade auto-layout) qui générerait des centaines de SVG → OOM/500.
 const MAX_NODE_RENDERS = 60;
-
-/**
- * Résout le snapshot d'une version.
- * - Si storage_path est défini → télécharge depuis Supabase Storage (versions post-migration 008)
- * - Sinon → utilise snapshot_json directement (versions antérieures à la migration)
- */
-async function resolveSnapshot(version: {
-  snapshot_json: FigmaSnapshot | null;
-  storage_path: string | null;
-}): Promise<FigmaSnapshot | null> {
-  if (version.storage_path) {
-    const { data, error } = await getSupabaseStorage()
-      .from(SNAPSHOTS_BUCKET)
-      .download(version.storage_path);
-
-    if (error || !data) return null;
-
-    try {
-      return JSON.parse(await data.text()) as FigmaSnapshot;
-    } catch {
-      return null;
-    }
-  }
-
-  // Fallback : anciennes versions stockées en DB avant migration 008
-  return version.snapshot_json ?? null;
-}
 
 /**
  * GET /api/branches/tree?asset_id=...
@@ -172,12 +149,12 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       prevVersion = prev;
       // Le snapshot parent ne sert qu'aux frames/crops (différés) → on ne le télécharge
       // QUE sur ?thumbs=1. Inutile sur l'appel par défaut (évite 1 download Storage).
-      if (wantThumbs) prevSnap = await resolveSnapshot(prev);
+      if (wantThumbs) prevSnap = await resolveSnapshot(getSupabaseStorage(), prev);
     }
   }
 
   // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
-  const currentSnap = await resolveSnapshot(versionData);
+  const currentSnap = await resolveSnapshot(getSupabaseStorage(), versionData);
 
   const [svgB64, prevSvgB64] = wantThumbs
     ? await Promise.all([
@@ -243,84 +220,72 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
  * POST /api/branches/versions/:id/restore
  * Creates a new checkpoint on the given branch using an older version's snapshot.
  * The snapshot is fetched from Storage server-side — the frontend never needs to send it.
+ * EXPLICABLE : diffs the restored state against the target branch's current head and
+ * fires an AI patch note (fire-and-forget).
  */
-branchesRouter.post('/versions/:id/restore', pluginMiddleware, async (c) => {
+branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json', restoreSchema), async (c) => {
   const supabase = getSupabaseClient();
-  const { branch_name, author } = await c.req.json<{
-    branch_name: string;
-    author: { figma_id: string; name: string; avatar_url?: string };
-  }>();
+  const storage = getSupabaseStorage();
+  const { branch_name, author } = c.req.valid('json');
 
-  if (!branch_name) return c.json<ErrorResponse>({ error: 'branch_name required' }, 400);
+  // Charger la version source + vérifier l'ownership (garde partagé).
+  const owned = await loadOwnedVersion(supabase, c.req.param('id'), c.get('projectId'));
+  if ('error' in owned) {
+    return owned.error === 'forbidden'
+      ? c.json<ErrorResponse>({ error: 'Forbidden' }, 403)
+      : c.json<ErrorResponse>({ error: 'Version not found' }, 404);
+  }
+  const src = owned.version as unknown as {
+    asset_id: string; version_number: number; branch_name: string;
+    figma_node_id: string | null; snapshot_json: FigmaSnapshot | null; storage_path: string | null;
+  };
 
-  // Load source version + verify ownership
-  const { data: src } = await supabase
-    .from('versions')
-    .select('*, assets!inner(project_id)')
-    .eq('id', c.req.param('id'))
-    .single();
-
-  if (!src) return c.json<ErrorResponse>({ error: 'Version not found' }, 404);
-  if ((src.assets as { project_id: string }).project_id !== c.get('projectId'))
-    return c.json<ErrorResponse>({ error: 'Forbidden' }, 403);
-
-  const snapshot = await resolveSnapshot(src);
+  const snapshot = await resolveSnapshot(storage, src);
   if (!snapshot) return c.json<ErrorResponse>({ error: 'Snapshot not found in storage' }, 404);
 
-  // Next version number on target branch
-  const { data: prev } = await supabase
-    .from('versions')
-    .select('id, version_number, storage_path')
-    .eq('asset_id', src.asset_id)
-    .eq('branch_name', branch_name)
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Création atomique sur la branche cible. Restore EXPLICABLE : on diffe l'état
+  // restauré contre le head courant de la branche cible (ce que le restore change).
+  let pendingDelta: DeltaJSON | null = null;
+  const result = await createVersionAtomic(supabase, storage, {
+    assetId: src.asset_id,
+    branchName: branch_name,
+    snapshot,
+    renderB64: null, // le render pixel-perfect est copié depuis la source ci-dessous
+    figmaNodeId: src.figma_node_id,
+    author,
+    computeMeta: async (prev) => {
+      const baseSummary = `Restauration depuis v${src.version_number} (${src.branch_name})`;
+      if (!prev?.storage_path) return { analysisJson: null, aiSummary: baseSummary };
+      const headSnap = await downloadSnapshot(storage, prev.storage_path);
+      if (!headSnap) return { analysisJson: null, aiSummary: baseSummary };
+      const delta = diffService.compareSnapshots(headSnap, snapshot);
+      if (delta.totalChanges > 0) pendingDelta = delta;
+      return { analysisJson: delta.totalChanges > 0 ? delta : null, aiSummary: baseSummary };
+    },
+  });
 
-  const nextVersion = prev ? prev.version_number + 1 : 1;
-  const safeBranch = branch_name.replace(/[^a-zA-Z0-9-_]/g, '_');
-  const newPath = `${src.asset_id}/${safeBranch}/v${nextVersion}.json`;
+  if (!result.ok) return c.json<ErrorResponse>({ error: result.error }, result.status);
+  const { version } = result;
 
-  const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
-  const { error: uploadErr } = await getSupabaseStorage()
-    .from(SNAPSHOTS_BUCKET)
-    .upload(newPath, bytes, { contentType: 'application/json', upsert: false });
-
-  if (uploadErr) return c.json<ErrorResponse>({ error: 'Failed to upload snapshot' }, 500);
-
-  // Copy pixel-perfect render if it exists on the source version
-  if (src.storage_path) {
-    const srcRender = src.storage_path.replace('.json', '_render.json');
-    const { data: renderData } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(srcRender);
+  // Copier le render pixel-perfect de la source si présent (best-effort).
+  if (src.storage_path && version.storage_path) {
+    const { data: renderData } = await storage.from(SNAPSHOTS_BUCKET).download(src.storage_path.replace('.json', '_render.json'));
     if (renderData) {
-      const renderBytes = await renderData.arrayBuffer();
-      await getSupabaseStorage().from(SNAPSHOTS_BUCKET)
-        .upload(newPath.replace('.json', '_render.json'), renderBytes, { contentType: 'application/json', upsert: false });
+      await storage.from(SNAPSHOTS_BUCKET).upload(
+        version.storage_path.replace('.json', '_render.json'),
+        await renderData.arrayBuffer(),
+        { contentType: 'application/json', upsert: true },
+      );
     }
   }
 
-  const { data: version, error: versionErr } = await supabase
-    .from('versions')
-    .insert({
-      asset_id: src.asset_id,
-      parent_id: prev?.id ?? null,
-      branch_name,
-      version_number: nextVersion,
-      author_figma_id: author.figma_id,
-      author_name: author.name,
-      author_avatar_url: author.avatar_url ?? null,
-      figma_node_id: src.figma_node_id,
-      snapshot_json: null,
-      storage_path: newPath,
-      analysis_json: null,
-      ai_summary: `Restauration depuis v${src.version_number} (${src.branch_name})`,
-    })
-    .select()
-    .single();
-
-  if (versionErr || !version) {
-    await getSupabaseStorage().from(SNAPSHOTS_BUCKET).remove([newPath]);
-    return c.json<ErrorResponse>({ error: 'Failed to create restore checkpoint' }, 500);
+  // Patch Note IA expliquant ce que le restore a changé (fire-and-forget) ; remplace
+  // l'ai_summary constant par un résumé du delta dès qu'il est généré.
+  if (pendingDelta) {
+    void generateAndStoreSummary({
+      versionId: version.id, delta: pendingDelta, authorName: author.name,
+      branchName: branch_name, versionNumber: version.version_number, projectName: 'Design Guardian',
+    });
   }
 
   return c.json({ version }, 201);
@@ -343,7 +308,7 @@ branchesRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
   if ((version.assets as { project_id: string }).project_id !== c.get('projectId'))
     return c.json<ErrorResponse>({ error: 'Forbidden' }, 403);
 
-  const snapshot = await resolveSnapshot(version);
+  const snapshot = await resolveSnapshot(getSupabaseStorage(), version);
   if (!snapshot) return c.json<ErrorResponse>({ error: 'Snapshot not found in storage' }, 404);
 
   return c.json({ snapshot });
