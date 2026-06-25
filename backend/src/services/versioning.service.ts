@@ -76,39 +76,49 @@ export async function createVersionAtomic(
     const { error: upErr } = await uploadSnapshot(storage, path, input.snapshot);
     if (upErr) continue; // chemin déjà pris par une requête concurrente → on réessaie
 
-    const meta = await input.computeMeta(prevTyped);
+    // À partir d'ici un snapshot existe en Storage : toute sortie anormale (computeMeta
+    // qui throw, échec d'insert) doit nettoyer le blob orphelin (+ son rendu _render.json).
+    const renderPath = path.replace('.json', '_render.json');
+    try {
+      const meta = await input.computeMeta(prevTyped);
 
-    if (input.renderB64) {
-      const renderBytes = Buffer.from(JSON.stringify({ svg_b64: input.renderB64 }));
-      await storage.from(SNAPSHOTS_BUCKET).upload(path.replace('.json', '_render.json'), renderBytes, { contentType: 'application/json', upsert: true });
+      if (input.renderB64) {
+        const renderBytes = Buffer.from(JSON.stringify({ svg_b64: input.renderB64 }));
+        await storage.from(SNAPSHOTS_BUCKET).upload(renderPath, renderBytes, { contentType: 'application/json', upsert: true });
+      }
+
+      const { data: version, error: insErr } = await db
+        .from('versions')
+        .insert({
+          asset_id: input.assetId,
+          parent_id: prevTyped?.id ?? null,
+          branch_name: input.branchName,
+          version_number: nextVersion,
+          author_figma_id: input.author.figma_id,
+          author_name: input.author.name,
+          author_avatar_url: input.author.avatar_url ?? null,
+          figma_node_id: input.figmaNodeId ?? null,
+          snapshot_json: null,
+          storage_path: path,
+          analysis_json: meta.analysisJson,
+          ai_summary: meta.aiSummary,
+        })
+        .select()
+        .single();
+
+      if (insErr || !version) {
+        await storage.from(SNAPSHOTS_BUCKET).remove([path, renderPath]);
+        if ((insErr as { code?: string } | null)?.code === '23505') continue; // numéro pris entre-temps
+        return { ok: false, status: 500, error: insErr?.message ?? 'insert failed' };
+      }
+
+      return { ok: true, version: version as Version, prev: prevTyped, analysisJson: meta.analysisJson };
+    } catch (e) {
+      // computeMeta (diff/IA) ou l'upload du rendu a levé → on ne retente pas (ce n'est pas
+      // une collision transitoire) ; on supprime le snapshot orphelin et on remonte un 500.
+      await storage.from(SNAPSHOTS_BUCKET).remove([path, renderPath]);
+      return { ok: false, status: 500, error: e instanceof Error ? e.message : 'version creation failed' };
     }
-
-    const { data: version, error: insErr } = await db
-      .from('versions')
-      .insert({
-        asset_id: input.assetId,
-        parent_id: prevTyped?.id ?? null,
-        branch_name: input.branchName,
-        version_number: nextVersion,
-        author_figma_id: input.author.figma_id,
-        author_name: input.author.name,
-        author_avatar_url: input.author.avatar_url ?? null,
-        figma_node_id: input.figmaNodeId ?? null,
-        snapshot_json: null,
-        storage_path: path,
-        analysis_json: meta.analysisJson,
-        ai_summary: meta.aiSummary,
-      })
-      .select()
-      .single();
-
-    if (insErr || !version) {
-      await storage.from(SNAPSHOTS_BUCKET).remove([path]);
-      if ((insErr as { code?: string } | null)?.code === '23505') continue; // numéro pris entre-temps
-      return { ok: false, status: 500, error: insErr?.message ?? 'insert failed' };
-    }
-
-    return { ok: true, version: version as Version, prev: prevTyped, analysisJson: meta.analysisJson };
   }
   return { ok: false, status: 409, error: 'Could not allocate a free version number after retries' };
 }
