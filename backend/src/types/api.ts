@@ -154,3 +154,9 @@ export const portalSchema = z.object({
   return_url: z.string().url(),
 });
 export type PortalRequest = z.infer<typeof portalSchema>;
+
+// ── Branches / versions (plugin) ──────────────────────────────────────────────
+export const statusSchema = z.object({
+  status: z.enum(['draft', 'review', 'approved']),
+});
+export type StatusRequest = z.infer<typeof statusSchema>;
