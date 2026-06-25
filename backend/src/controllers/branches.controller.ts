@@ -1,14 +1,17 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
+import { statusSchema } from '../types/api.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
 import { nodeIdsToRender } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps, detectBlockMoves } from '../services/block-moves.service.js';
+import { loadOwnedVersion } from '../services/ownership.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
 
@@ -350,10 +353,15 @@ branchesRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
  * PUT /api/branches/versions/:id/status
  * Update version status: draft | review | approved
  */
-branchesRouter.put('/versions/:id/status', pluginMiddleware, async (c) => {
-  const { status } = await c.req.json<{ status: Version['status'] }>();
-  if (!['draft', 'review', 'approved'].includes(status)) {
-    return c.json<ErrorResponse>({ error: 'Invalid status' }, 400);
+branchesRouter.put('/versions/:id/status', pluginMiddleware, zValidator('json', statusSchema), async (c) => {
+  const id = c.req.param('id');
+  const { status } = c.req.valid('json');
+
+  const owned = await loadOwnedVersion(getSupabaseClient(), id, c.get('projectId'));
+  if ('error' in owned) {
+    return owned.error === 'forbidden'
+      ? c.json<ErrorResponse>({ error: 'Forbidden' }, 403)
+      : c.json<ErrorResponse>({ error: 'Version not found' }, 404);
   }
 
   const update: Partial<Version> = {
@@ -363,11 +371,7 @@ branchesRouter.put('/versions/:id/status', pluginMiddleware, async (c) => {
   };
 
   const { data, error } = await getSupabaseClient()
-    .from('versions')
-    .update(update)
-    .eq('id', c.req.param('id'))
-    .select()
-    .single();
+    .from('versions').update(update).eq('id', id).select().single();
 
   if (error || !data) return c.json<ErrorResponse>({ error: 'Version not found', details: error?.message }, 404);
   return c.json<ApproveVersionResponse>({ version: data });
