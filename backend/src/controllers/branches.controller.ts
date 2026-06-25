@@ -254,6 +254,7 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
     figmaNodeId: src.figma_node_id,
     author,
     computeMeta: async (prev) => {
+      pendingDelta = null; // reset par tentative : sur retry 23505, seul le dernier slot fait foi
       const baseSummary = `Restauration depuis v${src.version_number} (${src.branch_name})`;
       if (!prev?.storage_path) return { analysisJson: null, aiSummary: baseSummary };
       const headSnap = await downloadSnapshot(storage, prev.storage_path);

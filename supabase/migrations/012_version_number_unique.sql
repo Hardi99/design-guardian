@@ -24,8 +24,16 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE public.versions
-  ADD CONSTRAINT versions_asset_branch_vnum_unique
-  UNIQUE (asset_id, branch_name, version_number);
+-- Idempotent : Postgres n'a pas d'`ADD CONSTRAINT IF NOT EXISTS`, on garde via pg_constraint.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'versions_asset_branch_vnum_unique'
+  ) THEN
+    ALTER TABLE public.versions
+      ADD CONSTRAINT versions_asset_branch_vnum_unique
+      UNIQUE (asset_id, branch_name, version_number);
+  END IF;
+END $$;
 
 COMMIT;

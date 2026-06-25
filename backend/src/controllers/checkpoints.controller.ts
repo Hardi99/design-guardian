@@ -65,6 +65,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     figmaNodeId: body.figma_node_id ?? null,
     author: body.author,
     computeMeta: async (prev) => {
+      pendingDelta = null; // reset par tentative : sur retry 23505, seul le dernier slot fait foi
       if (!prev?.storage_path) return { analysisJson: null, aiSummary: null };
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
