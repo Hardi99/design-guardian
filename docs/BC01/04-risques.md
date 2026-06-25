@@ -1,41 +1,43 @@
 # C1.2.3 — Cartographie des Risques — Design Guardian
 
-## Matrice Probabilité / Impact (risques actifs)
+## Matrice de criticité 5×5 (Probabilité × Impact)
 
-```mermaid
-quadrantChart
-    title Risques actifs - Probabilite vs Impact
-    x-axis Faible probabilite --> Forte probabilite
-    y-axis Faible impact --> Fort impact
-    quadrant-1 Critiques - Traiter en priorite
-    quadrant-2 Majeurs - Surveiller de pres
-    quadrant-3 Mineurs - Accepter
-    quadrant-4 A surveiller
-    R03 Adoption faible: [0.62, 0.94]
-    R01 Versioning natif Figma: [0.40, 0.92]
-    R02 Rupture API Plugin: [0.60, 0.74]
-    R05 Dependance infra: [0.38, 0.74]
-    R04 Quota cout OpenAI: [0.40, 0.55]
-    R06 Perte de donnees: [0.20, 0.95]
-```
+> **Échelle complète 1-5 sur les deux axes.** Criticité = P × I → de **1 à 25**.
+> Bandes : 🟢 **Faible** 1-4 · 🟡 **Modérée** 5-9 · 🟠 **Élevée** 10-14 · 🔴 **Critique** 15-25.
+> → À construire en **tableau Canva natif 5×5, cellules colorées** (la vraie matrice de criticité). Chaque risque est placé dans sa case (valeur = P × I) ; le tableau ci-dessous reprend **exactement** les mêmes valeurs (zéro conflit graph/tableau).
 
-> Échelle 1-5 normalisée sur l'axe. **Criticité = Probabilité × Impact.** Chaque risque occupe une case distincte (pas de superposition).
-> R03 (adoption, 3 × 5 = 15) est le risque le plus critique — devant les risques techniques.
+| Impact ↓ \ Proba → | **P1** | **P2** | **P3** | **P4** | **P5** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **I5** | 🟡 5 · **R06** | 🟠 10 · **R01** | 🔴 15 | 🔴 20 · **R03** | 🔴 25 |
+| **I4** | 🟢 4 | 🟡 8 · **R05** | 🟠 12 · **R02** | 🔴 16 | 🔴 20 |
+| **I3** | 🟢 3 | 🟡 6 · **R04** | 🟡 9 | 🟠 12 | 🔴 15 |
+| **I2** | 🟢 2 | 🟢 4 | 🟡 6 | 🟡 8 | 🟠 10 |
+| **I1** | 🟢 1 | 🟢 2 | 🟢 3 | 🟢 4 | 🟡 5 |
+
+> **Lecture** : R03 (adoption faible) = **4 × 5 = 20** → 🔴 Critique, le risque n°1, loin devant les risques techniques. Le max théorique est **25**.
 
 ---
 
 ## Référentiel des risques actifs
 
-| ID | Risque | Probabilité | Impact | Criticité | Mitigation |
+| ID | Risque | Probabilité | Impact | Criticité (P×I, /25) | Mitigation |
 |----|--------|:-----------:|:------:|-----------|------------|
-| R03 | Adoption faible au lancement | 3 | 5 | 🔴 Élevée (15) | Early adopter actif (mai 2026) · plugin public Figma Community · onboarding à venir |
-| R02 | Rupture / changement de l'API Plugin Figma | 3 | 4 | 🔴 Élevée (12) | APIs stables documentées uniquement · veille active du changelog Figma (déjà vécu : `exportAsync`, sprint 2) |
-| R01 | Figma sort un versioning natif | 2 | 5 | 🔴 Élevée (10) | Différenciation prix (Branches 45 $/mois/user vs DG Free) · diff 0,01px · AI Patch Note |
-| R05 | Dépendance infra (Railway / Supabase) | 2 | 4 | 🟠 Haute (8) | Health checks `/health` · `/ping` + UptimeRobot 5 min · rollback Railway en 1 clic |
-| R04 | Quota / coût OpenAI dépassé | 2 | 3 | 🟡 Moyenne (6) | Rate limiting backend · fallback `ai_summary = null` si quota atteint |
-| R06 | Perte de données (snapshot manquant) | 1 | 5 | 🟡 Moyenne (5) | Sauvegarde Storage + INSERT atomique · `snapshot_json` nullable géré par `resolveSnapshot()` |
+| R03 | Adoption faible au lancement | 4 | 5 | 🔴 Critique (20) | Early adopter actif (mai 2026) · plugin public Figma Community · onboarding à venir |
+| R02 | Rupture / changement de l'API Plugin Figma | 3 | 4 | 🟠 Élevée (12) | APIs stables documentées uniquement · veille active du changelog Figma (déjà vécu : `exportAsync`, sprint 2) |
+| R01 | Figma sort un versioning natif | 2 | 5 | 🟠 Élevée (10) | Différenciation prix (Branches 45 €/mois/user vs DG Free) · diff 0,01px · AI Patch Note |
+| R05 | Dépendance infra (Railway / Supabase) | 2 | 4 | 🟡 Modérée (8) | Health checks `/health` · `/ping` + UptimeRobot 5 min · rollback Railway en 1 clic |
+| R04 | Quota / coût OpenAI dépassé | 2 | 3 | 🟡 Modérée (6) | Rate limiting backend · fallback `ai_summary = null` si quota atteint |
+| R06 | Perte de données (snapshot manquant) | 1 | 5 | 🟡 Modérée (5) | Sauvegarde Storage + INSERT atomique · `snapshot_json` nullable géré par `resolveSnapshot()` |
 
-> **Indicateurs de contrôle** : health checks `/health` et `/ping` · monitoring Grafana · taux d'erreur API · latence des endpoints · couverture de tests ≥ 80 %.
+> **Bandes de criticité** (P×I sur 25) : 🟢 Faible 1-4 · 🟡 Modérée 5-9 · 🟠 Élevée 10-14 · 🔴 Critique 15-25.
+> **Re-cotation** (retour prof) : l'adoption faible (R03) passe à **proba 4** — pour un produit de niche au lancement, c'est hautement probable → criticité **20/25**, et l'échelle utilise enfin le haut de la grille.
+
+> **Indicateurs de contrôle** (pour repérer un risque tôt) :
+> - 🟢 **Disponibilité** → `/health` + `/ping` (sonde UptimeRobot 5 min) — *l'infra est-elle debout ?*
+> - ⚡ **Performance** → latence + taux d'erreur API (Grafana) — *y a-t-il une dégradation ?*
+> - 🧪 **Qualité** → couverture de tests ≥ 80 % — *risque de régression maîtrisé ?*
+>
+> Chaque indicateur a un **seuil d'alerte** (ex. dispo < 99,5 %, erreurs > 1 %) → on agit **avant** que le risque devienne incident.
 
 ---
 
@@ -44,10 +46,10 @@ quadrantChart
 ```mermaid
 flowchart TD
     A["Risque détecté"] --> B{"Criticité ?"}
-    B -->|"🔴 Élevée"| C["Traitement immédiat<br/>< 4h"]
-    B -->|"🟠 Haute"| D["Traitement planifié<br/>< 24h"]
-    B -->|"🟡 Moyenne"| E["Backlog prioritaire<br/>< 1 semaine"]
-    B -->|"🟢 Basse"| F["Backlog standard<br/>Prochain sprint"]
+    B -->|"🔴 Critique (15-25)"| C["Traitement immédiat<br/>< 4h"]
+    B -->|"🟠 Élevée (10-14)"| D["Traitement planifié<br/>< 24h"]
+    B -->|"🟡 Modérée (5-9)"| E["Backlog prioritaire<br/>< 1 semaine"]
+    B -->|"🟢 Faible (1-4)"| F["Backlog standard<br/>Prochain sprint"]
 
     C --> G["Hotfix branch<br/>+ PR review<br/>+ deploy Railway"]
     D --> G

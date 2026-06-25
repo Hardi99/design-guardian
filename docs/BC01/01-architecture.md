@@ -241,7 +241,7 @@ graph LR
 graph LR
     Commit["git push<br/>master"] --> Build["Build<br/>tsc / vite build"]
     Build --> Types["Typecheck<br/>tsc --noEmit"]
-    Types --> Tests["Vitest<br/>123 tests (63 back · 60 plugin)"]
+    Types --> Tests["Vitest<br/>199 tests (104 back · 95 plugin)"]
     Tests --> Coverage["Coverage gate<br/>≥ 80%"]
     Coverage --> Deploy["Deploy<br/>Railway auto-deploy"]
     Deploy --> Health["Health check<br/>/health · /ping"]

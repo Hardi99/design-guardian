@@ -1,0 +1,226 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Brand ─────────────────────────────────────────── */
+:root {
+  --dg-bg:       #041018;
+  --dg-surface:  #071a2e;
+  --dg-border:   #0d2d47;
+  --dg-muted:    #1e3a52;
+  --dg-text:     #f0f9ff;
+  --dg-subtle:   #5c8aa8;
+  --dg-purple:   #22d3ee;
+  --dg-purple-l: #67e8f9;
+  --dg-green:    #34d399;
+  --dg-amber:    #fbbf24;
+  --dg-red:      #f87171;
+}
+
+/* ── Base ───────────────────────────────────────────── */
+.slidev-layout {
+  background: var(--dg-bg) !important;
+  color: var(--dg-text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.slidev-layout.default,
+.slidev-layout.center,
+.slidev-layout.full,
+.slidev-layout.cover,
+.slidev-layout.two-cols,
+.slidev-layout.image-right {
+  background: var(--dg-bg) !important;
+}
+
+/* ── Typography ─────────────────────────────────────── */
+h1 {
+  background: linear-gradient(140deg, #ffffff 0%, #22d3ee 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1 !important;
+}
+
+h2 {
+  color: #e2f5fa;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  color: var(--dg-purple-l);
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+p, li {
+  color: #a8cfe0;
+  line-height: 1.7;
+}
+
+strong {
+  color: #f0f9ff;
+  font-weight: 600;
+}
+
+a {
+  color: var(--dg-purple-l);
+  text-decoration: none;
+}
+
+/* ── Cards ──────────────────────────────────────────── */
+.card {
+  background: var(--dg-surface);
+  border: 1px solid var(--dg-border);
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.card-accent {
+  border-color: var(--dg-purple);
+  box-shadow: 0 0 0 1px var(--dg-purple), 0 0 20px rgba(34,211,238,0.12);
+}
+
+/* ── Tag / Pill ─────────────────────────────────────── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.tag-purple { background: rgba(34,211,238,0.1);  color: #67e8f9; border: 1px solid rgba(34,211,238,0.25); }
+.tag-green  { background: rgba(52,211,153,0.1);  color: #6ee7b7; border: 1px solid rgba(52,211,153,0.25); }
+.tag-amber  { background: rgba(251,191,36,0.1);  color: #fcd34d; border: 1px solid rgba(251,191,36,0.25); }
+.tag-blue   { background: rgba(34,211,238,0.07); color: #a5f3fc; border: 1px solid rgba(34,211,238,0.18); }
+
+/* ── Logo ───────────────────────────────────────────── */
+.dg-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--dg-purple);
+  border-radius: 0.625rem;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #041018;
+  letter-spacing: -0.02em;
+}
+.dg-logo.lg {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 1rem;
+  font-size: 1.4rem;
+}
+
+/* ── Big stat ───────────────────────────────────────── */
+.stat-num {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #fff 0%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+/* ── Mermaid ────────────────────────────────────────── */
+.mermaid svg {
+  background: transparent !important;
+  max-height: 400px;
+}
+
+/* ── Code ───────────────────────────────────────────── */
+.shiki, .shiki-container {
+  background: var(--dg-surface) !important;
+  border: 1px solid var(--dg-border);
+  border-radius: 0.75rem;
+  padding: 1rem !important;
+}
+
+/* ── Interactive diagram link ───────────────────────── */
+.open-diagram {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(34,211,238,0.08);
+  border: 1px solid rgba(34,211,238,0.3);
+  border-radius: 0.5rem;
+  color: #67e8f9;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+  margin-top: 0.75rem;
+}
+.open-diagram:hover {
+  background: rgba(34,211,238,0.16);
+  color: white;
+}
+
+/* ── Slidev chrome ──────────────────────────────────── */
+.slidev-progress { background: var(--dg-purple) !important; }
+.slidev-page-number { color: var(--dg-muted) !important; }
+.slidev-nav-go-back, .slidev-nav-go-next { color: var(--dg-muted) !important; }
+
+/* ── Cover specific ─────────────────────────────────── */
+.slidev-layout.cover {
+  background: radial-gradient(ellipse 80% 60% at 70% 50%, rgba(34,211,238,0.07) 0%, transparent 70%), var(--dg-bg) !important;
+}
+
+/* ── Comparison table ───────────────────────────────── */
+.comp-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.comp-table th {
+  background: var(--dg-surface);
+  color: var(--dg-subtle);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--dg-border);
+  text-align: left;
+}
+.comp-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid rgba(13,45,71,0.7);
+  color: #a8cfe0;
+}
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tr:hover td { background: rgba(34,211,238,0.03); }
+.check { color: var(--dg-green); font-weight: 700; }
+.cross { color: var(--dg-red); }
+.partial { color: var(--dg-amber); }
+
+/* ── Plan cards ─────────────────────────────────────── */
+.plan-card {
+  background: var(--dg-surface);
+  border: 1px solid var(--dg-border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.plan-card.featured {
+  border-color: var(--dg-purple);
+  box-shadow: 0 0 24px rgba(34,211,238,0.14);
+  background: linear-gradient(145deg, rgba(34,211,238,0.05), var(--dg-surface));
+}
+.plan-name { font-weight: 700; font-size: 1.1rem; color: white; }
+.plan-price { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: white; }
+.plan-price span { font-size: 0.85rem; font-weight: 400; color: var(--dg-subtle); }
+.plan-feature { font-size: 0.78rem; color: #7fb8d0; display: flex; align-items: center; gap: 0.4rem; }
+.plan-feature::before { content: '✓'; color: var(--dg-green); font-weight: 700; flex-shrink: 0; }

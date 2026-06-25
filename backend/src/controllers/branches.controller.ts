@@ -149,6 +149,11 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     } catch { return null; }
   };
 
+  // Frames entières ET crops par-nœud ne sont produits que sur demande (?thumbs=1) :
+  // l'appel par défaut renvoie le changelog (texte) instantané ; le plugin recharge
+  // le lourd (frames + vignettes) en différé. Défaut Nodes = zéro SVG.
+  const wantThumbs = c.req.query('thumbs') === '1';
+
   // Fetch parent version — storage_path + snapshot_json pour compatibilité
   let prevVersion = null;
   let prevSnap: FigmaSnapshot | null = null;
@@ -162,17 +167,14 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
     if (prev) {
       prevVersion = prev;
-      prevSnap = await resolveSnapshot(prev);
+      // Le snapshot parent ne sert qu'aux frames/crops (différés) → on ne le télécharge
+      // QUE sur ?thumbs=1. Inutile sur l'appel par défaut (évite 1 download Storage).
+      if (wantThumbs) prevSnap = await resolveSnapshot(prev);
     }
   }
 
   // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
   const currentSnap = await resolveSnapshot(versionData);
-
-  // Frames entières ET crops par-nœud ne sont produits que sur demande (?thumbs=1) :
-  // l'appel par défaut renvoie le changelog (texte) instantané ; le plugin recharge
-  // le lourd (frames + vignettes) en différé. Défaut Nodes = zéro SVG.
-  const wantThumbs = c.req.query('thumbs') === '1';
 
   const [svgB64, prevSvgB64] = wantThumbs
     ? await Promise.all([

@@ -1,6 +1,12 @@
-# BC03 — Arbitrage documenté : suppression d'un asset (soft vs hard delete)
+# BC03 — Arbitrages documentés (C3.2.2)
 
-> Cas d'arbitrage réel (C3.2.2) — format Contexte / Options / Analyse / Décision / Justification.
+> Cas d'arbitrage réels — format Contexte / Options / Analyse / Décision / Justification.
+> 1. Suppression d'un asset (soft vs hard delete)
+> 2. Stockage du rendu visuel (JSON-wrap vs fichier brut)
+
+---
+
+# Arbitrage 1 — Suppression d'un asset (soft vs hard delete)
 
 ## Contexte
 La suppression d'un asset depuis le plugin déclenche un `DELETE` SQL. Deux problèmes identifiés :
@@ -35,3 +41,35 @@ Cohérence avec la promesse « guardian de l'historique » (pas de destruction a
 - **Cible — roadmap (post-oral)** : migration `deleted_at` + filtres + UI corbeille + cron de purge. → relève de **BC04 amélioration continue**.
 
 > **Lien BC02/BC04** : ce bug (orphelins Storage) constitue aussi une **fiche d'anomalie réelle** (C4.2.1) — détection → analyse → correctif → vérification.
+
+---
+
+# Arbitrage 2 — Stockage du rendu visuel (JSON-wrap vs fichier brut)
+
+## Contexte
+Le rendu visuel d'une version (SVG **ou** PNG natif Figma) est stocké en **base64 dans `v{n}_render.json`** (bucket `snapshots`, MIME `application/json` uniquement, migration 008). Pas de fichier image brut.
+
+## Options
+| | A — JSON-wrap (actuel) | B — Fichier brut `.svg` / `.png` |
+|---|---|---|
+| Taille | **+33 %** (overhead base64) | **~33 % plus léger** |
+| Buckets | **1** (réutilise `snapshots`) | 2 (ou reconfig MIME) |
+| Format | agnostique (SVG ou PNG dans une string) | typé par fichier |
+| Servable par URL (image) | ❌ (faut désencapsuler) | ✅ |
+| Migration | — | rendus existants + read/write (`checkpoints` + `branches`) |
+
+## Analyse
+- **A** privilégie la **simplicité** (un bucket, un MIME, une convention de chemin facile à énumérer/nettoyer) et colle à la consommation webview (base64 + `atob()`).
+- **B** privilégie la **légèreté** (−33 %) et l'**éco-conception** (moins de bytes stockés/transférés), + permet de servir l'image directement par URL.
+
+## Décision (tendance)
+**Migrer vers B** (fichier brut dans un bucket média `image/svg+xml` + `image/png`) — priorité **légèreté + éco-conception**.
+
+## Justification & caveat honnête
+« Plus léger = mieux » est un bon principe par défaut. **Mais** : à l'échelle MVP (peu de rendus, free tier), le gain de 33 % est **marginal** face au coût (2ᵉ bucket, MIME, migration des rendus, maj read/write, gestion `.svg` vs `.png`). → **Valider que le volume justifie la migration** avant de la faire. La légèreté n'est pas gratuite.
+
+---
+
+# Roadmap technique post-oral
+1. **Soft delete + purge à rétention** (Arbitrage 1) — migration `deleted_at` + filtres requêtes + UI corbeille + cron de purge (le purge fait le hard delete + nettoyage Storage déjà codé).
+2. **Stockage rendu en fichier brut** (Arbitrage 2) — bucket média + migration des `*_render.json` → `.svg`/`.png` + maj `checkpoints` / `branches`.
