@@ -376,25 +376,31 @@ describe('matcher en couches (dg_id)', () => {
     expect(delta.modified.some(m => m.nodeId === 'a2' && m.nodeName === 'Nouveau')).toBe(true);
   });
 
-  it('reste robuste au réordonnancement (dg_id stable malgré index changé)', () => {
+  it('apparie par dg_id malgré réordonnancement ET ids Figma changés (pas add+remove)', () => {
     const diff = new DiffService();
+    // ids Figma différents entre v1 et v2 → SEUL le dg_id peut apparier ces nœuds.
+    // (un matching par id échouerait → tout en add/remove ; un matching par chemin
+    //  échouerait aussi à cause du réordonnancement.) On y ajoute un changement de
+    //  propriété sur A pour vérifier qu'il ressort en `modified` avec son id Figma brut.
     const v1 = makeSnapshot({
       id: 'r1', dg_id: 'root-dg', type: 'FRAME',
       children: [
-        makeRoot({ id: 'a', dg_id: 'A', name: 'A' }),
-        makeRoot({ id: 'b', dg_id: 'B', name: 'B' }),
+        makeRoot({ id: 'a1', dg_id: 'A', name: 'A', x: 0 }),
+        makeRoot({ id: 'b1', dg_id: 'B', name: 'B' }),
       ],
     });
     const v2 = makeSnapshot({
       id: 'r1', dg_id: 'root-dg', type: 'FRAME',
       children: [
-        makeRoot({ id: 'b', dg_id: 'B', name: 'B' }),
-        makeRoot({ id: 'a', dg_id: 'A', name: 'A' }),
+        makeRoot({ id: 'b2', dg_id: 'B', name: 'B' }),
+        makeRoot({ id: 'a2', dg_id: 'A', name: 'A', x: 5 }),
       ],
     });
     const delta = diff.compareSnapshots(v1, v2);
     expect(delta.added).toHaveLength(0);
     expect(delta.removed).toHaveLength(0);
+    // Apparié par dg_id ; le nodeId émis est l'id Figma brut côté v2 (pas la clé `dg:A`).
+    expect(delta.modified.some(m => m.nodeId === 'a2')).toBe(true);
   });
 
   it('fallback legacy : sans dg_id, le matching par chemin/ id fonctionne encore', () => {
