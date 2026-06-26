@@ -106,9 +106,33 @@ export class DiffService {
       });
     }
 
-    // Corner radius
-    if (v1.cornerRadius !== undefined && v2.cornerRadius !== undefined) {
-      this.compareNumeric(changes, 'cornerRadius', v1.cornerRadius, v2.cornerRadius, 'px');
+    // Corner radius — uniforme ET par-coin. Si les deux côtés sont uniformes, on garde
+    // EXACTEMENT le comportement scalaire historique (+X.XXpx). Dès qu'un côté est par-coin
+    // (cornerRadii), on normalise en 4-uplet [TL,TR,BR,BL] et on compare coin par coin à ε.
+    if (!v1.cornerRadii && !v2.cornerRadii) {
+      if (v1.cornerRadius !== undefined && v2.cornerRadius !== undefined) {
+        this.compareNumeric(changes, 'cornerRadius', v1.cornerRadius, v2.cornerRadius, 'px');
+      }
+    } else {
+      const r1 = this.cornerTuple(v1);
+      const r2 = this.cornerTuple(v2);
+      if (r1 && r2) {
+        // coin le plus modifié → oldValue/newValue numériques (significance garde son seuil 1px)
+        let maxI = -1, maxD = 0;
+        for (let i = 0; i < 4; i++) {
+          const d = Math.abs((r1[i] ?? 0) - (r2[i] ?? 0));
+          if (d > maxD) { maxD = d; maxI = i; }
+        }
+        if (maxD > this.EPSILON && maxI >= 0) {
+          const fmt = (t: number[]) => t.map(n => Number(n.toFixed(2))).join('/');
+          changes.push({
+            property: 'cornerRadius',
+            oldValue: r1[maxI],
+            newValue: r2[maxI],
+            delta: `${fmt(r1)} → ${fmt(r2)} px`,
+          });
+        }
+      }
     }
 
     // Stroke weight
@@ -250,6 +274,13 @@ export class DiffService {
       Math.abs(a.b - b.b) < 0.004 &&
       Math.abs(a.a - b.a) < 0.004
     );
+  }
+
+  // 4-uplet de rayons [TL,TR,BR,BL] : par-coin si présent, sinon uniforme étalé, sinon null.
+  private cornerTuple(n: NodeSnapshot): number[] | null {
+    if (n.cornerRadii && n.cornerRadii.length === 4) return n.cornerRadii;
+    if (n.cornerRadius !== undefined) return [n.cornerRadius, n.cornerRadius, n.cornerRadius, n.cornerRadius];
+    return null;
   }
 
   private colorToHex(color: FigmaColor): string {
