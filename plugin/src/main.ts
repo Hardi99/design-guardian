@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
+import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
@@ -154,8 +155,17 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
   if (props.has('visible'))                       node.visible = snap.visible ?? true;
   if (props.has('rotation') && 'rotation' in node && snap.rotation !== undefined)
     (node as SceneNode & { rotation: number }).rotation = snap.rotation;
-  if (props.has('cornerRadius') && 'cornerRadius' in node && snap.cornerRadius !== undefined)
-    (node as CornerMixin).cornerRadius = snap.cornerRadius;
+  if ((props.has('cornerRadius') || props.has('cornerRadii')) && 'cornerRadius' in node) {
+    if (snap.cornerRadii && snap.cornerRadii.length === 4) {
+      const n = node as unknown as Record<string, number>;
+      try {
+        n.topLeftRadius = snap.cornerRadii[0]; n.topRightRadius = snap.cornerRadii[1];
+        n.bottomRightRadius = snap.cornerRadii[2]; n.bottomLeftRadius = snap.cornerRadii[3];
+      } catch { /* non assignable sur ce type de nœud */ }
+    } else if (snap.cornerRadius !== undefined) {
+      (node as CornerMixin).cornerRadius = snap.cornerRadius;
+    }
+  }
   if (props.has('strokeWeight') && 'strokeWeight' in node && snap.strokeWeight !== undefined)
     (node as MinimalStrokesMixin).strokeWeight = snap.strokeWeight;
 
@@ -225,7 +235,7 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
 
 // Every property a snapshot can hold. Root excludes geometry (don't move/resize
 // the tracked frame); children include it (restore their layout within the frame).
-const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'strokeWeight', 'fills', 'strokes', 'effects', 'fontFamily', 'fontWeight', 'fontStyle', 'characters', 'fontSize', 'vectorPaths'];
+const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'cornerRadii', 'strokeWeight', 'fills', 'strokes', 'effects', 'fontFamily', 'fontWeight', 'fontStyle', 'characters', 'fontSize', 'vectorPaths'];
 const RESTORE_PROPS_ROOT     = new Set(RESTORE_PROPS);
 const RESTORE_PROPS_CHILDREN = new Set([...RESTORE_PROPS, 'x', 'y', 'width', 'height']);
 
@@ -559,6 +569,7 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     strokes:  extractStrokes(node),
     strokeWeight: safeNum('strokeWeight' in node ? (node as { strokeWeight: number | symbol }).strokeWeight : undefined),
     cornerRadius: safeNum('cornerRadius' in node ? (node as { cornerRadius: number | symbol }).cornerRadius : undefined),
+    cornerRadii: computeCornerRadii(node as unknown as CornerInput),
     layoutSizingHorizontal: extractLayoutSizing(node, 'layoutSizingHorizontal'),
     layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
     layoutPositioning:      extractLayoutPositioning(node),

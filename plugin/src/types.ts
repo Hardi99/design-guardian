@@ -36,6 +36,7 @@ export interface NodeSnapshot {
   rotation?: number;
   fills: FigmaFill[]; strokes: FigmaStroke[];
   strokeWeight?: number; cornerRadius?: number;
+  cornerRadii?: number[]; // [TL, TR, BR, BL] — présent uniquement si coins mixtes
   // Auto-layout : mode de dimensionnement de l'enfant (pour restaurer le resize en auto-layout)
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
