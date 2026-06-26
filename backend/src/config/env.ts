@@ -40,6 +40,17 @@ export function loadEnv(): Env {
   }
 
   env = parsed.data;
+
+  // Garde prod : /metrics ne doit pas être ouvert ; CORS doit être restreint.
+  if (env.NODE_ENV === 'production') {
+    if (!env.METRICS_TOKEN) {
+      throw new Error('METRICS_TOKEN is required in production (protège /metrics)');
+    }
+    if (!env.CORS_ORIGINS) {
+      console.warn('⚠️  CORS_ORIGINS vide en production : CORS ouvert à toutes les origines');
+    }
+  }
+
   return env;
 }
 
