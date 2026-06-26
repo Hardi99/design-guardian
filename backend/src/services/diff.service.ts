@@ -222,6 +222,14 @@ export class DiffService {
       changes.push({ property: 'fontStyle', oldValue: v1.fontStyle, newValue: v2.fontStyle, delta: `${v1.fontStyle} → ${v2.fontStyle}` });
     }
 
+    // Micro-typographie (px uniquement — cf. capture plugin)
+    if (v1.letterSpacing !== undefined && v2.letterSpacing !== undefined) {
+      this.compareNumeric(changes, 'letterSpacing', v1.letterSpacing, v2.letterSpacing, 'px');
+    }
+    if (v1.lineHeight !== undefined && v2.lineHeight !== undefined) {
+      this.compareNumeric(changes, 'lineHeight', v1.lineHeight, v2.lineHeight, 'px');
+    }
+
     // Effects — compare count + per-effect values (not just count)
     const v1Effects = v1.effects ?? [];
     const v2Effects = v2.effects ?? [];

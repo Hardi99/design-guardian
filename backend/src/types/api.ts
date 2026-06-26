@@ -97,6 +97,8 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     fontWeight: z.number().optional(),
     fontStyle: z.string().optional(),
     fontStyleName: z.string().optional(),
+    letterSpacing: z.number().optional(),
+    lineHeight: z.number().optional(),
     vectorPaths: z.array(figmaVectorPathSchema).optional(),
     children: z.array(nodeSnapshotSchema).optional(),
   })

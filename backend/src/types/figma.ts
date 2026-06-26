@@ -74,6 +74,8 @@ export interface NodeSnapshot {
   fontWeight?: number;
   fontStyle?: string;
   fontStyleName?: string; // raw Figma fontName.style — exact round-trip for restore
+  letterSpacing?: number; // px (résolu) ; undefined si AUTO/PERCENT/mixed
+  lineHeight?: number;    // px (résolu) ; undefined si AUTO/PERCENT/mixed
   // For VECTOR nodes
   vectorPaths?: FigmaVectorPath[];
   // Recursive children
