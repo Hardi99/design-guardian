@@ -17,7 +17,7 @@ export async function pluginMiddleware(c: Context<ProjectEnv>, next: Next): Prom
 
   c.set('projectId', data.id);
 
-  let plan = (data.plan as string) ?? 'free';
+  let plan = (data.plan ?? 'free') as string;
   const linkToken = c.req.header('X-Link-Token');
   if (linkToken) {
     const { data: link } = await db
