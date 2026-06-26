@@ -1,4 +1,5 @@
 import type { Context, Next } from 'hono';
+import { routePath } from 'hono/route';
 import { httpRequestsTotal, httpRequestDuration, activeConnections } from '../services/metrics.service.js';
 
 export async function metricsMiddleware(c: Context, next: Next): Promise<void> {
@@ -7,11 +8,10 @@ export async function metricsMiddleware(c: Context, next: Next): Promise<void> {
   try {
     await next();
   } finally {
-    // Pattern de route Hono (`/api/checkpoints/:id`) plutôt que le pathname concret :
-    // évite l'explosion de cardinalité Prometheus (1 série par id). Fallback : pathname.
-    // TODO(hono-upgrade): `c.req.routePath` est @deprecated en Hono 4.x ; migrer vers
-    // le helper `routePath` de `hono/route` lors du prochain bump majeur.
-    const route = c.req.routePath ?? new URL(c.req.url).pathname;
+    // Pattern de route Hono (leaf match, ex. `/api/checkpoints/:id`) plutôt que le pathname
+    // concret → évite l'explosion de cardinalité Prometheus (1 série par id). `routePath(c, -1)`
+    // = dernière route matchée (le handler), pas `*` du middleware global. API non-dépréciée.
+    const route = routePath(c, -1);
     const method = c.req.method;
     const status = String(c.res.status);
     httpRequestsTotal.inc({ method, route, status });
