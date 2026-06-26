@@ -9,16 +9,22 @@ import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
 import { pollPatchNote } from './patchNote.js';
+import { linkReducer } from './linkFlow.js';
 import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
+let currentLinkToken: string | null = null;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function api<T>(key: string, path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
-    headers: { 'X-API-Key': key, 'Content-Type': 'application/json', ...(opts?.headers ?? {}) },
+    headers: {
+      'X-API-Key': key, 'Content-Type': 'application/json',
+      ...(currentLinkToken ? { 'X-Link-Token': currentLinkToken } : {}),
+      ...(opts?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error: string; details?: string };
@@ -28,6 +34,53 @@ async function api<T>(key: string, path: string, opts?: RequestInit): Promise<T>
 }
 
 function send(msg: UIToMain) { parent.postMessage({ pluginMessage: msg }, '*'); }
+
+// ─── AccountLink ──────────────────────────────────────────────────────────────
+
+function AccountLink() {
+  const apiKey = useAppStore(s => s.apiKey)!;
+  const author = useAppStore(s => s.author);
+  const setPlan = useAppStore(s => s.setPlan);
+  const [state, dispatch] = useReducer(linkReducer, { phase: 'idle' });
+
+  const start = useCallback(async () => {
+    dispatch({ type: 'START' });
+    try {
+      const r = await api<{ code: string; approve_url: string }>(apiKey, '/api/link/start', {
+        method: 'POST',
+        body: JSON.stringify({ figma_user_id: author?.figma_id ?? '', figma_user_name: author?.name ?? '' }),
+      });
+      dispatch({ type: 'STARTED', code: r.code });
+      send({ type: 'OPEN_EXTERNAL', url: r.approve_url });
+    } catch (e) { dispatch({ type: 'FAIL', message: (e as Error).message }); }
+  }, [apiKey, author]);
+
+  useEffect(() => {
+    if (state.phase !== 'awaiting') return;
+    const code = state.code;
+    const id = setInterval(async () => {
+      try {
+        const r = await api<{ status: string; link_token?: string }>(apiKey, `/api/link/status?code=${code}`);
+        if (r.status === 'approved' && r.link_token) {
+          currentLinkToken = r.link_token;
+          send({ type: 'LINK_PERSIST_TOKEN', token: r.link_token });
+          dispatch({ type: 'POLL_APPROVED', token: r.link_token });
+          const me = await api<{ plan: Plan }>(apiKey, '/api/link/me');
+          setPlan(me.plan ?? 'free');
+        } else if (r.status === 'expired') {
+          dispatch({ type: 'POLL_EXPIRED' });
+        }
+      } catch { /* transitoire — on retente au tick suivant */ }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [state, apiKey]);
+
+  if (state.phase === 'linked')   return <p class="text-xs text-green-400">✓ Compte lié</p>;
+  if (state.phase === 'awaiting') return <p class="text-xs text-gray-400">En attente d'approbation dans le navigateur…</p>;
+  if (state.phase === 'expired')  return <button class="btn-secondary text-xs px-3 py-1.5" onClick={() => dispatch({ type: 'RESET' })}>Code expiré — réessayer</button>;
+  if (state.phase === 'error')    return <button class="btn-secondary text-xs px-3 py-1.5" onClick={start}>Erreur — réessayer</button>;
+  return <button class="btn-secondary text-xs px-3 py-1.5" onClick={start}>Lier mon compte</button>;
+}
 
 // ─── App (routeur) ────────────────────────────────────────────────────────────
 
@@ -66,6 +119,16 @@ function App() {
         case 'BRANCH_CREATED': break;
         case 'BRANCH_SWITCHED': break;
         case 'ERROR': alert(`[DG] ${msg.message}`); break;
+        case 'LINK_TOKEN': {
+          currentLinkToken = msg.token;
+          if (msg.token) {
+            try {
+              const me = await fetch(`${API_BASE}/api/link/me`, { headers: { 'X-Link-Token': msg.token } }).then(r => r.json()) as { plan: Plan };
+              setPlan(me.plan ?? 'free');
+            } catch { /* garde le plan projet */ }
+          }
+          break;
+        }
       }
     };
     window.addEventListener('message', handler);
@@ -98,6 +161,7 @@ function App() {
           </div>
         ))}
       </div>
+      <AccountLink />
       <p class="text-xs text-gray-600 text-center mt-auto">Contact : design-guardian@proton.me</p>
     </div>
   );

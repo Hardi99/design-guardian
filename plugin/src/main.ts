@@ -52,6 +52,8 @@ function generateFileId(): string {
   }
 
   send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
+  const linkToken = (await figma.clientStorage.getAsync('dg_link_token')) as string | undefined;
+  send({ type: 'LINK_TOKEN', token: linkToken ?? null });
 })();
 
 const user = figma.currentUser;
@@ -73,6 +75,7 @@ figma.ui.onmessage = async (raw: unknown) => {
       break;
     }
     case 'OPEN_EXTERNAL':     figma.openExternal(msg.url); break;
+    case 'LINK_PERSIST_TOKEN': await figma.clientStorage.setAsync('dg_link_token', msg.token); break;
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;

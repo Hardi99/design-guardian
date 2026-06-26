@@ -76,7 +76,8 @@ export type MainToUI =
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
   | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number }
-  | { type: 'ERROR'; message: string };
+  | { type: 'ERROR'; message: string }
+  | { type: 'LINK_TOKEN'; token: string | null };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -93,4 +94,5 @@ export type UIToMain =
   | { type: 'CREATE_BRANCH'; branchName: string }
   | { type: 'SWITCH_BRANCH'; branchName: string }
   | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
-  | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta };
+  | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
+  | { type: 'LINK_PERSIST_TOKEN'; token: string };
