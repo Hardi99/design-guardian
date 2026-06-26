@@ -61,6 +61,7 @@ export interface NodeSnapshot {
   strokes: FigmaStroke[];
   strokeWeight?: number;
   cornerRadius?: number;
+  cornerRadii?: number[]; // [TL, TR, BR, BL] — présent uniquement si coins par-coin (mixed)
   // Auto-layout (pour la significativité : distinguer géométrie authored vs dérivée)
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';

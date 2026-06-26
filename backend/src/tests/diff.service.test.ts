@@ -414,6 +414,40 @@ describe('matcher en couches (dg_id)', () => {
   });
 });
 
+// ─── rayons par-coin (cornerRadii) ───────────────────────────────────────────
+
+describe('rayons par-coin (cornerRadii)', () => {
+  it('détecte un changement de coin (mixed), propriété cornerRadius, sans add/remove', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadii: [8, 8, 8, 8] });
+    const v2 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadii: [8, 8.5, 8, 8] });
+    const delta = diff.compareSnapshots(v1, v2);
+    const node = delta.modified.find(m => m.nodeId === 'r');
+    expect(node).toBeDefined();
+    const ch = node!.changes.find(c => c.property === 'cornerRadius');
+    expect(ch).toBeDefined();
+    expect(ch!.delta).toBe('8/8/8/8 → 8/8.5/8/8 px');
+  });
+
+  it('coins uniformes : comportement scalaire inchangé (+1.00px)', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadius: 8 });
+    const v2 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadius: 9 });
+    const delta = diff.compareSnapshots(v1, v2);
+    const ch = delta.modified.find(m => m.nodeId === 'r')!.changes.find(c => c.property === 'cornerRadius');
+    expect(ch!.delta).toBe('+1.00px');
+  });
+
+  it('uniforme vs par-coin équivalents : aucun changement', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadius: 8 });
+    const v2 = makeSnapshot({ id: 'r', type: 'RECTANGLE', cornerRadii: [8, 8, 8, 8] });
+    const delta = diff.compareSnapshots(v1, v2);
+    const node = delta.modified.find(m => m.nodeId === 'r');
+    expect(node).toBeUndefined();
+  });
+});
+
 // ─── totalChanges accounting ──────────────────────────────────────────────────
 
 describe('DiffService – totalChanges', () => {
