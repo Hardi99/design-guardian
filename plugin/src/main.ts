@@ -229,13 +229,19 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
     const t = node as TextNode;
     if (typeof t.fontSize !== 'symbol') t.fontSize = snap.fontSize;
   }
+  if (props.has('letterSpacing') && node.type === 'TEXT' && snap.letterSpacing !== undefined) {
+    (node as TextNode).letterSpacing = { value: snap.letterSpacing, unit: 'PIXELS' };
+  }
+  if (props.has('lineHeight') && node.type === 'TEXT' && snap.lineHeight !== undefined) {
+    (node as TextNode).lineHeight = { value: snap.lineHeight, unit: 'PIXELS' };
+  }
   if (props.has('vectorPaths') && 'vectorPaths' in node && snap.vectorPaths?.length)
     (node as VectorNode).vectorPaths = snap.vectorPaths as VectorPath[];
 }
 
 // Every property a snapshot can hold. Root excludes geometry (don't move/resize
 // the tracked frame); children include it (restore their layout within the frame).
-const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'cornerRadii', 'strokeWeight', 'fills', 'strokes', 'effects', 'fontFamily', 'fontWeight', 'fontStyle', 'characters', 'fontSize', 'vectorPaths'];
+const RESTORE_PROPS = ['opacity', 'visible', 'rotation', 'cornerRadius', 'cornerRadii', 'strokeWeight', 'fills', 'strokes', 'effects', 'fontFamily', 'fontWeight', 'fontStyle', 'characters', 'fontSize', 'letterSpacing', 'lineHeight', 'vectorPaths'];
 const RESTORE_PROPS_ROOT     = new Set(RESTORE_PROPS);
 const RESTORE_PROPS_CHILDREN = new Set([...RESTORE_PROPS, 'x', 'y', 'width', 'height']);
 
@@ -606,6 +612,14 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
                     if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) return undefined;
                     return (fn as FontName).style;
                   })() : undefined,
+    letterSpacing: node.type === 'TEXT' ? (() => {
+      const ls = (node as unknown as TextNode).letterSpacing;
+      return typeof ls === 'object' && ls !== null && (ls as { unit?: string }).unit === 'PIXELS' ? (ls as { value: number }).value : undefined;
+    })() : undefined,
+    lineHeight: node.type === 'TEXT' ? (() => {
+      const lh = (node as unknown as TextNode).lineHeight;
+      return typeof lh === 'object' && lh !== null && (lh as { unit?: string }).unit === 'PIXELS' ? (lh as { value: number }).value : undefined;
+    })() : undefined,
     children: 'children' in node ? (node as ChildrenMixin).children.map(extractSnapshot) : [],
   };
 }
