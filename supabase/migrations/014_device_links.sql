@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS public.device_links (
   approved_at     timestamptz
 );
 
-CREATE INDEX IF NOT EXISTS idx_device_links_code       ON public.device_links (code);
 CREATE INDEX IF NOT EXISTS idx_device_links_token_hash ON public.device_links (token_hash);
 CREATE INDEX IF NOT EXISTS idx_device_links_figma_user ON public.device_links (figma_user_id);
 

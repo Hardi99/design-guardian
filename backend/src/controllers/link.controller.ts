@@ -60,7 +60,8 @@ linkRouter.get('/status', pluginMiddleware, async (c) => {
   // et poll en série → au pire le MÊME token est renvoyé 2× au MÊME client. Une garantie
   // stricte exigerait un UPDATE…RETURNING via RPC Postgres — disproportionné ici (YAGNI).
   if (status === 'approved' && row.pending_token) {
-    await db.from('device_links').update({ pending_token: null }).eq('code', code);
+    const { error: clearErr } = await db.from('device_links').update({ pending_token: null }).eq('code', code);
+    if (clearErr) console.error('[link] failed to clear pending_token:', clearErr.message);
     return c.json({ status, link_token: row.pending_token as string });
   }
   return c.json({ status });
@@ -110,7 +111,7 @@ linkRouter.get('/me', async (c) => {
     .from('device_links').select('profile_id').eq('token_hash', hashToken(token)).not('profile_id', 'is', null).maybeSingle();
   if (!link?.profile_id) return c.json({ linked: false, plan: 'free' });
   const { data: profile } = await db.from('profiles').select('plan').eq('id', link.profile_id).maybeSingle();
-  return c.json({ linked: true, plan: (profile?.plan as string) ?? 'free' });
+  return c.json({ linked: true, plan: (profile?.plan as string) || 'free' });
 });
 
 export { linkRouter };
