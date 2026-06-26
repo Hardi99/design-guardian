@@ -39,18 +39,21 @@ export function loadEnv(): Env {
     throw new Error('Invalid environment variables');
   }
 
-  env = parsed.data;
+  const validated = parsed.data;
 
   // Garde prod : /metrics ne doit pas être ouvert ; CORS doit être restreint.
-  if (env.NODE_ENV === 'production') {
-    if (!env.METRICS_TOKEN) {
+  if (validated.NODE_ENV === 'production') {
+    if (!validated.METRICS_TOKEN) {
       throw new Error('METRICS_TOKEN is required in production (protège /metrics)');
     }
-    if (!env.CORS_ORIGINS) {
+    if (!validated.CORS_ORIGINS) {
       console.warn('⚠️  CORS_ORIGINS vide en production : CORS ouvert à toutes les origines');
     }
   }
 
+  // N'assigner le cache QU'APRÈS toute validation : si la garde throw et que l'appelant
+  // l'attrape, getEnv() ne doit pas resservir un env invalide déjà mis en cache.
+  env = validated;
   return env;
 }
 
