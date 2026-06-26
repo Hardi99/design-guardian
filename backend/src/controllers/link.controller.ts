@@ -54,6 +54,11 @@ linkRouter.get('/status', pluginMiddleware, async (c) => {
 
   if (!row) return c.json({ status: 'expired' as const });
   const status = linkStatus(row, new Date());
+  // Livraison du token : le plaintext (pending_token) n'est renvoyé qu'ici, puis nullé
+  // (le durable reste token_hash, hashé). La paire lecture+update n'est pas atomique, mais
+  // c'est ACCEPTÉ : seul le plugin d'origine détient X-API-Key + code (16 octets aléatoires)
+  // et poll en série → au pire le MÊME token est renvoyé 2× au MÊME client. Une garantie
+  // stricte exigerait un UPDATE…RETURNING via RPC Postgres — disproportionné ici (YAGNI).
   if (status === 'approved' && row.pending_token) {
     await db.from('device_links').update({ pending_token: null }).eq('code', code);
     return c.json({ status, link_token: row.pending_token as string });
@@ -84,7 +89,8 @@ linkRouter.post('/approve', authMiddleware, zValidator('json', linkApproveSchema
   if (row.profile_id) return c.json<ErrorResponse>({ error: 'Already linked' }, 409);
 
   // Un seul lien actif par utilisateur Figma : révoquer les liens approuvés antérieurs.
-  await db.from('device_links').delete().eq('figma_user_id', row.figma_user_id).not('token_hash', 'is', null);
+  const { error: revokeErr } = await db.from('device_links').delete().eq('figma_user_id', row.figma_user_id).not('token_hash', 'is', null);
+  if (revokeErr) console.error('[link] failed to revoke prior links:', revokeErr.message);
 
   const { token, hash } = newToken();
   const { error } = await db.from('device_links').update({
