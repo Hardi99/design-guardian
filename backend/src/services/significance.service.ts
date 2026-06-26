@@ -37,6 +37,8 @@ const QUALITATIVE = new Set<string>([
 export const SIGNIFICANCE_THRESHOLDS: Record<string, number> = {
   x: 1, y: 1, width: 1, height: 1,   // px
   fontSize: 1,                       // px
+  letterSpacing: 0.1,                // px — l'interlettrage joue en dixièmes
+  lineHeight: 1,                     // px
   cornerRadius: 1, strokeWeight: 1,  // px
   opacity: 0.05,                     // 0..1
   rotation: 1,                       // degrés

@@ -448,6 +448,25 @@ describe('rayons par-coin (cornerRadii)', () => {
   });
 });
 
+// ─── micro-typo (letterSpacing / lineHeight) ─────────────────────────────────
+
+describe('micro-typo (letterSpacing / lineHeight)', () => {
+  it('détecte un changement d\'interlettrage', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 't', type: 'TEXT', letterSpacing: 0 });
+    const v2 = makeSnapshot({ id: 't', type: 'TEXT', letterSpacing: 1.5 });
+    const ch = diff.compareSnapshots(v1, v2).modified.find(m => m.nodeId === 't')!.changes.find(c => c.property === 'letterSpacing');
+    expect(ch!.delta).toBe('+1.50px');
+  });
+  it('détecte un changement d\'interligne', () => {
+    const diff = new DiffService();
+    const v1 = makeSnapshot({ id: 't', type: 'TEXT', lineHeight: 20 });
+    const v2 = makeSnapshot({ id: 't', type: 'TEXT', lineHeight: 24 });
+    const ch = diff.compareSnapshots(v1, v2).modified.find(m => m.nodeId === 't')!.changes.find(c => c.property === 'lineHeight');
+    expect(ch!.delta).toBe('+4.00px');
+  });
+});
+
 // ─── totalChanges accounting ──────────────────────────────────────────────────
 
 describe('DiffService – totalChanges', () => {
