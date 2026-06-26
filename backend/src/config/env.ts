@@ -50,6 +50,9 @@ export function loadEnv(): Env {
     if (!validated.CORS_ORIGINS) {
       console.warn('⚠️  CORS_ORIGINS vide en production : CORS ouvert à toutes les origines');
     }
+    if (!validated.WEBAPP_URL) {
+      console.warn('⚠️  WEBAPP_URL vide en production : approve_url du device-link sera relatif/cassé');
+    }
   }
 
   // N'assigner le cache QU'APRÈS toute validation : si la garde throw et que l'appelant
