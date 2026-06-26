@@ -24,6 +24,7 @@ const envSchema = z.object({
   // Sécurité — vides par défaut (comportement non-bloquant) ; à renseigner en prod.
   CORS_ORIGINS: z.string().default(''),   // origines autorisées, séparées par des virgules ; vide = toutes
   METRICS_TOKEN: z.string().default(''),  // si défini, /metrics exige ce bearer token
+  WEBAPP_URL: z.string().default(''),     // URL de la webapp (ex: https://designguardian.app) — guard prod ajouté en A5
 });
 
 type Env = z.infer<typeof envSchema>;

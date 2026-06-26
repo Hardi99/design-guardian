@@ -10,6 +10,7 @@ import { checkpointsRouter } from './controllers/checkpoints.controller.js';
 import { branchesRouter } from './controllers/branches.controller.js';
 import { notificationsRouter } from './controllers/notifications.controller.js';
 import { paymentsRouter } from './controllers/payments.controller.js';
+import { linkRouter } from './controllers/link.controller.js';
 import { metricsMiddleware } from './middleware/metrics.middleware.js';
 import { registry } from './services/metrics.service.js';
 import { getOpenApiSpec } from './services/openapi.js';
@@ -92,6 +93,7 @@ export function createApp() {
   app.route('/api/branches', branchesRouter);
   app.route('/api/notifications', notificationsRouter);
   app.route('/api/payments', paymentsRouter);
+  app.route('/api/link', linkRouter);
 
   return app;
 }
