@@ -210,7 +210,7 @@ async function applyDeltaProps(node: SceneNode, snap: NodeSnapshot, props: Set<s
   // LIMITE CONNUE : le snapshot ne stocke le style texte qu'au niveau nœud (1 couleur,
   // 1 police). Le rich text (couleur/police PAR PLAGE) n'est pas capturé → non restauré.
   // Vrai fix = getStyledTextSegments + setRange* (projet « fidélité rich-text » post-SP1).
-  if (node.type === 'TEXT' && (props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle') || props.has('characters') || props.has('fontSize'))) {
+  if (node.type === 'TEXT' && (props.has('fontFamily') || props.has('fontWeight') || props.has('fontStyle') || props.has('characters') || props.has('fontSize') || props.has('letterSpacing') || props.has('lineHeight'))) {
     await loadNodeFonts(node as TextNode);
   }
 
