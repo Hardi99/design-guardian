@@ -176,7 +176,7 @@ export type RestoreRequest = z.infer<typeof restoreSchema>;
 
 // ── Pont billing↔identité (device-code) ──────────────────────────────────────
 export const linkStartSchema = z.object({
-  figma_user_id: z.string().min(1),
+  figma_user_id: z.string().min(1).max(64),
   figma_user_name: z.string().max(120).optional(),
 });
-export const linkApproveSchema = z.object({ code: z.string().min(1) });
+export const linkApproveSchema = z.object({ code: z.string().min(1).max(64) });

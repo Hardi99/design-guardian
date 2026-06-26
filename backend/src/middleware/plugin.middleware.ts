@@ -24,7 +24,7 @@ export async function pluginMiddleware(c: Context<ProjectEnv>, next: Next): Prom
       .from('device_links').select('profile_id').eq('token_hash', hashToken(linkToken)).not('profile_id', 'is', null).maybeSingle();
     if (link?.profile_id) {
       const { data: profile } = await db.from('profiles').select('plan').eq('id', link.profile_id).maybeSingle();
-      if (profile?.plan) plan = profile.plan as string;
+      if (profile?.plan != null) plan = profile.plan as string;
     }
   }
   c.set('plan', plan);
