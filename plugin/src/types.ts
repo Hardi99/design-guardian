@@ -50,6 +50,8 @@ export interface NodeSnapshot {
   fontWeight?: number;
   fontStyle?: string;
   fontStyleName?: string; // raw Figma fontName.style — exact round-trip for restore
+  letterSpacing?: number; // px ; undefined si AUTO/PERCENT/mixed
+  lineHeight?: number;    // px ; undefined si AUTO/PERCENT/mixed
   children?: NodeSnapshot[];
 }
 
