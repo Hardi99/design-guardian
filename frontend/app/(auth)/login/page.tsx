@@ -148,6 +148,12 @@ export default function LoginPage() {
               Retour à l&apos;accueil
             </Link>
           </div>
+
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            <a href="/privacy" className="hover:text-foreground">Confidentialité</a>
+            {' · '}
+            <a href="/terms" className="hover:text-foreground">CGU</a>
+          </p>
         </div>
       </div>
     </div>
