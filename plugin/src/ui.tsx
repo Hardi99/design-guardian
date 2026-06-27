@@ -609,14 +609,17 @@ function useCycleStatus(dispatch: (a: DiffAction) => void, apiKey: string, versi
   }, [apiKey, versionId, status]);
 }
 
-function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string, svgB64: string | null, delta: RestorationDelta | null) {
+function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string, renderUrl: string | null, renderKind: 'svg' | 'png' | null, delta: RestorationDelta | null) {
   return useCallback(async () => {
     dispatch({ type: 'APPLY_START' });
     try {
       const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${versionId}/snapshot`);
-      send({ type: 'RESTORE_TO_FIGMA', versionId, snapshot, render_svg_b64: svgB64 ?? undefined, delta: delta ?? undefined });
+      const renderSvg = (renderKind === 'svg' && renderUrl)
+        ? await fetch(renderUrl).then(r => r.text()).then(t => btoa(unescape(encodeURIComponent(t)))).catch(() => undefined)
+        : undefined;
+      send({ type: 'RESTORE_TO_FIGMA', versionId, snapshot, render_svg_b64: renderSvg, delta: delta ?? undefined });
     } catch (e) { dispatch({ type: 'APPLY_ERROR', err: (e as Error).message }); }
-  }, [apiKey, versionId, svgB64, delta]);
+  }, [apiKey, versionId, renderUrl, renderKind, delta]);
 }
 
 function useRestore(
@@ -653,7 +656,7 @@ function DiffScreen() {
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
   const cycleStatus  = useCycleStatus(dispatch, apiKey, version.id, state.status);
-  const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id, state.data?.svg_b64 ?? null, (state.data?.version.analysis_json ?? null) as RestorationDelta | null);
+  const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id, state.data?.render_url ?? null, state.data?.render_kind ?? null, (state.data?.version.analysis_json ?? null) as RestorationDelta | null);
   const restore      = useRestore(dispatch, apiKey, version.id, author, branch, setScreen);
 
   const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
@@ -773,23 +776,23 @@ function DiffScreen() {
               <div class="flex flex-1 overflow-hidden">
                 <div class="flex-1 flex flex-col items-center justify-center border-r border-gray-800 p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{data.prev_version!.version_number} — avant</p>
-                  {data.prev_svg_b64
-                    ? <SvgFrame b64={data.prev_svg_b64} style="flex-1 min-h-0 overflow-hidden" zoomable />
+                  {data.prev_render_url
+                    ? <SvgFrame url={data.prev_render_url} kind={data.prev_render_kind ?? 'png'} style="flex-1 min-h-0 overflow-hidden" zoomable />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
                 <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
                   <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
-                  {data.svg_b64
-                    ? <SvgFrame b64={data.svg_b64} style="flex-1 min-h-0 overflow-hidden" zoomable />
+                  {data.render_url
+                    ? <SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="flex-1 min-h-0 overflow-hidden" zoomable />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
                   }
                 </div>
               </div>
             ) : (
               <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
-                {data.prev_svg_b64 && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame b64={data.prev_svg_b64} style="w-full h-full" /></div>}
-                {data.svg_b64      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame b64={data.svg_b64} style="w-full h-full" /></div>}
+                {data.prev_render_url && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame url={data.prev_render_url} kind={data.prev_render_kind ?? 'png'} style="w-full h-full" /></div>}
+                {data.render_url      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="w-full h-full" /></div>}
                 <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
                   <span class="text-xs text-gray-500">avant</span>
                   <input type="range" min={0} max={1} step={0.01} value={opacity}
@@ -855,7 +858,18 @@ function DiffScreen() {
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zoomable?: boolean }) {
+function SvgFrame({ url, kind, style, zoomable }: { url: string; kind: 'svg' | 'png'; style?: string; zoomable?: boolean }) {
+  const [svg, setSvg] = useState<string | null>(null);
+  useEffect(() => {
+    if (kind !== 'svg') return;
+    let alive = true;
+    fetch(url).then(r => r.text()).then(t => { if (alive) setSvg(
+      t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
+       .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"')
+    ); }).catch(() => { if (alive) setSvg(''); });
+    return () => { alive = false; };
+  }, [url, kind]);
+
   const [zoom,     setZoom]     = useState(1);
   const [pan,      setPan]      = useState({ x: 0, y: 0 });
   const [grabbing, setGrabbing] = useState(false);
@@ -873,22 +887,13 @@ function SvgFrame({ b64, style, zoomable }: { b64: string; style?: string; zooma
     return { x: Math.min(hw, Math.max(-hw, x)), y: Math.min(hh, Math.max(-hh, y)) };
   };
 
-  const html = useMemo(() => {
-    if (b64.startsWith('iVBO')) return null;
-    try {
-      const svg = atob(b64);
-      return svg
-        .replace(/(<svg[^>]*)\s+width="[^"]*"/, '$1')
-        .replace(/(<svg[^>]*)\s+height="[^"]*"/, '$1')
-        .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
-    } catch { return ''; }
-  }, [b64]);
-
-  const content = html === null
-    ? <img src={`data:image/png;base64,${b64}`} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />
-    : html
-      ? <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: html }} />
-      : <p class="text-gray-600 text-xs">Erreur rendu</p>;
+  const content = kind === 'png'
+    ? <img src={url} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />
+    : svg === null
+      ? <div class="w-full h-full animate-pulse bg-gray-800/40" />
+      : svg
+        ? <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />
+        : <p class="text-gray-600 text-xs">Erreur rendu</p>;
 
   if (!zoomable) return <div class={style ?? 'w-full h-full'}>{content}</div>;
 
