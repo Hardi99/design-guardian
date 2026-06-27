@@ -863,6 +863,7 @@ function SvgFrame({ url, kind, style, zoomable }: { url: string; kind: 'svg' | '
   useEffect(() => {
     if (kind !== 'svg') return;
     let alive = true;
+    setSvg(null); // reset → skeleton pendant le (re)chargement, évite l'image périmée à la navigation
     fetch(url).then(r => r.text()).then(t => { if (alive) setSvg(
       t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
        .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"')
