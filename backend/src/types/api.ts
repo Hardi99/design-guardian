@@ -114,6 +114,7 @@ export const createCheckpointSchema = z.object({
   snapshot_json: figmaSnapshotSchema,
   figma_node_id: z.string().optional(),
   render_svg_b64: z.string().optional(),
+  render_kind: z.enum(['svg', 'png']).optional(),
   notify_email: z.string().email().optional(),
   author: z.object({
     figma_id: z.string(),

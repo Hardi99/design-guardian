@@ -34,7 +34,64 @@ function dbWithConflictThenSuccess() {
   };
 }
 
+// Helper: DB qui réussit au premier essai (pas de conflit 23505).
+function dbFirstSuccess() {
+  const prev = { id: 'p', version_number: 1, storage_path: null };
+  return {
+    from: () => ({
+      select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: prev, error: null }) }) }) }) }) }),
+      insert: () => ({ select: () => ({ single: async () => ({ data: { id: 'v', version_number: 2, branch_name: 'main' }, error: null }) }) }),
+    }),
+  };
+}
+
 describe('createVersionAtomic', () => {
+  it('stocke le render PNG sous png_b64 quand renderKind est "png"', async () => {
+    const db = dbFirstSuccess();
+    let capturedRenderJson: string | undefined;
+    const bucket = {
+      upload: vi.fn(async (path: string, data: Uint8Array) => {
+        if (path.endsWith('_render.json')) capturedRenderJson = Buffer.from(data).toString();
+        return { error: null as null };
+      }),
+      remove: vi.fn(async () => ({ error: null as null })),
+      download: vi.fn(async () => ({ data: null as null, error: { message: 'x' } })),
+    };
+    const storage = { from: () => bucket };
+    const res = await createVersionAtomic(db as never, storage as never, {
+      assetId: 'a', branchName: 'main', snapshot: snap,
+      renderB64: 'iVBOxxx', renderKind: 'png',
+      author: { figma_id: 'f', name: 'A' },
+      computeMeta: async () => ({ analysisJson: null, aiSummary: null }),
+    });
+    expect(res.ok).toBe(true);
+    expect(capturedRenderJson).toBeDefined();
+    expect(JSON.parse(capturedRenderJson!)).toEqual({ png_b64: 'iVBOxxx' });
+  });
+
+  it('stocke le render SVG sous svg_b64 quand renderKind est "svg"', async () => {
+    const db = dbFirstSuccess();
+    let capturedRenderJson: string | undefined;
+    const bucket = {
+      upload: vi.fn(async (path: string, data: Uint8Array) => {
+        if (path.endsWith('_render.json')) capturedRenderJson = Buffer.from(data).toString();
+        return { error: null as null };
+      }),
+      remove: vi.fn(async () => ({ error: null as null })),
+      download: vi.fn(async () => ({ data: null as null, error: { message: 'x' } })),
+    };
+    const storage = { from: () => bucket };
+    const res = await createVersionAtomic(db as never, storage as never, {
+      assetId: 'a', branchName: 'main', snapshot: snap,
+      renderB64: 'PHN2Zy8+', renderKind: 'svg',
+      author: { figma_id: 'f', name: 'A' },
+      computeMeta: async () => ({ analysisJson: null, aiSummary: null }),
+    });
+    expect(res.ok).toBe(true);
+    expect(capturedRenderJson).toBeDefined();
+    expect(JSON.parse(capturedRenderJson!)).toEqual({ svg_b64: 'PHN2Zy8+' });
+  });
+
   it('réessaie après une collision 23505 puis réussit, en nettoyant le snapshot orphelin', async () => {
     const db = dbWithConflictThenSuccess();
     const { storage, bucket } = storageWithSpies();
