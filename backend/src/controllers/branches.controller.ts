@@ -246,7 +246,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
   return c.json({
     version: versionData, prev_version: prevVersion,
-    svg_b64: svgB64, prev_svg_b64: prevSvgB64,
     render_url: curUrl?.url ?? null,        render_kind: curUrl?.kind ?? null,
     prev_render_url: prevUrl?.url ?? null,  prev_render_kind: prevUrl?.kind ?? null,
     node_diffs: nodeDiffs, block_moves: blockMoves,
