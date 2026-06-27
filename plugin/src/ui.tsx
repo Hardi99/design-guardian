@@ -147,11 +147,6 @@ function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  if (screen === 'loading')    return <LoadingScreen />;
-  if (screen === 'assets')     return <AssetsScreen />;
-  if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
-  if (screen === 'diff')       return <DiffScreen />;
-  if (screen === 'checkpoint') return <CheckpointScreen />;
   if (showUpgrade) return (
     <div class="flex flex-col h-screen bg-gray-950 text-white p-6 gap-4">
       <div class="flex items-center gap-3 border-b border-gray-800 pb-4">
@@ -177,6 +172,12 @@ function App() {
       <p class="text-xs text-gray-600 text-center mt-auto">Contact : design-guardian@proton.me</p>
     </div>
   );
+
+  if (screen === 'loading')    return <LoadingScreen />;
+  if (screen === 'assets')     return <AssetsScreen />;
+  if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
+  if (screen === 'diff')       return <DiffScreen />;
+  if (screen === 'checkpoint') return <CheckpointScreen />;
   return <Spinner full />;
 }
 
