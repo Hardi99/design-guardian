@@ -13,11 +13,12 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://design-guardian.up.railway.app"
+      "https://design-guardian.up.railway.app",
+      "https://zrlwwxarwgfkdwgshocb.supabase.co"
     ],
     "devAllowedDomains": [
       "http://localhost:3001"
     ],
-    "reasoning": "Design Guardian sends design snapshots to its backend API to compute geometric diffs, generate AI patch notes, and store version history."
+    "reasoning": "Design Guardian sends design snapshots to its backend API to compute geometric diffs, generate AI patch notes, and store version history; it loads pixel-perfect render previews from Supabase Storage signed URLs."
   }
 }
