@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
+import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
@@ -344,6 +345,7 @@ function tryRestoreFromClone(versionId: string): boolean {
 }
 
 async function handleRestoreToFigma(versionId: string | undefined, snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
+  if (renderSvgB64 && renderSvgB64.startsWith('iVBO')) renderSvgB64 = undefined; // PNG → pas de createNodeFromSvg
   // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
   if (versionId && tryRestoreFromClone(versionId)) {
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
@@ -494,26 +496,33 @@ async function handleSnapshot(): Promise<void> {
 
   storeHistoryClonePending(node);
 
-  // Pixel-perfect SVG via exportAsync — requires "exports" permission in manifest
+  // Aperçu : SVG si vectoriel léger (zoom net), sinon PNG borné (raster/lourd, échelle dégressive).
   let render_svg_b64: string | undefined;
+  let render_kind: 'svg' | 'png' = 'svg';
   if ('exportAsync' in node) {
+    const exportNode = node as ExportMixin;
+    const toB64 = (bytes: Uint8Array): string => {
+      const CHUNK = 8192; let b = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) b += String.fromCharCode(...Array.from(bytes.slice(i, Math.min(i + CHUNK, bytes.length))));
+      return btoa(b);
+    };
     try {
-      const bytes = await (node as ExportMixin).exportAsync({ format: 'SVG' });
-      // Chunk-based btoa — handles binary-safe UTF-8 without stack overflow
-      const CHUNK = 8192;
-      let b = '';
-      for (let i = 0; i < bytes.length; i += CHUNK) {
-        b += String.fromCharCode(...Array.from(bytes.slice(i, Math.min(i + CHUNK, bytes.length))));
+      const svgB64 = toB64(await exportNode.exportAsync({ format: 'SVG' }));
+      if (chooseFormat(svgB64.length) === 'svg') {
+        render_svg_b64 = svgB64; render_kind = 'svg';
+      } else {
+        for (const s of PNG_SCALES) {
+          render_svg_b64 = toB64(await exportNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: s } }));
+          render_kind = 'png';
+          if (render_svg_b64.length <= PNG_MAX_B64 || s === 0.5) break;
+        }
       }
-      const b64 = btoa(b);
-      if (b64.length < 2_000_000) render_svg_b64 = b64;
-      console.log('[DG] exportAsync SVG:', bytes.length, 'bytes →', b64.length, 'b64 chars', render_svg_b64 ? '✓' : '(skipped: too large)');
+      console.log('[DG] render', render_kind, render_svg_b64?.length, 'b64 chars');
     } catch (e) {
-      console.log('[DG] exportAsync failed:', e);
+      console.log('[DG] export failed:', e);
     }
   }
-
-  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id, render_svg_b64 });
+  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id, render_svg_b64, render_kind });
 }
 
 // ─── Snapshot extraction ──────────────────────────────────────────────────────

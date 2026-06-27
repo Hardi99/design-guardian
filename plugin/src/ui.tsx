@@ -127,7 +127,7 @@ function App() {
           break;
         }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
-        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64); setScreen('checkpoint'); break;
+        case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64, msg.render_kind); setScreen('checkpoint'); break;
         case 'BRANCH_CREATED': break;
         case 'BRANCH_SWITCHED': break;
         case 'ERROR': alert(`[DG] ${msg.message}`); break;
@@ -443,6 +443,7 @@ function CheckpointScreen() {
   const branch       = useAppStore(s => s.branch);
   const snapshot     = useAppStore(s => s.snapshot)!;
   const renderSvgB64 = useAppStore(s => s.renderSvgB64);
+  const renderKind   = useAppStore(s => s.renderKind);
   const setScreen    = useAppStore(s => s.setScreen);
 
   const [branchName, setBranchName] = useState(branch);
@@ -466,6 +467,7 @@ function CheckpointScreen() {
             figma_node_id:   snapshot.figmaNodeId,
             snapshot_json:   snapshot,
             render_svg_b64:  renderSvgB64,
+            render_kind:     renderKind,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
           }),
         }
@@ -475,7 +477,7 @@ function CheckpointScreen() {
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
-  }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64]);
+  }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64, renderKind]);
 
   // Récupération asynchrone du AI Patch Note (généré en arrière-plan côté serveur).
   useEffect(() => {
@@ -542,7 +544,6 @@ function CheckpointScreen() {
         <div class="p-3 bg-gray-900 rounded-lg border border-gray-800">
           <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
           <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
-          {!renderSvgB64 && <p class="text-xs text-amber-600/80 mt-1">Frame complexe — aperçu approximatif activé</p>}
         </div>
         <div>
           <label htmlFor="cp-branch" class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>

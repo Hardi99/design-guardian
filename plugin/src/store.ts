@@ -27,6 +27,7 @@ interface AppData {
   branch:       string
   snapshot:     FigmaSnapshot | null
   renderSvgB64: string | undefined
+  renderKind:   'svg' | 'png' | undefined
   initErr:      string | null
   diffVersion:  Version | null
 }
@@ -39,7 +40,7 @@ export interface AppState extends AppData {
   setAuthor:      (a: PluginAuthor)                       => void
   setAsset:       (a: Asset | null)                       => void
   setBranch:      (b: string)                             => void
-  setSnapshot:    (s: FigmaSnapshot | null, svg?: string) => void
+  setSnapshot:    (s: FigmaSnapshot | null, svg?: string, kind?: 'svg' | 'png') => void
   setInitErr:     (e: string | null)                      => void
   setDiffVersion: (v: Version | null)                     => void
 }
@@ -56,6 +57,7 @@ export const INITIAL_STATE: AppData = {
   branch:       'main',
   snapshot:     null,
   renderSvgB64: undefined,
+  renderKind:   undefined,
   initErr:      null,
   diffVersion:  null,
 }
@@ -73,7 +75,7 @@ export const appStore = createStore<AppState>()((set) => ({
   // globales. Sans ça, un nouvel asset hérite de la branche de l'ancien (bug fantôme).
   setAsset:       (asset)                  => set({ asset, branch: 'main' }),
   setBranch:      (branch)                 => set({ branch }),
-  setSnapshot:    (snapshot, renderSvgB64) => set({ snapshot, renderSvgB64 }),
+  setSnapshot:    (snapshot, renderSvgB64, renderKind) => set({ snapshot, renderSvgB64, renderKind }),
   setInitErr:     (initErr)                => set({ initErr }),
   setDiffVersion: (diffVersion)            => set({ diffVersion }),
 }))
