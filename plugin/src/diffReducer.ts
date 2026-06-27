@@ -30,12 +30,14 @@ export interface NodeDiffVisual {
 }
 
 export interface DiffData {
-  version:      Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null }
-  prev_version: (Version & { snapshot_json: unknown }) | null
-  svg_b64:      string | null
-  prev_svg_b64: string | null
-  node_diffs:   NodeDiffVisual[]
-  block_moves?: BlockMove[]
+  version:          Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null }
+  prev_version:     (Version & { snapshot_json: unknown }) | null
+  render_url:       string | null
+  render_kind:      'svg' | 'png' | null
+  prev_render_url:  string | null
+  prev_render_kind: 'svg' | 'png' | null
+  node_diffs:       NodeDiffVisual[]
+  block_moves?:     BlockMove[]
 }
 
 // ─── État du reducer ──────────────────────────────────────────────────────────
@@ -90,7 +92,9 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
     case 'SET_VIEW':       return { ...state, view: action.view }
     // Le lourd (frames + vignettes) arrive en différé → fusion dans les données affichées.
     case 'HEAVY_LOADED':   return state.data ? { ...state, data: { ...state.data,
-      svg_b64: action.data.svg_b64, prev_svg_b64: action.data.prev_svg_b64, node_diffs: action.data.node_diffs } } : state
+      render_url: action.data.render_url, render_kind: action.data.render_kind,
+      prev_render_url: action.data.prev_render_url, prev_render_kind: action.data.prev_render_kind,
+      node_diffs: action.data.node_diffs } } : state
     case 'CLEAR_MSG':      return { ...state, restoreMsg: null }
     default: return state
   }
