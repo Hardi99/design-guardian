@@ -24,7 +24,11 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: (() => {
+          const next = new URLSearchParams(window.location.search).get('next');
+          const base = `${window.location.origin}/auth/callback`;
+          return next ? `${base}?next=${encodeURIComponent(next)}` : base;
+        })(),
       },
     });
 
