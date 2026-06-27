@@ -271,14 +271,19 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
   if (!result.ok) return c.json<ErrorResponse>({ error: result.error }, result.status);
   const { version } = result;
 
-  // Copier le render pixel-perfect de la source si présent (best-effort) — blob binaire.
+  // Copier le render pixel-perfect de la source si présent (best-effort) — blob binaire,
+  // avec repli sur l'ancien `_render.json` (versions pré-migration) pour ne pas perdre le rendu.
   if (src.storage_path && version.storage_path) {
     const store = storage.from(SNAPSHOTS_BUCKET);
-    for (const copyExt of ['png', 'svg'] as const) {
-      const { data: renderData } = await store.download(src.storage_path.replace('.json', `_render.${copyExt}`));
+    const copies: { ext: string; ctype: string }[] = [
+      { ext: 'png',  ctype: 'image/png' },
+      { ext: 'svg',  ctype: 'image/svg+xml' },
+      { ext: 'json', ctype: 'application/json' }, // legacy
+    ];
+    for (const { ext, ctype } of copies) {
+      const { data: renderData } = await store.download(src.storage_path.replace('.json', `_render.${ext}`));
       if (renderData) {
-        const copyCtype = copyExt === 'png' ? 'image/png' : 'image/svg+xml';
-        await store.upload(version.storage_path.replace('.json', `_render.${copyExt}`), await renderData.arrayBuffer(), { contentType: copyCtype, upsert: true });
+        await store.upload(version.storage_path.replace('.json', `_render.${ext}`), await renderData.arrayBuffer(), { contentType: ctype, upsert: true });
         break;
       }
     }
