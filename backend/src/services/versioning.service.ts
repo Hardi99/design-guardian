@@ -78,16 +78,15 @@ export async function createVersionAtomic(
     if (upErr) continue; // chemin déjà pris par une requête concurrente → on réessaie
 
     // À partir d'ici un snapshot existe en Storage : toute sortie anormale (computeMeta
-    // qui throw, échec d'insert) doit nettoyer le blob orphelin (+ son rendu _render.json).
-    const renderPath = path.replace('.json', '_render.json');
+    // qui throw, échec d'insert) doit nettoyer le blob orphelin (+ son rendu _render.{ext}).
+    const ext   = input.renderKind === 'png' ? 'png' : 'svg';
+    const ctype = input.renderKind === 'png' ? 'image/png' : 'image/svg+xml';
+    const renderPath = path.replace('.json', `_render.${ext}`);
     try {
       const meta = await input.computeMeta(prevTyped);
 
       if (input.renderB64) {
-        const renderBytes = Buffer.from(JSON.stringify(
-          input.renderKind === 'png' ? { png_b64: input.renderB64 } : { svg_b64: input.renderB64 },
-        ));
-        await storage.from(SNAPSHOTS_BUCKET).upload(renderPath, renderBytes, { contentType: 'application/json', upsert: true });
+        await storage.from(SNAPSHOTS_BUCKET).upload(renderPath, Buffer.from(input.renderB64, 'base64'), { contentType: ctype, upsert: true });
       }
 
       const { data: version, error: insErr } = await db

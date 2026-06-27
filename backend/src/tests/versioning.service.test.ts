@@ -46,12 +46,18 @@ function dbFirstSuccess() {
 }
 
 describe('createVersionAtomic', () => {
-  it('stocke le render PNG sous png_b64 quand renderKind est "png"', async () => {
+  it('stocke le render PNG en blob binaire _render.png avec contentType image/png', async () => {
     const db = dbFirstSuccess();
-    let capturedRenderJson: string | undefined;
+    let capturedPath: string | undefined;
+    let capturedData: Buffer | undefined;
+    let capturedContentType: string | undefined;
     const bucket = {
-      upload: vi.fn(async (path: string, data: Uint8Array) => {
-        if (path.endsWith('_render.json')) capturedRenderJson = Buffer.from(data).toString();
+      upload: vi.fn(async (path: string, data: Uint8Array, opts?: { contentType?: string; upsert?: boolean }) => {
+        if (path.includes('_render')) {
+          capturedPath = path;
+          capturedData = Buffer.from(data);
+          capturedContentType = opts?.contentType;
+        }
         return { error: null as null };
       }),
       remove: vi.fn(async () => ({ error: null as null })),
@@ -65,16 +71,23 @@ describe('createVersionAtomic', () => {
       computeMeta: async () => ({ analysisJson: null, aiSummary: null }),
     });
     expect(res.ok).toBe(true);
-    expect(capturedRenderJson).toBeDefined();
-    expect(JSON.parse(capturedRenderJson!)).toEqual({ png_b64: 'iVBOxxx' });
+    expect(capturedPath).toMatch(/_render\.png$/);
+    expect(capturedContentType).toBe('image/png');
+    expect(capturedData).toEqual(Buffer.from('iVBOxxx', 'base64'));
   });
 
-  it('stocke le render SVG sous svg_b64 quand renderKind est "svg"', async () => {
+  it('stocke le render SVG en blob binaire _render.svg avec contentType image/svg+xml', async () => {
     const db = dbFirstSuccess();
-    let capturedRenderJson: string | undefined;
+    let capturedPath: string | undefined;
+    let capturedData: Buffer | undefined;
+    let capturedContentType: string | undefined;
     const bucket = {
-      upload: vi.fn(async (path: string, data: Uint8Array) => {
-        if (path.endsWith('_render.json')) capturedRenderJson = Buffer.from(data).toString();
+      upload: vi.fn(async (path: string, data: Uint8Array, opts?: { contentType?: string; upsert?: boolean }) => {
+        if (path.includes('_render')) {
+          capturedPath = path;
+          capturedData = Buffer.from(data);
+          capturedContentType = opts?.contentType;
+        }
         return { error: null as null };
       }),
       remove: vi.fn(async () => ({ error: null as null })),
@@ -88,8 +101,9 @@ describe('createVersionAtomic', () => {
       computeMeta: async () => ({ analysisJson: null, aiSummary: null }),
     });
     expect(res.ok).toBe(true);
-    expect(capturedRenderJson).toBeDefined();
-    expect(JSON.parse(capturedRenderJson!)).toEqual({ svg_b64: 'PHN2Zy8+' });
+    expect(capturedPath).toMatch(/_render\.svg$/);
+    expect(capturedContentType).toBe('image/svg+xml');
+    expect(capturedData).toEqual(Buffer.from('PHN2Zy8+', 'base64'));
   });
 
   it('réessaie après une collision 23505 puis réussit, en nettoyant le snapshot orphelin', async () => {
@@ -104,7 +118,7 @@ describe('createVersionAtomic', () => {
     if (res.ok) expect(res.version.version_number).toBe(4);
     expect(db._inserts()).toBe(2);
     // Après l'insert en conflit (23505), le blob orphelin + son rendu sont supprimés.
-    expect(bucket.remove).toHaveBeenCalledWith(['a/main/v3.json', 'a/main/v3_render.json']);
+    expect(bucket.remove).toHaveBeenCalledWith(['a/main/v3.json', 'a/main/v3_render.svg']);
   });
 
   it('nettoie le snapshot orphelin si computeMeta lève (et renvoie 500 sans retenter)', async () => {
@@ -118,6 +132,6 @@ describe('createVersionAtomic', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.status).toBe(500);
     expect(db._inserts()).toBe(0); // pas d'insert tenté
-    expect(bucket.remove).toHaveBeenCalledWith(['a/main/v3.json', 'a/main/v3_render.json']);
+    expect(bucket.remove).toHaveBeenCalledWith(['a/main/v3.json', 'a/main/v3_render.svg']);
   });
 });

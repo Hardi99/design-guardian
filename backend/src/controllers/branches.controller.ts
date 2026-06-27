@@ -79,18 +79,21 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     } catch { return null; }
   };
 
-  // Tente de charger le SVG pixel-perfect depuis Storage (exportAsync)
-  // Si absent, génère le SVG depuis le snapshot (fallback)
+  // Tente de charger le rendu depuis Storage : blob binaire d'abord, puis legacy JSON, puis reconstruction.
   const resolveRenderB64 = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<string | null> => {
     if (storagePath) {
-      // SVG/PNG enveloppé en JSON (contourne la restriction MIME du bucket)
-      const renderPath = storagePath.replace('.json', '_render.json');
-      const { data } = await getSupabaseStorage().from(SNAPSHOTS_BUCKET).download(renderPath);
-      if (data) {
+      const store = getSupabaseStorage().from(SNAPSHOTS_BUCKET);
+      for (const blobExt of ['png', 'svg'] as const) {
+        const { data } = await store.download(storagePath.replace('.json', `_render.${blobExt}`));
+        if (data) return Buffer.from(await data.arrayBuffer()).toString('base64');
+      }
+      // legacy : ancien rendu enveloppé en JSON
+      const { data: legacy } = await store.download(storagePath.replace('.json', '_render.json'));
+      if (legacy) {
         try {
-          const json = JSON.parse(await data.text()) as { svg_b64?: string; png_b64?: string };
+          const json = JSON.parse(await legacy.text()) as { svg_b64?: string; png_b64?: string };
           if (json.svg_b64) return json.svg_b64;
-          if (json.png_b64) return json.png_b64; // backward compat — anciennes versions PNG
+          if (json.png_b64) return json.png_b64;
         } catch { /* fallback */ }
       }
     }
@@ -268,15 +271,16 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
   if (!result.ok) return c.json<ErrorResponse>({ error: result.error }, result.status);
   const { version } = result;
 
-  // Copier le render pixel-perfect de la source si présent (best-effort).
+  // Copier le render pixel-perfect de la source si présent (best-effort) — blob binaire.
   if (src.storage_path && version.storage_path) {
-    const { data: renderData } = await storage.from(SNAPSHOTS_BUCKET).download(src.storage_path.replace('.json', '_render.json'));
-    if (renderData) {
-      await storage.from(SNAPSHOTS_BUCKET).upload(
-        version.storage_path.replace('.json', '_render.json'),
-        await renderData.arrayBuffer(),
-        { contentType: 'application/json', upsert: true },
-      );
+    const store = storage.from(SNAPSHOTS_BUCKET);
+    for (const copyExt of ['png', 'svg'] as const) {
+      const { data: renderData } = await store.download(src.storage_path.replace('.json', `_render.${copyExt}`));
+      if (renderData) {
+        const copyCtype = copyExt === 'png' ? 'image/png' : 'image/svg+xml';
+        await store.upload(version.storage_path.replace('.json', `_render.${copyExt}`), await renderData.arrayBuffer(), { contentType: copyCtype, upsert: true });
+        break;
+      }
     }
   }
 
