@@ -3,6 +3,7 @@ export const metadata = { title: 'Conditions générales — Design Guardian' };
 export default function TermsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 text-foreground space-y-8">
+      <p><a href="/" className="text-sm text-muted-foreground hover:text-foreground">← Accueil</a></p>
       <h1 className="text-3xl font-bold">Conditions générales d&apos;utilisation</h1>
       <p className="text-muted-foreground">Dernière mise à jour : 27 juin 2026.</p>
 
