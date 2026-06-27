@@ -86,7 +86,12 @@ export async function createVersionAtomic(
       const meta = await input.computeMeta(prevTyped);
 
       if (input.renderB64) {
-        await storage.from(SNAPSHOTS_BUCKET).upload(renderPath, Buffer.from(input.renderB64, 'base64'), { contentType: ctype, upsert: true });
+        // Best-effort (un échec render ne doit pas faire échouer le checkpoint), mais on
+        // LOGGUE l'erreur : un rejet silencieux (ex. restriction MIME du bucket) faisait
+        // retomber l'aperçu en reconstruction sans aucun signal.
+        const { error: renderErr } = await storage.from(SNAPSHOTS_BUCKET)
+          .upload(renderPath, Buffer.from(input.renderB64, 'base64'), { contentType: ctype, upsert: true });
+        if (renderErr) console.warn(`[render] upload ${renderPath} failed (${ctype}):`, renderErr.message);
       }
 
       const { data: version, error: insErr } = await db
