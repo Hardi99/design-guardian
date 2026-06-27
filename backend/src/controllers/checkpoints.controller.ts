@@ -62,6 +62,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     branchName: body.branch_name,
     snapshot: body.snapshot_json as FigmaSnapshot,
     renderB64: body.render_svg_b64 ?? null,
+    renderKind: body.render_kind ?? 'svg',
     figmaNodeId: body.figma_node_id ?? null,
     author: body.author,
     computeMeta: async (prev) => {

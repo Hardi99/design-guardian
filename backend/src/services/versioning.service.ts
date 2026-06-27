@@ -37,6 +37,7 @@ export interface CreateVersionInput {
   branchName: string;
   snapshot: FigmaSnapshot;
   renderB64?: string | null;
+  renderKind?: 'svg' | 'png';
   figmaNodeId?: string | null;
   author: { figma_id: string; name: string; avatar_url?: string };
   computeMeta: (prev: PrevVersion | null) => Promise<{ analysisJson: DeltaJSON | null; aiSummary: string | null }>;
@@ -83,7 +84,9 @@ export async function createVersionAtomic(
       const meta = await input.computeMeta(prevTyped);
 
       if (input.renderB64) {
-        const renderBytes = Buffer.from(JSON.stringify({ svg_b64: input.renderB64 }));
+        const renderBytes = Buffer.from(JSON.stringify(
+          input.renderKind === 'png' ? { png_b64: input.renderB64 } : { svg_b64: input.renderB64 },
+        ));
         await storage.from(SNAPSHOTS_BUCKET).upload(renderPath, renderBytes, { contentType: 'application/json', upsert: true });
       }
 
