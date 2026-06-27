@@ -13,9 +13,9 @@ function storageStub() {
 }
 
 // DB stub paramétrable.
-function dbStub(opts: { assets?: { id: string }[]; projects?: { id: string }[]; sub?: string | null }) {
-  const deleteEq = vi.fn(async () => ({ error: null }));
-  const deleteUser = vi.fn(async () => ({ error: null }));
+function dbStub(opts: { assets?: { id: string }[]; projects?: { id: string }[]; sub?: string | null; deleteError?: boolean; deleteUserError?: boolean }) {
+  const deleteEq = vi.fn(async () => ({ error: opts.deleteError ? { message: 'boom' } : null }));
+  const deleteUser = vi.fn(async () => ({ error: opts.deleteUserError ? { message: 'boom' } : null }));
   const from = (table: string) => {
     if (table === 'assets') return { select: () => ({ eq: async () => ({ data: opts.assets ?? [], error: null }) }) };
     if (table === 'projects') return {
@@ -43,19 +43,26 @@ describe('purgeProjectData', () => {
     const { db, deleteEq } = dbStub({ assets: [{ id: 'a1' }] });
     const res = await purgeProjectData(db as never, storage as never, 'p1');
     expect(remove).toHaveBeenCalledWith(['a1/main/v1.json', 'a1/main/v1_render.json']);
-    expect(deleteEq).toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith('id', 'p1');
     expect(res).toEqual({ blobs: 2 });
+  });
+
+  it('throw si la suppression projet échoue (purge partielle non silencieuse)', async () => {
+    const { storage } = storageStub();
+    const { db } = dbStub({ assets: [{ id: 'a1' }], deleteError: true });
+    await expect(purgeProjectData(db as never, storage as never, 'p1')).rejects.toThrow(/Project delete failed/);
   });
 });
 
 describe('purgeAccount', () => {
   it('annule Stripe, purge le Storage, supprime l\'utilisateur', async () => {
-    const { storage } = storageStub();
+    const { storage, remove } = storageStub();
     const { db, deleteUser } = dbStub({ projects: [{ id: 'p1' }], assets: [{ id: 'a1' }], sub: 'sub_123' });
     const cancel = vi.fn(async () => ({}));
     const stripe = { subscriptions: { cancel } };
     const res = await purgeAccount(db as never, storage as never, stripe as never, 'u1');
     expect(cancel).toHaveBeenCalledWith('sub_123');
+    expect(remove).toHaveBeenCalledWith(['a1/main/v1.json', 'a1/main/v1_render.json']);
     expect(deleteUser).toHaveBeenCalledWith('u1');
     expect(res).toEqual({ projects: 1, blobs: 2 });
   });
@@ -67,5 +74,13 @@ describe('purgeAccount', () => {
     await purgeAccount(db as never, storage as never, { subscriptions: { cancel } } as never, 'u1');
     expect(cancel).not.toHaveBeenCalled();
     expect(deleteUser).toHaveBeenCalledWith('u1');
+  });
+
+  it('throw si deleteUser échoue (purge partielle non silencieuse)', async () => {
+    const { storage } = storageStub();
+    const { db } = dbStub({ projects: [{ id: 'p1' }], assets: [{ id: 'a1' }], sub: null, deleteUserError: true });
+    await expect(
+      purgeAccount(db as never, storage as never, { subscriptions: { cancel: async () => ({}) } } as never, 'u1'),
+    ).rejects.toThrow(/deleteUser failed/);
   });
 });
