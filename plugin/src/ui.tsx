@@ -4,6 +4,7 @@ import { render, h } from 'preact';
 import { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'preact/hooks';
 import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor, RestorationDelta } from './types.js';
 import { useAppStore } from './useAppStore.js';
+import { appStore } from './store.js';
 import type { Asset, Version, Plan, Screen } from './store.js';
 import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
@@ -14,6 +15,9 @@ import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
 let currentLinkToken: string | null = null;
+
+const PLAN_RANK: Record<Plan, number> = { free: 0, pro: 1, team: 2 };
+function maxPlan(a: Plan, b: Plan): Plan { return PLAN_RANK[a] >= PLAN_RANK[b] ? a : b; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,7 +64,7 @@ function AccountLink() {
     const code = state.code;
     const id = setInterval(async () => {
       try {
-        const r = await api<{ status: string; link_token?: string }>(apiKey, `/api/link/status?code=${code}`);
+        const r = await api<{ status: 'pending' | 'approved' | 'expired'; link_token?: string }>(apiKey, `/api/link/status?code=${code}`);
         if (r.status === 'approved' && r.link_token) {
           currentLinkToken = r.link_token;
           send({ type: 'LINK_PERSIST_TOKEN', token: r.link_token });
@@ -79,7 +83,15 @@ function AccountLink() {
   if (state.phase === 'awaiting') return <p class="text-xs text-gray-400">En attente d'approbation dans le navigateur…</p>;
   if (state.phase === 'expired')  return <button class="btn-secondary text-xs px-3 py-1.5" onClick={() => dispatch({ type: 'RESET' })}>Code expiré — réessayer</button>;
   if (state.phase === 'error')    return <button class="btn-secondary text-xs px-3 py-1.5" onClick={start}>Erreur — réessayer</button>;
-  return <button class="btn-secondary text-xs px-3 py-1.5" onClick={start}>Lier mon compte</button>;
+  return (
+    <button
+      class="btn-secondary text-xs px-3 py-1.5"
+      onClick={start}
+      disabled={state.phase === 'starting' || !author}
+    >
+      {state.phase === 'starting' ? 'Connexion…' : 'Lier mon compte'}
+    </button>
+  );
 }
 
 // ─── App (routeur) ────────────────────────────────────────────────────────────
@@ -107,7 +119,7 @@ function App() {
               body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: msg.fileName }),
             }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string } };
             setApiKey(data.api_key);
-            setPlan((data.project.plan as Plan) ?? 'free');
+            setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
             setScreen('assets');
           } catch {
             setInitErr('Impossible de joindre le serveur.');
@@ -124,7 +136,7 @@ function App() {
           if (msg.token) {
             try {
               const me = await fetch(`${API_BASE}/api/link/me`, { headers: { 'X-Link-Token': msg.token } }).then(r => r.json()) as { plan: Plan };
-              setPlan(me.plan ?? 'free');
+              setPlan(maxPlan(appStore.getState().plan, me.plan ?? 'free'));
             } catch { /* garde le plan projet */ }
           }
           break;
