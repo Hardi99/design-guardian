@@ -13,6 +13,7 @@ export default function LinkPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'done' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [code, setCode] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -36,8 +37,10 @@ export default function LinkPage() {
   }, []);
 
   const confirm = async () => {
+    setConfirming(true);
     try { await apiClient.approveLink(code); setState('done'); }
     catch (e) { setState('error'); setMessage((e as Error).message); }
+    finally { setConfirming(false); }
   };
 
   return (
@@ -51,7 +54,9 @@ export default function LinkPage() {
               <p className="text-sm text-muted-foreground">
                 Lier le plugin de <strong>{figmaName ?? 'cet utilisateur Figma'}</strong> à votre compte ? Vos checkpoints utiliseront votre abonnement.
               </p>
-              <Button onClick={confirm}>Confirmer la liaison</Button>
+              <Button onClick={confirm} disabled={confirming}>
+                {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmer la liaison'}
+              </Button>
             </>
           )}
           {state === 'done' && <Alert className="border-green-500/40"><AlertDescription>✓ Plugin lié. Retournez dans Figma — votre plan est actif.</AlertDescription></Alert>}
