@@ -25,8 +25,12 @@ export async function purgeProjectData(
   db: SupabaseClient, storage: StorageApi, projectId: string,
 ): Promise<{ blobs: number }> {
   const paths = await collectProjectStoragePaths(db, storage, projectId);
-  if (paths.length) await storage.from(SNAPSHOTS_BUCKET).remove(paths);
-  await db.from('projects').delete().eq('id', projectId);
+  if (paths.length) {
+    const { error } = await storage.from(SNAPSHOTS_BUCKET).remove(paths);
+    if (error) throw new Error(`Storage purge failed (project ${projectId}): ${error.message}`);
+  }
+  const { error: delErr } = await db.from('projects').delete().eq('id', projectId);
+  if (delErr) throw new Error(`Project delete failed (${projectId}): ${delErr.message}`);
   return { blobs: paths.length };
 }
 
@@ -45,10 +49,14 @@ export async function purgeAccount(
   let blobs = 0;
   for (const p of (projects ?? []) as { id: string }[]) {
     const paths = await collectProjectStoragePaths(db, storage, p.id);
-    if (paths.length) await storage.from(SNAPSHOTS_BUCKET).remove(paths);
+    if (paths.length) {
+      const { error } = await storage.from(SNAPSHOTS_BUCKET).remove(paths);
+      if (error) throw new Error(`Storage purge failed (project ${p.id}): ${error.message}`);
+    }
     blobs += paths.length;
   }
 
-  await db.auth.admin.deleteUser(userId);
+  const { error: delErr } = await db.auth.admin.deleteUser(userId);
+  if (delErr) throw new Error(`deleteUser failed (${userId}): ${delErr.message}`);
   return { projects: (projects ?? []).length, blobs };
 }
