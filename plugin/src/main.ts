@@ -27,6 +27,9 @@ function generateFileId(): string {
 // 3. figma.clientStorage    — legacy per-user fallback (promotes to shared on write)
 // 4. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
+  // documentAccess: "dynamic-page" → il faut charger les pages avant d'accéder à leurs
+  // children (page d'historique dg/_history, pages de branches). Sinon get_children throw.
+  await figma.loadAllPagesAsync();
   let fileKey: string =
     (figma.fileKey as string | undefined) ??
     figma.root.getPluginData('dg_file_id') ??
@@ -346,6 +349,7 @@ function tryRestoreFromClone(versionId: string): boolean {
 
 async function handleRestoreToFigma(versionId: string | undefined, snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
   if (renderSvgB64 && renderSvgB64.startsWith('iVBO')) renderSvgB64 = undefined; // PNG → pas de createNodeFromSvg
+  await figma.loadAllPagesAsync(); // dynamic-page : le clone d'historique vit sur dg/_history
   // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
   if (versionId && tryRestoreFromClone(versionId)) {
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
@@ -486,6 +490,8 @@ async function handleSnapshot(): Promise<void> {
   const [node] = figma.currentPage.selection;
   if (!node) { send({ type: 'ERROR', message: 'Sélectionne un élément dans Figma.' }); return; }
   if (figma.currentPage.selection.length > 1) { send({ type: 'ERROR', message: 'Sélectionne un seul élément.' }); return; }
+
+  await figma.loadAllPagesAsync(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
 
   const figmaSnapshot: FigmaSnapshot = {
     figmaNodeId: node.id,
