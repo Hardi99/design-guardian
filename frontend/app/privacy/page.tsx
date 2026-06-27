@@ -3,6 +3,7 @@ export const metadata = { title: 'Politique de confidentialité — Design Guard
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 text-foreground space-y-8">
+      <p><a href="/" className="text-sm text-muted-foreground hover:text-foreground">← Accueil</a></p>
       <h1 className="text-3xl font-bold">Politique de confidentialité</h1>
       <p className="text-muted-foreground">Dernière mise à jour : 27 juin 2026.</p>
 
@@ -21,6 +22,7 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-semibold">Sous-traitants</h2>
         <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
           <li>Supabase — base de données et stockage (région UE)</li>
+          <li>Railway — hébergement du backend (traitement des requêtes)</li>
           <li>OpenAI — génération du résumé de changements (données minimisées : delta synthétique)</li>
           <li>Stripe — paiement et abonnements</li>
           <li>Resend — emails transactionnels ; Twilio — SMS de vérification</li>

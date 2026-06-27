@@ -1,7 +1,7 @@
-// Script opérateur de suppression RGPD. DRY-RUN par défaut. Lancer avec tsx :
-//   npx tsx scripts/purge.mjs --account <email|uuid>
-//   npx tsx scripts/purge.mjs --file-key <figma_file_key>
-//   npx tsx scripts/purge.mjs --project <project_id>
+// Script opérateur de suppression RGPD. DRY-RUN par défaut. À LANCER AVEC tsx (PAS `node`) :
+//   npx tsx scripts/purge.ts --account <email|uuid>
+//   npx tsx scripts/purge.ts --file-key <figma_file_key>
+//   npx tsx scripts/purge.ts --project <project_id>
 // Ajouter --confirm pour exécuter réellement (sinon : affichage seul, rien n'est supprimé).
 import dotenv from 'dotenv'; dotenv.config();
 import { createClient } from '@supabase/supabase-js';
@@ -11,6 +11,11 @@ import { collectProjectStoragePaths, purgeProjectData, purgeAccount } from '../s
 const args = process.argv.slice(2);
 const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
 const confirm = args.includes('--confirm');
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error('Manque SUPABASE_URL / SUPABASE_SERVICE_KEY dans l\'environnement (.env).');
+  process.exit(1);
+}
 
 const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 const storage = db.storage;

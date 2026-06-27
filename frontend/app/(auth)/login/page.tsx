@@ -150,9 +150,9 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            <a href="/privacy" className="hover:text-foreground">Confidentialité</a>
+            <Link href="/privacy" className="hover:text-foreground">Confidentialité</Link>
             {' · '}
-            <a href="/terms" className="hover:text-foreground">CGU</a>
+            <Link href="/terms" className="hover:text-foreground">CGU</Link>
           </p>
         </div>
       </div>
