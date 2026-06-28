@@ -12,8 +12,7 @@ describe('initialDiffState', () => {
     expect(base.loading).toBe(true)
     expect(base.data).toBeNull()
     expect(base.err).toBeNull()
-    expect(base.mode).toBe('split')
-    expect(base.view).toBe('nodes')
+    expect(base.heavyDone).toBe(false)
     expect(base.statusBusy).toBe(false)
     expect(base.restoring).toBe(false)
     expect(base.applyingToFigma).toBe(false)
@@ -37,12 +36,12 @@ describe('LOAD_SUCCESS', () => {
     expect(next.err).toBeNull()
   })
 
-  it('ne modifie pas les autres champs', () => {
+  it('ne modifie pas les autres champs et réinitialise heavyDone', () => {
     const data = {} as DiffData
-    const next = diffReducer(base, { type: 'LOAD_SUCCESS', data })
-    expect(next.mode).toBe(base.mode)
+    const withHeavy = { ...base, heavyDone: true }
+    const next = diffReducer(withHeavy, { type: 'LOAD_SUCCESS', data })
     expect(next.status).toBe(base.status)
-    expect(next.view).toBe(base.view)
+    expect(next.heavyDone).toBe(false)
   })
 })
 
@@ -55,28 +54,41 @@ describe('LOAD_ERROR', () => {
   })
 })
 
-// ─── Vue ──────────────────────────────────────────────────────────────────────
+// ─── Chargement lourd (vignettes/frames) ─────────────────────────────────────
 
-describe('SET_MODE', () => {
-  it('passe en overlay', () => {
-    const next = diffReducer(base, { type: 'SET_MODE', mode: 'overlay' })
-    expect(next.mode).toBe('overlay')
+describe('HEAVY_LOADED', () => {
+  it('met heavyDone à true et fusionne les champs render', () => {
+    const data = { node_diffs: [] } as unknown as DiffData
+    const withData = diffReducer(base, { type: 'LOAD_SUCCESS', data })
+    const heavy = { render_url: 'https://x.com/img.png', render_kind: 'png', render_source: 'blob',
+      prev_render_url: null, prev_render_kind: null, prev_render_source: null,
+      node_diffs: [], current_frame: { w: 100, h: 200 }, prev_frame: null } as unknown as DiffData
+    const next = diffReducer(withData, { type: 'HEAVY_LOADED', data: heavy })
+    expect(next.heavyDone).toBe(true)
+    expect(next.data?.render_url).toBe('https://x.com/img.png')
+    expect(next.data?.current_frame).toEqual({ w: 100, h: 200 })
   })
 
-  it('repasse en split', () => {
-    const s = diffReducer(base, { type: 'SET_MODE', mode: 'overlay' })
-    expect(diffReducer(s, { type: 'SET_MODE', mode: 'split' }).mode).toBe('split')
+  it('est sans effet si data est null', () => {
+    const heavy = {} as unknown as DiffData
+    const next = diffReducer(base, { type: 'HEAVY_LOADED', data: heavy })
+    expect(next).toBe(base)
   })
 })
 
-describe('SET_VIEW', () => {
-  it('passe en frame', () => {
-    expect(diffReducer(base, { type: 'SET_VIEW', view: 'frame' }).view).toBe('frame')
+describe('HEAVY_DONE', () => {
+  it('met heavyDone à true sans modifier data', () => {
+    const next = diffReducer(base, { type: 'HEAVY_DONE' })
+    expect(next.heavyDone).toBe(true)
+    expect(next.data).toBeNull()
   })
 
-  it('repasse en nodes', () => {
-    const s = diffReducer(base, { type: 'SET_VIEW', view: 'frame' })
-    expect(diffReducer(s, { type: 'SET_VIEW', view: 'nodes' }).view).toBe('nodes')
+  it('permet de signaler un échec du chargement lourd', () => {
+    const data = { node_diffs: [] } as unknown as DiffData
+    const withData = diffReducer(base, { type: 'LOAD_SUCCESS', data })
+    const next = diffReducer(withData, { type: 'HEAVY_DONE' })
+    expect(next.heavyDone).toBe(true)
+    expect(next.data).toBe(withData.data)
   })
 })
 
@@ -181,7 +193,7 @@ describe('CLEAR_MSG', () => {
 
 describe('immutabilité', () => {
   it('chaque action retourne un nouvel objet', () => {
-    const next = diffReducer(base, { type: 'SET_MODE', mode: 'overlay' })
+    const next = diffReducer(base, { type: 'HEAVY_DONE' })
     expect(next).not.toBe(base)
   })
 

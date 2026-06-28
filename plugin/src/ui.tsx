@@ -575,7 +575,7 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
         // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
         api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
           .then(full => dispatch({ type: 'HEAVY_LOADED', data: full }))
-          .catch(() => { /* frames + vignettes optionnelles */ });
+          .catch(() => dispatch({ type: 'HEAVY_DONE' }));
       })
       .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
   }, [apiKey, versionId]);
@@ -695,7 +695,7 @@ function DiffScreen() {
 
   const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
 
-  const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg } = state;
+  const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg, heavyDone } = state;
   const hasPrev = !!data?.prev_version;
   const nodeDiffs = data?.node_diffs ?? [];
   const highlights = buildHighlights(nodeDiffs, beforeMode, showMinor);
@@ -706,9 +706,10 @@ function DiffScreen() {
     removed:  nodeDiffs.filter(n => n.kind === 'removed').length,
     derived:  nodeDiffs.filter(n => n.significance === 'minor').length,
   };
-  const canvasUrl   = beforeMode ? data?.prev_render_url  : data?.render_url;
-  const canvasKind  = beforeMode ? data?.prev_render_kind : data?.render_kind;
-  const canvasFrame = beforeMode ? data?.prev_frame       : data?.current_frame;
+  const canvasUrl    = beforeMode ? data?.prev_render_url    : data?.render_url;
+  const canvasKind   = beforeMode ? data?.prev_render_kind   : data?.render_kind;
+  const canvasFrame  = beforeMode ? data?.prev_frame         : data?.current_frame;
+  const canvasSource = beforeMode ? data?.prev_render_source : data?.render_source;
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
@@ -779,12 +780,14 @@ function DiffScreen() {
         hasPrev ? (
           <div class="flex flex-1 overflow-hidden">
             <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">
-              <DiffChips counts={counts} beforeMode={beforeMode} showDerived={showMinor}
+              <DiffChips counts={counts} beforeMode={beforeMode} showDerived={showMinor} approximate={canvasSource === 'reconstruction'}
                 onToggleBefore={() => { setBeforeMode(v => !v); setSelectedId(null); }} onToggleDerived={() => setShowMinor(v => !v)} />
               {canvasUrl && canvasKind && canvasFrame
                 ? <HighlightCanvas url={canvasUrl} kind={canvasKind} frame={canvasFrame}
                     highlights={highlights} selectedId={selectedId} onSelect={setSelectedId} />
-                : <div class="flex-1 flex items-center justify-center"><p class="text-gray-600 text-xs">Rendu indisponible.</p></div>}
+                : <div class="flex-1 flex items-center justify-center">
+                    <p class="text-gray-600 text-xs">{heavyDone ? 'Rendu indisponible.' : 'Chargement du rendu…'}</p>
+                  </div>}
             </div>
             <div class="w-72 flex flex-col overflow-hidden">
               <NodeDetail node={selected} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url}
@@ -813,93 +816,6 @@ function DiffScreen() {
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-function SvgFrame({ url, kind, style, zoomable }: { url: string; kind: 'svg' | 'png'; style?: string; zoomable?: boolean }) {
-  const [svg, setSvg] = useState<string | null>(null);
-  useEffect(() => {
-    if (kind !== 'svg') return;
-    let alive = true;
-    setSvg(null); // reset → skeleton pendant le (re)chargement, évite l'image périmée à la navigation
-    fetch(url).then(r => r.text()).then(t => { if (alive) setSvg(
-      t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
-       .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"')
-    ); }).catch(() => { if (alive) setSvg(''); });
-    return () => { alive = false; };
-  }, [url, kind]);
-
-  const [zoom,     setZoom]     = useState(1);
-  const [pan,      setPan]      = useState({ x: 0, y: 0 });
-  const [grabbing, setGrabbing] = useState(false);
-  const dragRef      = useRef<{ active: boolean; lastX: number; lastY: number }>({ active: false, lastX: 0, lastY: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
-
-  const clampPan = (x: number, y: number, z: number) => {
-    const el = containerRef.current;
-    if (!el) return { x, y };
-    const margin = 80;
-    const hw = el.clientWidth  * (1 + z) / 2 - margin;
-    const hh = el.clientHeight * (1 + z) / 2 - margin;
-    return { x: Math.min(hw, Math.max(-hw, x)), y: Math.min(hh, Math.max(-hh, y)) };
-  };
-
-  const content = kind === 'png'
-    ? <img src={url} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />
-    : svg === null
-      ? <div class="w-full h-full animate-pulse bg-gray-800/40" />
-      : svg
-        ? <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />
-        : <p class="text-gray-600 text-xs">Erreur rendu</p>;
-
-  if (!zoomable) return <div class={style ?? 'w-full h-full'}>{content}</div>;
-
-  const isTransformed = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
-
-  return (
-    <div
-      ref={containerRef}
-      class={`${style ?? 'w-full h-full'} relative overflow-hidden select-none`}
-      style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
-      onWheel={(e) => {
-        e.preventDefault();
-        setZoom(z => {
-          const nz = clampZoom(z * (e.deltaY < 0 ? 1.1 : 0.9));
-          setPan(p => clampPan(p.x, p.y, nz));
-          return nz;
-        });
-      }}
-      onMouseDown={(e) => {
-        dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
-        setGrabbing(true);
-        e.preventDefault();
-      }}
-      onMouseMove={(e) => {
-        if (!dragRef.current.active) return;
-        const dx = e.clientX - dragRef.current.lastX;
-        const dy = e.clientY - dragRef.current.lastY;
-        dragRef.current.lastX = e.clientX;
-        dragRef.current.lastY = e.clientY;
-        setPan(p => clampPan(p.x + dx, p.y + dy, zoom));
-      }}
-      onMouseUp={() => { dragRef.current.active = false; setGrabbing(false); }}
-      onMouseLeave={() => { dragRef.current.active = false; setGrabbing(false); }}
-    >
-      <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
-        {content}
-      </div>
-      {isTransformed && (
-        <button
-          aria-label={`Réinitialiser le zoom (${Math.round(zoom * 100)}%)`}
-          class="absolute top-2 right-2 text-[10px] text-gray-400 bg-gray-900/80 px-1.5 py-0.5 rounded hover:text-white"
-          onClick={(e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); }}
-        >
-          {Math.round(zoom * 100)}% ↺
-        </button>
-      )}
-    </div>
-  );
-}
-
 function NodeCrop({ url, frameW, frameH, bbox }: { url: string; frameW: number; frameH: number; bbox: { x: number; y: number; w: number; h: number } }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -916,84 +832,6 @@ function NodeCrop({ url, frameW, frameH, bbox }: { url: string; frameW: number; 
   return (
     <div ref={ref} class="relative w-full h-full overflow-hidden">
       {scale > 0 && <img src={url} style={{ position: 'absolute', width: `${frameW * scale}px`, height: `${frameH * scale}px`, left: `${left}px`, top: `${top}px`, maxWidth: 'none', pointerEvents: 'none' }} />}
-    </div>
-  );
-}
-
-function NodeDiffCard({ nd, renderUrl, prevRenderUrl, currentFrame, prevFrame }: {
-  nd: NodeDiffVisual;
-  renderUrl: string | null;
-  prevRenderUrl: string | null;
-  currentFrame: { w: number; h: number } | null;
-  prevFrame: { w: number; h: number } | null;
-}) {
-  const kindColor = nd.kind === 'added' ? 'text-green-400 bg-green-500/10' : nd.kind === 'removed' ? 'text-red-400 bg-red-500/10' : 'text-purple-400 bg-purple-500/10';
-  const kindLabel = nd.kind === 'added' ? '+ ajout' : nd.kind === 'removed' ? '− supprimé' : '~ modifié';
-
-  return (
-    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-800">
-        <span class="text-xs font-medium text-gray-200 truncate flex-1" title={nd.nodeName}>{nd.nodeName}</span>
-        <span class="text-[10px] text-gray-600 font-mono">{nd.nodeType}</span>
-        <span class={`text-[10px] px-1.5 py-0.5 rounded font-mono ${kindColor}`}>{kindLabel}</span>
-      </div>
-      <div class="flex">
-        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 border-r border-gray-800 min-h-[80px] max-h-24 overflow-hidden">
-          {nd.before_bbox && prevRenderUrl && prevFrame
-            ? <NodeCrop url={prevRenderUrl} frameW={prevFrame.w} frameH={prevFrame.h} bbox={nd.before_bbox} />
-            : <span class="text-gray-700 text-xs">—</span>}
-          <span class="text-[10px] text-gray-600">avant</span>
-        </div>
-        <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 min-h-[80px] max-h-24 overflow-hidden">
-          {nd.after_bbox && renderUrl && currentFrame
-            ? <NodeCrop url={renderUrl} frameW={currentFrame.w} frameH={currentFrame.h} bbox={nd.after_bbox} />
-            : <span class="text-gray-700 text-xs">—</span>}
-          <span class="text-[10px] text-gray-600">après</span>
-        </div>
-      </div>
-      {(nd.readable && nd.readable.length > 0) ? (
-        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-1">
-          {nd.readable.map((r, i) => (
-            <div key={i} class="flex items-center gap-2 text-[11px]">
-              <span class="text-gray-400 w-16 flex-shrink-0">{r.label}</span>
-              <span class="text-gray-200 flex items-center gap-1.5 leading-tight">
-                {r.kind === 'color' ? (
-                  <>
-                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.from }} />
-                    <span class="font-mono text-gray-500">{r.from}</span>
-                    <span class="text-gray-600">→</span>
-                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.to }} />
-                    <span class="font-mono">{r.to}</span>
-                  </>
-                ) : (r.kind === 'weight' || r.kind === 'text') ? (
-                  <span><span class="text-gray-500">{r.from}</span> → {r.to}</span>
-                ) : r.kind === 'rotation' ? (
-                  <span>↻ {r.degrees > 0 ? '+' : ''}{r.degrees}°</span>
-                ) : r.kind === 'move' ? (
-                  <span>↔ {r.dx}px, {r.dy}px</span>
-                ) : r.kind === 'resize' ? (
-                  <span>⤢ {r.dw > 0 ? '+' : ''}{r.dw}px, {r.dh > 0 ? '+' : ''}{r.dh}px</span>
-                ) : r.kind === 'opacity' ? (
-                  <span>{r.from}% → {r.to}%</span>
-                ) : r.kind === 'visibility' ? (
-                  <span>{r.visible ? 'Affiché' : 'Masqué'}</span>
-                ) : (
-                  <span class="font-mono text-gray-500">{r.detail}</span>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : nd.changes.length > 0 && (
-        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-0.5">
-          {nd.changes.map((ch, i) => (
-            <div key={i} class="flex items-start gap-2">
-              <span class="text-[10px] font-mono text-gray-500 w-20 flex-shrink-0 truncate">{ch.property}</span>
-              <span class="text-[10px] text-purple-400 font-mono leading-tight">{ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -1132,9 +970,9 @@ function NodeDetail({ node, renderUrl, prevRenderUrl, currentFrame, prevFrame }:
   );
 }
 
-function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDerived }: {
+function DiffChips({ counts, beforeMode, showDerived, approximate, onToggleBefore, onToggleDerived }: {
   counts: { modified: number; added: number; removed: number; derived: number };
-  beforeMode: boolean; showDerived: boolean;
+  beforeMode: boolean; showDerived: boolean; approximate: boolean;
   onToggleBefore: () => void; onToggleDerived: () => void;
 }) {
   return (
@@ -1142,6 +980,7 @@ function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDe
       <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">{counts.modified} modifiés</span>
       {counts.added > 0   && <span class="px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">{counts.added} ajoutés</span>}
       {counts.removed > 0 && <span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{counts.removed} supprimés</span>}
+      {approximate && <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">⚠ approximatif</span>}
       {counts.derived > 0 && (
         <button onClick={onToggleDerived} aria-pressed={showDerived}
           class={`px-1.5 py-0.5 rounded ${showDerived ? 'bg-gray-600 text-gray-100' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}`}>
@@ -1159,9 +998,6 @@ function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDe
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
-
-// NodeDiffCard / SvgFrame retained for T7 cleanup — suppress TS6133 until then.
-void (NodeDiffCard as unknown); void (SvgFrame as unknown);
 
 function Logo({ small = false }: { small?: boolean }) {
   return (
