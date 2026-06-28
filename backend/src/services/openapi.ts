@@ -390,7 +390,7 @@ export function getOpenApiSpec() {
         get: {
           tags: ['Versions'],
           summary: 'Get full version detail with visual diff',
-          description: 'Returns version metadata, AI summary, per-node diffs, and base64 SVGs for the frame (current + previous) and each modified/added/removed node.',
+          description: 'Returns version metadata, AI summary, per-node diffs (with frame-relative bbox for CSS cropping), and signed render URLs for the frame (current + previous).',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           responses: {
             '200': {
@@ -406,6 +406,10 @@ export function getOpenApiSpec() {
                       render_kind: { type: 'string', nullable: true, description: 'MIME kind of render_url: "png" or "svg"' },
                       prev_render_url: { type: 'string', nullable: true, description: 'Signed URL of the previous frame render blob' },
                       prev_render_kind: { type: 'string', nullable: true, description: 'MIME kind of prev_render_url: "png" or "svg"' },
+                      render_source: { type: 'string', nullable: true, description: "Origine du rendu courant : 'blob' | 'legacy' | 'reconstruction'" },
+                      prev_render_source: { type: 'string', nullable: true, description: 'Origine du rendu précédent' },
+                      current_frame: { type: 'object', nullable: true, description: 'Dimensions de la frame courante (pour le crop CSS par-nœud)', properties: { w: { type: 'number' }, h: { type: 'number' } } },
+                      prev_frame: { type: 'object', nullable: true, description: 'Dimensions de la frame précédente', properties: { w: { type: 'number' }, h: { type: 'number' } } },
                       node_diffs: { type: 'array', items: { $ref: '#/components/schemas/NodeDiff' } },
                     },
                   },
