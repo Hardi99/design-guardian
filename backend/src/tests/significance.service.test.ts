@@ -154,6 +154,13 @@ describe('derivedMoveIds', () => {
     const parent = new Map<string, string | null>([['Child', 'Parent']]);
     expect(derivedMoveIds(d, parent).has('Child')).toBe(false);
   });
+  it('tolérance EPS : écart < 0,5px = dérivé, ≥ 0,5px = authored', () => {
+    const parent = new Map<string, string | null>([['Parent', null], ['Child', 'Parent']]);
+    const near = delta({ modified: [mv('Parent', 10, 0), mv('Child', 10.4, 0)] });   // écart 0,4
+    expect(derivedMoveIds(near, parent).has('Child')).toBe(true);
+    const far = delta({ modified: [mv('Parent', 10, 0), mv('Child', 10.6, 0)] });    // écart 0,6
+    expect(derivedMoveIds(far, parent).has('Child')).toBe(false);
+  });
 });
 
 describe('rankDelta — move porté (dérivé du parent)', () => {

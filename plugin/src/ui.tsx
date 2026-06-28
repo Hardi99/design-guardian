@@ -882,7 +882,11 @@ function DiffScreen() {
           <div class="w-72 flex flex-col overflow-y-auto">
             <div class="px-4 py-3 border-b border-gray-800">
               <p class="text-xs font-semibold text-gray-300">Smart Data</p>
-              {delta && <p class="text-xs text-gray-600 mt-0.5">{delta.totalChanges} modification(s)</p>}
+              {delta && delta.totalChanges > 0 && (() => {
+                const authored = data.node_diffs.filter(n => n.significance !== 'minor').length;
+                const derived  = data.node_diffs.filter(n => n.significance === 'minor').length;
+                return <p class="text-xs text-gray-600 mt-0.5">{authored} changement{authored > 1 ? 's' : ''}{derived > 0 ? <span class="text-gray-700"> · {derived} dérivé{derived > 1 ? 's' : ''}</span> : ''}</p>;
+              })()}
             </div>
 
             {!delta && <p class="text-xs text-gray-600 p-4">Première version — aucune diff.</p>}
