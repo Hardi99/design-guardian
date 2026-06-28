@@ -683,6 +683,7 @@ function DiffScreen() {
 
   const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
   const [opacity, setOpacity] = useState(0.5);
+  const [showMinor, setShowMinor] = useState(false); // changements dérivés (move porté/auto-layout) repliés
 
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
@@ -805,9 +806,28 @@ function DiffScreen() {
                     ))}
                   </div>
                 )}
-                {data.node_diffs
-                  .filter(nd => nd.kind !== 'modified' || (nd.readable && nd.readable.length > 0))
-                  .map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url} currentFrame={data.current_frame} prevFrame={data.prev_frame} />)}
+                {(() => {
+                  const visible = data.node_diffs.filter(nd => nd.kind !== 'modified' || (nd.readable && nd.readable.length > 0));
+                  const notable = visible.filter(nd => nd.significance !== 'minor');
+                  const minor   = visible.filter(nd => nd.significance === 'minor');
+                  const card = (nd: NodeDiffVisual) => <NodeDiffCard key={nd.nodeId} nd={nd} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url} currentFrame={data.current_frame} prevFrame={data.prev_frame} />;
+                  return (
+                    <>
+                      {notable.length === 0 && minor.length > 0 && (
+                        <p class="text-gray-500 text-xs text-center py-3">Aucun changement à la main — uniquement des conséquences dérivées.</p>
+                      )}
+                      {notable.map(card)}
+                      {minor.length > 0 && (
+                        <button class="text-[11px] text-gray-500 hover:text-gray-300 px-1 py-1.5 text-left transition-colors"
+                          onClick={() => setShowMinor(v => !v)}
+                          aria-expanded={showMinor}>
+                          {showMinor ? '▾' : '▸'} {minor.length} changement{minor.length > 1 ? 's' : ''} dérivé{minor.length > 1 ? 's' : ''} <span class="text-gray-600">(déplacés avec leur parent / auto-layout)</span>
+                        </button>
+                      )}
+                      {showMinor && minor.map(card)}
+                    </>
+                  );
+                })()}
               </div>
             ) : mode === 'split' ? (
               <div class="flex flex-1 overflow-hidden">

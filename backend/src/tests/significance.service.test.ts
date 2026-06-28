@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scoreChange, rankDelta, nodeIdsToRender } from '../services/significance.service.js';
+import { scoreChange, rankDelta, nodeIdsToRender, derivedMoveIds } from '../services/significance.service.js';
 import type { LayoutContext } from '../services/significance.service.js';
 import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
 
@@ -132,6 +132,45 @@ describe('rankDelta — utilise le contexte layout du NodeDelta', () => {
     };
     const r = rankDelta(delta({ modified: [n] }));
     expect(r.notableModified.map(x => x.nodeName)).toEqual(['Logo']);
+  });
+});
+
+describe('derivedMoveIds', () => {
+  const mv = (name: string, dx: number, dy: number) => node(name, [
+    { property: 'x', oldValue: 0, newValue: dx }, { property: 'y', oldValue: 0, newValue: dy },
+  ]);
+  it('enfant porté (même delta que le parent) → dérivé', () => {
+    const d = delta({ modified: [mv('Parent', 10, 0), mv('Child', 10, 0)] });
+    const parent = new Map<string, string | null>([['Parent', null], ['Child', 'Parent']]);
+    expect([...derivedMoveIds(d, parent)]).toEqual(['Child']);
+  });
+  it('enfant déplacé indépendamment (delta ≠ parent) → authored', () => {
+    const d = delta({ modified: [mv('Parent', 10, 0), mv('Child', 15, 0)] });
+    const parent = new Map<string, string | null>([['Parent', null], ['Child', 'Parent']]);
+    expect(derivedMoveIds(d, parent).has('Child')).toBe(false);
+  });
+  it('parent non déplacé → enfant authored', () => {
+    const d = delta({ modified: [mv('Child', 10, 0)] });
+    const parent = new Map<string, string | null>([['Child', 'Parent']]);
+    expect(derivedMoveIds(d, parent).has('Child')).toBe(false);
+  });
+});
+
+describe('rankDelta — move porté (dérivé du parent)', () => {
+  it('nœud dont le seul changement est un move porté → minor', () => {
+    const d = delta({ modified: [node('Child', [
+      { property: 'x', oldValue: 0, newValue: 10 }, { property: 'y', oldValue: 0, newValue: 0 },
+    ])] });
+    const r = rankDelta(d, new Set(['Child']));
+    expect(r.minorModified.map(n => n.nodeName)).toEqual(['Child']);
+    expect(r.notableModified).toHaveLength(0);
+  });
+  it('move porté + changement couleur → reste notable', () => {
+    const d = delta({ modified: [node('Child', [
+      { property: 'x', oldValue: 0, newValue: 10 }, { property: 'fills', oldValue: 'a', newValue: 'b' },
+    ])] });
+    const r = rankDelta(d, new Set(['Child']));
+    expect(r.notableModified.map(n => n.nodeName)).toEqual(['Child']);
   });
 });
 

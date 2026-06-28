@@ -91,8 +91,8 @@ export interface RankedDelta {
  * cascade auto-layout (centaines de décalages dérivés) ne doit PAS générer des
  * centaines de SVG → protège l'endpoint diff de l'OOM/timeout.
  */
-export function nodeIdsToRender(delta: DeltaJSON, cap: number): Set<string> {
-  const ranked = rankDelta(delta);
+export function nodeIdsToRender(delta: DeltaJSON, cap: number, derivedIds?: Set<string>): Set<string> {
+  const ranked = rankDelta(delta, derivedIds);
   const ids = [
     ...ranked.notableModified.map(n => n.nodeId),
     ...ranked.added.map(n => n.nodeId),
@@ -101,12 +101,41 @@ export function nodeIdsToRender(delta: DeltaJSON, cap: number): Set<string> {
   return new Set(ids.slice(0, Math.max(0, cap)));
 }
 
-export function rankDelta(delta: DeltaJSON): RankedDelta {
+// Un déplacement est DÉRIVÉ s'il est identique à celui du parent : le nœud est « porté »
+// par son parent (qui a bougé), pas déplacé à la main. Retourne les ids aux moves dérivés.
+// Coords absolues → bouger un frame décale tous ses descendants du même delta = conséquence.
+export function derivedMoveIds(delta: DeltaJSON, parent: Map<string, string | null>): Set<string> {
+  const moveOf = new Map<string, { dx: number; dy: number }>();
+  for (const n of delta.modified) {
+    let dx = 0, dy = 0, has = false;
+    for (const c of n.changes) {
+      if ((c.property === 'x' || c.property === 'y') && typeof c.newValue === 'number' && typeof c.oldValue === 'number') {
+        if (c.property === 'x') dx = c.newValue - c.oldValue; else dy = c.newValue - c.oldValue;
+        has = true;
+      }
+    }
+    if (has) moveOf.set(n.nodeId, { dx, dy });
+  }
+  const EPS = 0.5; // px — tolérance « même delta que le parent »
+  const derived = new Set<string>();
+  for (const [id, m] of moveOf) {
+    const p = parent.get(id);
+    const pm = p ? moveOf.get(p) : undefined;
+    if (pm && Math.abs(pm.dx - m.dx) < EPS && Math.abs(pm.dy - m.dy) < EPS) derived.add(id);
+  }
+  return derived;
+}
+
+export function rankDelta(delta: DeltaJSON, derivedIds?: Set<string>): RankedDelta {
   const notableModified: NodeDelta[] = [];
   const minorModified: NodeDelta[] = [];
   for (const n of delta.modified) {
     const ctx = layoutContextOf(n);
-    const hasNotable = n.changes.some(c => scoreChange(c, ctx) === 'notable');
+    const carried = derivedIds?.has(n.nodeId) ?? false;
+    const hasNotable = n.changes.some(c => {
+      if (carried && (c.property === 'x' || c.property === 'y')) return false; // move porté = dérivé
+      return scoreChange(c, ctx) === 'notable';
+    });
     (hasNotable ? notableModified : minorModified).push(n);
   }
   return {

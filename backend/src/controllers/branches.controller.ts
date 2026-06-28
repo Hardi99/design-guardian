@@ -11,7 +11,7 @@ import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
-import { nodeIdsToRender } from '../services/significance.service.js';
+import { nodeIdsToRender, derivedMoveIds, rankDelta } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps, detectBlockMoves } from '../services/block-moves.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
@@ -155,20 +155,31 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     nodeId: string; nodeName: string; nodeType: string;
     changes: unknown[]; kind: 'modified' | 'added' | 'removed';
     readable: ReadableChange[];
+    significance: 'notable' | 'minor';
     before_bbox: { x: number; y: number; w: number; h: number } | null;
     after_bbox:  { x: number; y: number; w: number; h: number } | null;
   }> = [];
 
+  // Arbre une seule fois → réutilisé pour la détection de moves dérivés ET les block-moves.
+  const tree = (delta && currentSnap) ? buildTreeMaps(currentSnap.root) : null;
+  // Un déplacement identique à celui du parent = conséquence (nœud porté), pas authored.
+  const derived = (delta && tree) ? derivedMoveIds(delta as unknown as DeltaJSON, tree.parent) : new Set<string>();
+  // Nœuds modifiés AUTHORED (≥1 changement notable, move porté exclu) → tout le reste = mineur/dérivé.
+  const notableModIds = delta
+    ? new Set(rankDelta(delta as unknown as DeltaJSON, derived).notableModified.map(n => n.nodeId))
+    : new Set<string>();
+
   if (delta) {
-    // On ne génère un crop SVG que pour les nœuds NOTABLES (+ ajoutés/supprimés),
-    // plafonnés : un gros diff en cascade ne doit pas produire des centaines de SVG.
-    const renderIds = nodeIdsToRender(delta as unknown as DeltaJSON, MAX_NODE_RENDERS);
+    // On ne génère un crop QUE pour les nœuds NOTABLES (+ ajoutés/supprimés), plafonné :
+    // un gros diff en cascade ne doit pas produire des centaines de crops.
+    const renderIds = nodeIdsToRender(delta as unknown as DeltaJSON, MAX_NODE_RENDERS, derived);
     for (const nd of delta.modified) {
       const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
         readable: formatNodeChanges(nd as unknown as NodeDelta),
+        significance: notableModIds.has(nd.nodeId) ? 'notable' : 'minor',
         before_bbox: render ? nodeBbox(prevSnap, nd.nodeId) : null,
         after_bbox:  render ? nodeBbox(currentSnap, nd.nodeId) : null,
       });
@@ -176,7 +187,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     for (const nd of delta.added) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
-        changes: [], kind: 'added', readable: [],
+        changes: [], kind: 'added', readable: [], significance: 'notable',
         before_bbox: null,
         after_bbox:  (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(currentSnap, nd.nodeId) : null,
       });
@@ -184,15 +195,15 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
-        changes: [], kind: 'removed', readable: [],
+        changes: [], kind: 'removed', readable: [], significance: 'notable',
         before_bbox: (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(prevSnap, nd.nodeId) : null,
         after_bbox:  null,
       });
     }
   }
 
-  const blockMoves = (delta && currentSnap)
-    ? (() => { const { parent, name } = buildTreeMaps(currentSnap.root); return detectBlockMoves(delta as unknown as DeltaJSON, parent, name, 3); })()
+  const blockMoves = (delta && tree)
+    ? detectBlockMoves(delta as unknown as DeltaJSON, tree.parent, tree.name, 3)
     : [];
 
   return c.json({

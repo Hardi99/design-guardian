@@ -27,6 +27,7 @@ export interface NodeDiffVisual {
   changes: PropertyChange[];
   readable?: ReadableChange[];
   kind: 'modified' | 'added' | 'removed';
+  significance: 'notable' | 'minor';
   before_bbox: Bbox | null;
   after_bbox: Bbox | null;
 }
