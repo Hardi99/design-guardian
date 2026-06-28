@@ -20,13 +20,15 @@ export type ReadableChange =
 
 export interface BlockMove { name: string; dx: number; dy: number; count: number }
 
+export interface Bbox { x: number; y: number; w: number; h: number }
+
 export interface NodeDiffVisual {
   nodeId: string; nodeName: string; nodeType: string;
   changes: PropertyChange[];
   readable?: ReadableChange[];
   kind: 'modified' | 'added' | 'removed';
-  before_svg_b64: string | null;
-  after_svg_b64: string | null;
+  before_bbox: Bbox | null;
+  after_bbox: Bbox | null;
 }
 
 export interface DiffData {
@@ -40,6 +42,8 @@ export interface DiffData {
   prev_render_source: 'blob' | 'legacy' | 'reconstruction' | null
   node_diffs:         NodeDiffVisual[]
   block_moves?:       BlockMove[]
+  current_frame:      { w: number; h: number } | null
+  prev_frame:         { w: number; h: number } | null
 }
 
 // ─── État du reducer ──────────────────────────────────────────────────────────
@@ -98,7 +102,10 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
       render_source: action.data.render_source,
       prev_render_url: action.data.prev_render_url, prev_render_kind: action.data.prev_render_kind,
       prev_render_source: action.data.prev_render_source,
-      node_diffs: action.data.node_diffs } } : state
+      node_diffs: action.data.node_diffs,
+      current_frame: action.data.current_frame,
+      prev_frame: action.data.prev_frame,
+    } } : state
     case 'CLEAR_MSG':      return { ...state, restoreMsg: null }
     default: return state
   }
