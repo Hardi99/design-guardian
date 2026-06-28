@@ -11,6 +11,7 @@ import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
 import { pollPatchNote } from './patchNote.js';
 import { linkReducer } from './linkFlow.js';
+import { buildHighlights, type Highlight } from './diffHighlights.js';
 import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
@@ -1134,6 +1135,169 @@ function NodeDiffCard({ nd, renderUrl, prevRenderUrl, currentFrame, prevFrame }:
     </div>
   );
 }
+
+// ─── Frame-hero components (T2–T5) — not yet wired into DiffScreen (T6) ─────
+
+function FrameImage({ url, kind }: { url: string; kind: 'svg' | 'png' }) {
+  const [svg, setSvg] = useState<string | null>(null);
+  useEffect(() => {
+    if (kind !== 'svg') { setSvg(null); return; }
+    let alive = true;
+    setSvg(null);
+    fetch(url).then(r => r.text()).then(t => { if (alive) setSvg(
+      t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
+       .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"')
+    ); }).catch(() => { if (alive) setSvg(''); });
+    return () => { alive = false; };
+  }, [url, kind]);
+  if (kind === 'png') return <img src={url} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
+  if (svg === null) return <div class="w-full h-full animate-pulse bg-gray-800/40" />;
+  if (!svg) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
+  return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+const TONE_CLASS: Record<Highlight['tone'], string> = {
+  modified: 'border-purple-400',
+  added:    'border-green-400',
+  removed:  'border-red-400',
+  derived:  'border-gray-500/50',
+};
+
+function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }: {
+  url: string; kind: 'svg' | 'png'; frame: { w: number; h: number };
+  highlights: Highlight[]; selectedId: string | null; onSelect: (id: string | null) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el); setBox({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+  const scale = box.w > 0 && frame.w > 0 && frame.h > 0 ? Math.min(box.w / frame.w, box.h / frame.h) : 0;
+  const offX = (box.w - frame.w * scale) / 2;
+  const offY = (box.h - frame.h * scale) / 2;
+  return (
+    <div ref={ref} class="relative flex-1 min-h-0 overflow-hidden" onClick={() => onSelect(null)}>
+      <FrameImage url={url} kind={kind} />
+      {scale > 0 && highlights.map(hl => (
+        <button key={hl.nodeId}
+          aria-label={`Voir le changement de ${hl.nodeId}`}
+          onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
+          class={`absolute border-2 rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-white/70 bg-white/5' : 'hover:bg-white/5'}`}
+          style={{ left: `${offX + hl.bbox.x * scale}px`, top: `${offY + hl.bbox.y * scale}px`, width: `${Math.max(6, hl.bbox.w * scale)}px`, height: `${Math.max(6, hl.bbox.h * scale)}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NodeDetail({ node, renderUrl, prevRenderUrl, currentFrame, prevFrame }: {
+  node: NodeDiffVisual | null;
+  renderUrl: string | null; prevRenderUrl: string | null;
+  currentFrame: { w: number; h: number } | null; prevFrame: { w: number; h: number } | null;
+}) {
+  if (!node) return (
+    <div class="flex-1 flex items-center justify-center p-6 text-center">
+      <p class="text-gray-600 text-xs">Clique un élément surligné pour voir son changement.</p>
+    </div>
+  );
+  return (
+    <div class="flex flex-col overflow-y-auto">
+      <div class="px-4 py-3 border-b border-gray-800">
+        <p class="text-xs font-medium text-gray-200 truncate" title={node.nodeName}>{node.nodeName}
+          <span class="text-gray-600 font-mono ml-1 text-[10px]">{node.nodeType}</span></p>
+      </div>
+      <div class="flex border-b border-gray-800">
+        <div class="flex-1 min-h-[96px] max-h-32 p-2 border-r border-gray-800 overflow-hidden flex flex-col items-center justify-center gap-1">
+          {node.before_bbox && prevRenderUrl && prevFrame
+            ? <NodeCrop url={prevRenderUrl} frameW={prevFrame.w} frameH={prevFrame.h} bbox={node.before_bbox} />
+            : <span class="text-gray-700 text-xs">—</span>}
+          <span class="text-[10px] text-gray-600">avant</span>
+        </div>
+        <div class="flex-1 min-h-[96px] max-h-32 p-2 overflow-hidden flex flex-col items-center justify-center gap-1">
+          {node.after_bbox && renderUrl && currentFrame
+            ? <NodeCrop url={renderUrl} frameW={currentFrame.w} frameH={currentFrame.h} bbox={node.after_bbox} />
+            : <span class="text-gray-700 text-xs">—</span>}
+          <span class="text-[10px] text-gray-600">après</span>
+        </div>
+      </div>
+      {(node.readable && node.readable.length > 0) ? (
+        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-1">
+          {node.readable.map((r, i) => (
+            <div key={i} class="flex items-center gap-2 text-[11px]">
+              <span class="text-gray-400 w-16 flex-shrink-0">{r.label}</span>
+              <span class="text-gray-200 flex items-center gap-1.5 leading-tight">
+                {r.kind === 'color' ? (
+                  <>
+                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.from }} />
+                    <span class="font-mono text-gray-500">{r.from}</span>
+                    <span class="text-gray-600">→</span>
+                    <span class="inline-block w-3 h-3 rounded-sm border border-gray-600" style={{ background: r.to }} />
+                    <span class="font-mono">{r.to}</span>
+                  </>
+                ) : (r.kind === 'weight' || r.kind === 'text') ? (
+                  <span><span class="text-gray-500">{r.from}</span> → {r.to}</span>
+                ) : r.kind === 'rotation' ? (
+                  <span>↻ {r.degrees > 0 ? '+' : ''}{r.degrees}°</span>
+                ) : r.kind === 'move' ? (
+                  <span>↔ {r.dx}px, {r.dy}px</span>
+                ) : r.kind === 'resize' ? (
+                  <span>⤢ {r.dw > 0 ? '+' : ''}{r.dw}px, {r.dh > 0 ? '+' : ''}{r.dh}px</span>
+                ) : r.kind === 'opacity' ? (
+                  <span>{r.from}% → {r.to}%</span>
+                ) : r.kind === 'visibility' ? (
+                  <span>{r.visible ? 'Affiché' : 'Masqué'}</span>
+                ) : (
+                  <span class="font-mono text-gray-500">{r.detail}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : node.changes.length > 0 && (
+        <div class="px-3 py-2 border-t border-gray-800 flex flex-col gap-0.5">
+          {node.changes.map((ch, i) => (
+            <div key={i} class="flex items-start gap-2">
+              <span class="text-[10px] font-mono text-gray-500 w-20 flex-shrink-0 truncate">{ch.property}</span>
+              <span class="text-[10px] text-purple-400 font-mono leading-tight">{ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDerived }: {
+  counts: { modified: number; added: number; removed: number; derived: number };
+  beforeMode: boolean; showDerived: boolean;
+  onToggleBefore: () => void; onToggleDerived: () => void;
+}) {
+  return (
+    <div class="absolute top-2 left-2 right-2 flex flex-wrap items-center gap-1.5 text-[10px] z-10">
+      <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">{counts.modified} modifiés</span>
+      {counts.added > 0   && <span class="px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">{counts.added} ajoutés</span>}
+      {counts.removed > 0 && <span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{counts.removed} supprimés</span>}
+      {counts.derived > 0 && (
+        <button onClick={onToggleDerived} aria-pressed={showDerived}
+          class={`px-1.5 py-0.5 rounded ${showDerived ? 'bg-gray-600 text-gray-100' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}`}>
+          {showDerived ? '▾' : '▸'} {counts.derived} dérivés
+        </button>
+      )}
+      <button onClick={onToggleBefore} aria-pressed={beforeMode}
+        class="ml-auto px-2 py-0.5 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">
+        {beforeMode ? 'Avant ▸' : 'Après ▸'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Shared UI ────────────────────────────────────────────────────────────────
+
+// T2–T5 not yet wired into DiffScreen (T6). Suppress TS6133 until then.
+void buildHighlights; void (HighlightCanvas as unknown); void (NodeDetail as unknown); void (DiffChips as unknown);
 
 function Logo({ small = false }: { small?: boolean }) {
   return (
