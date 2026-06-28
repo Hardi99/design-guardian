@@ -104,6 +104,7 @@ function App() {
   const setAuthor     = useAppStore(s => s.setAuthor);
   const setSnapshot   = useAppStore(s => s.setSnapshot);
   const setInitErr    = useAppStore(s => s.setInitErr);
+  const diffVersionId = useAppStore(s => s.diffVersion?.id ?? null);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
@@ -176,7 +177,7 @@ function App() {
   if (screen === 'loading')    return <LoadingScreen />;
   if (screen === 'assets')     return <AssetsScreen />;
   if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
-  if (screen === 'diff')       return <DiffScreen />;
+  if (screen === 'diff')       return <DiffScreen key={diffVersionId} />;
   if (screen === 'checkpoint') return <CheckpointScreen />;
   return <Spinner full />;
 }
@@ -313,6 +314,7 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const setBranch      = useAppStore(s => s.setBranch);
   const setScreen      = useAppStore(s => s.setScreen);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
+  const setSiblings    = useAppStore(s => s.setSiblings);
 
   const [versions,   setVersions]   = useState<Version[]>([]);
   const [branches,   setBranches]   = useState<string[]>(['main']);
@@ -330,7 +332,7 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   const visible = versions.filter(v => v.branch_name === branch);
 
-  const openDiff = useCallback((v: Version) => { setDiffVersion(v); setScreen('diff'); }, []);
+  const openDiff = useCallback((v: Version) => { setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
@@ -661,6 +663,23 @@ function DiffScreen() {
   const author    = useAppStore(s => s.author);
   const branch    = useAppStore(s => s.branch);
   const setScreen = useAppStore(s => s.setScreen);
+  const siblings       = useAppStore(s => s.siblings);
+  const setDiffVersion = useAppStore(s => s.setDiffVersion);
+
+  // Navigation ◀▶ entre versions de la branche (siblings ordonnés ancien→récent).
+  // Le remount par key={version.id} côté App réinitialise le reducer/loader à chaque saut.
+  const navIdx = siblings.findIndex(s => s.id === version.id);
+  const prevV  = navIdx > 0 ? siblings[navIdx - 1] : null;
+  const nextV  = navIdx >= 0 && navIdx < siblings.length - 1 ? siblings[navIdx + 1] : null;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return; // ne pas voler les flèches du slider
+      if (e.key === 'ArrowLeft' && prevV) setDiffVersion(prevV);
+      else if (e.key === 'ArrowRight' && nextV) setDiffVersion(nextV);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [prevV, nextV]);
 
   const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
   const [opacity, setOpacity] = useState(0.5);
@@ -682,10 +701,16 @@ function DiffScreen() {
       {/* Header */}
       <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-800 flex-shrink-0">
         <button aria-label="Retour à la timeline" class="text-gray-500 hover:text-white text-sm flex-shrink-0" onClick={goBack}>←</button>
-        <span class="font-medium text-sm flex-1 truncate">
+        <button aria-label="Version précédente" title="Version précédente (←)" disabled={!prevV}
+          class="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-default text-sm flex-shrink-0"
+          onClick={() => prevV && setDiffVersion(prevV)}>◀</button>
+        <span class="font-medium text-sm flex-1 truncate text-center">
           v{version.version_number}
           <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
         </span>
+        <button aria-label="Version suivante" title="Version suivante (→)" disabled={!nextV}
+          class="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-default text-sm flex-shrink-0"
+          onClick={() => nextV && setDiffVersion(nextV)}>▶</button>
         {/* Status toggle + tooltip explicatif */}
         <div class="relative group flex-shrink-0">
           <button
