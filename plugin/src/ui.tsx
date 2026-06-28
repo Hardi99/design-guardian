@@ -892,22 +892,37 @@ function DiffScreen() {
             {!delta && <p class="text-xs text-gray-600 p-4">Première version — aucune diff.</p>}
             {delta && delta.totalChanges === 0 && <p class="text-xs text-gray-500 p-4">Aucune modification détectée.</p>}
 
-            {delta && [...delta.modified, ...delta.added, ...delta.removed].map(node => (
-              <div key={node.nodeId} class="px-4 py-3 border-b border-gray-800/50">
-                <p class="text-xs font-medium text-gray-200 mb-2 truncate" title={node.nodeName}>
-                  {node.nodeName}
-                  <span class="text-gray-600 font-mono ml-1 text-[10px]">{node.nodeType}</span>
-                </p>
-                {node.changes.map((ch, i) => (
-                  <div key={i} class="flex items-start gap-2 py-0.5">
-                    <span class="text-[10px] font-mono text-gray-500 w-24 flex-shrink-0 truncate" title={ch.property}>{ch.property}</span>
-                    <span class="text-[10px] text-purple-400 font-mono leading-tight">
-                      {ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))}
+            {delta && (() => {
+              const minorIds = new Set(data.node_diffs.filter(n => n.significance === 'minor').map(n => n.nodeId));
+              const all = [...delta.modified, ...delta.added, ...delta.removed];
+              const shown = all.filter(node => showMinor || !minorIds.has(node.nodeId));
+              return (
+                <>
+                  {shown.map(node => (
+                    <div key={node.nodeId} class="px-4 py-3 border-b border-gray-800/50">
+                      <p class="text-xs font-medium text-gray-200 mb-2 truncate" title={node.nodeName}>
+                        {node.nodeName}
+                        <span class="text-gray-600 font-mono ml-1 text-[10px]">{node.nodeType}</span>
+                      </p>
+                      {node.changes.map((ch, i) => (
+                        <div key={i} class="flex items-start gap-2 py-0.5">
+                          <span class="text-[10px] font-mono text-gray-500 w-24 flex-shrink-0 truncate" title={ch.property}>{ch.property}</span>
+                          <span class="text-[10px] text-purple-400 font-mono leading-tight">
+                            {ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {minorIds.size > 0 && (
+                    <button class="text-[11px] text-gray-500 hover:text-gray-300 px-4 py-2 text-left transition-colors"
+                      onClick={() => setShowMinor(v => !v)} aria-expanded={showMinor}>
+                      {showMinor ? '▾' : '▸'} {minorIds.size} changement{minorIds.size > 1 ? 's' : ''} dérivé{minorIds.size > 1 ? 's' : ''} <span class="text-gray-600">(portés/auto-layout)</span>
+                    </button>
+                  )}
+                </>
+              );
+            })()}
 
             {delta && delta.added.length > 0 && (
               <div class="px-4 py-2">
