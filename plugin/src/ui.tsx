@@ -822,7 +822,7 @@ function DiffScreen() {
                   <div class="flex items-center gap-1.5 flex-wrap justify-center">
                     <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
                     {data.render_source === 'reconstruction' && (
-                      <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu reconstruit</span>
+                      <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu approximatif</span>
                     )}
                     {data.render_url === null && (
                       <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
@@ -841,7 +841,7 @@ function DiffScreen() {
                 {(data.render_source === 'reconstruction' || data.render_url === null) && (
                   <div class="absolute top-2 left-1/2 -translate-x-1/2 z-10">
                     {data.render_source === 'reconstruction'
-                      ? <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu reconstruit</span>
+                      ? <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu approximatif</span>
                       : <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
                     }
                   </div>
