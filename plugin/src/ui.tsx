@@ -674,7 +674,7 @@ function DiffScreen() {
   const nextV  = navIdx >= 0 && navIdx < siblings.length - 1 ? siblings[navIdx + 1] : null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return; // ne pas voler les flèches du slider
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return; // ne pas voler les flèches dans les inputs
       if (e.key === 'ArrowLeft' && prevV) setDiffVersion(prevV);
       else if (e.key === 'ArrowRight' && nextV) setDiffVersion(nextV);
     };
@@ -683,7 +683,8 @@ function DiffScreen() {
   }, [prevV, nextV]);
 
   const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
-  const [opacity, setOpacity] = useState(0.5);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [beforeMode, setBeforeMode] = useState(false);
   const [showMinor, setShowMinor] = useState(false); // changements dérivés (move porté/auto-layout) repliés
 
   useDiffLoader(dispatch, apiKey, version.id);
@@ -694,9 +695,20 @@ function DiffScreen() {
 
   const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
 
-  const { data, loading, err, mode, status, statusBusy, restoring, applyingToFigma, restoreMsg, view } = state;
-  const delta   = data?.version.analysis_json;
+  const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg } = state;
   const hasPrev = !!data?.prev_version;
+  const nodeDiffs = data?.node_diffs ?? [];
+  const highlights = buildHighlights(nodeDiffs, beforeMode, showMinor);
+  const selected = nodeDiffs.find(n => n.nodeId === selectedId) ?? null;
+  const counts = {
+    modified: nodeDiffs.filter(n => n.kind === 'modified' && n.significance !== 'minor').length,
+    added:    nodeDiffs.filter(n => n.kind === 'added').length,
+    removed:  nodeDiffs.filter(n => n.kind === 'removed').length,
+    derived:  nodeDiffs.filter(n => n.significance === 'minor').length,
+  };
+  const canvasUrl   = beforeMode ? data?.prev_render_url  : data?.render_url;
+  const canvasKind  = beforeMode ? data?.prev_render_kind : data?.render_kind;
+  const canvasFrame = beforeMode ? data?.prev_frame       : data?.current_frame;
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
@@ -752,198 +764,54 @@ function DiffScreen() {
             {applyingToFigma ? '…' : '↩ Restore'}
           </button>
         )}
-        {hasPrev && (
-          <div class="flex gap-1 flex-shrink-0">
-            <button aria-pressed={view === 'nodes'} class={`px-2 py-1 rounded text-xs transition-colors ${view === 'nodes' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_VIEW', view: 'nodes' })}>Nodes</button>
-            <button aria-pressed={view === 'frame'} class={`px-2 py-1 rounded text-xs transition-colors ${view === 'frame' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_VIEW', view: 'frame' })}>Frame</button>
-          </div>
-        )}
-        {hasPrev && view === 'frame' && (
-          <div class="flex gap-1 flex-shrink-0">
-            <button aria-pressed={mode === 'split'}   class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'split'   ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_MODE', mode: 'split' })}>Split</button>
-            <button aria-pressed={mode === 'overlay'} class={`px-2 py-1 rounded text-xs transition-colors ${mode === 'overlay' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => dispatch({ type: 'SET_MODE', mode: 'overlay' })}>Overlay</button>
-          </div>
-        )}
       </div>
 
+      {version.ai_summary && (
+        <div class="px-4 py-2 border-b border-gray-800 flex-shrink-0">
+          <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
+        </div>
+      )}
       {restoreMsg && <div role="status" class="px-4 py-2 bg-green-900/40 border-b border-green-800 text-green-400 text-xs flex-shrink-0">{restoreMsg}</div>}
       {loading && <Spinner full />}
       {err     && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
 
       {data && (
-        <div class="flex flex-1 overflow-hidden">
-          {/* Visual panel */}
-          <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden">
-            {!hasPrev ? (
-              <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
-                <div class="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
-                  <span class="text-2xl">📸</span>
-                </div>
-                <div class="flex flex-col gap-1">
-                  <p class="text-sm font-medium text-gray-200">Checkpoint initial</p>
-                  <p class="text-xs text-gray-500">Le diff visuel apparaîtra à partir de la v2</p>
-                </div>
-                <div class="flex flex-col gap-1.5 text-xs text-gray-600">
-                  <span>{timeAgo(version.created_at)}</span>
-                  {version.author_name && <span>par {version.author_name}</span>}
-                </div>
-              </div>
-            ) : view === 'nodes' ? (
-              <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-                {data.node_diffs.length === 0 && (
-                  <div class="flex items-center justify-center h-full">
-                    <p class="text-gray-500 text-xs">Aucune modification visuelle détectée.</p>
-                  </div>
-                )}
-                {data.block_moves && data.block_moves.length > 0 && (
-                  <div class="flex flex-col gap-1 mb-2">
-                    {data.block_moves.map((bm, i) => (
-                      <div key={i} class="px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg flex items-center gap-2 text-[11px]">
-                        <span class="text-purple-400">⤢</span>
-                        <span class="text-gray-200">Bloc {bm.name ? <span class="text-purple-300">« {bm.name} »</span> : ''} déplacé</span>
-                        <span class="text-gray-500 font-mono">{bm.dx !== 0 ? `${bm.dx > 0 ? '+' : ''}${bm.dx}px ` : ''}{bm.dy !== 0 ? `${bm.dy > 0 ? '+' : ''}${bm.dy}px` : ''}</span>
-                        <span class="text-gray-600 ml-auto">{bm.count} éléments</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(() => {
-                  const visible = data.node_diffs.filter(nd => nd.kind !== 'modified' || (nd.readable && nd.readable.length > 0));
-                  const notable = visible.filter(nd => nd.significance !== 'minor');
-                  const minor   = visible.filter(nd => nd.significance === 'minor');
-                  const card = (nd: NodeDiffVisual) => <NodeDiffCard key={nd.nodeId} nd={nd} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url} currentFrame={data.current_frame} prevFrame={data.prev_frame} />;
-                  return (
-                    <>
-                      {notable.length === 0 && minor.length > 0 && (
-                        <p class="text-gray-500 text-xs text-center py-3">Aucun changement à la main — uniquement des conséquences dérivées.</p>
-                      )}
-                      {notable.map(card)}
-                      {minor.length > 0 && (
-                        <button class="text-[11px] text-gray-500 hover:text-gray-300 px-1 py-1.5 text-left transition-colors"
-                          onClick={() => setShowMinor(v => !v)}
-                          aria-expanded={showMinor}>
-                          {showMinor ? '▾' : '▸'} {minor.length} changement{minor.length > 1 ? 's' : ''} dérivé{minor.length > 1 ? 's' : ''} <span class="text-gray-600">(déplacés avec leur parent / auto-layout)</span>
-                        </button>
-                      )}
-                      {showMinor && minor.map(card)}
-                    </>
-                  );
-                })()}
-              </div>
-            ) : mode === 'split' ? (
-              <div class="flex flex-1 overflow-hidden">
-                <div class="flex-1 flex flex-col items-center justify-center border-r border-gray-800 p-3 gap-2 overflow-hidden">
-                  <p class="text-xs text-gray-600 font-mono">v{data.prev_version!.version_number} — avant</p>
-                  {data.prev_render_url
-                    ? <SvgFrame url={data.prev_render_url} kind={data.prev_render_kind ?? 'png'} style="flex-1 min-h-0 overflow-hidden" zoomable />
-                    : <p class="text-gray-600 text-xs">Pas de visuel</p>
-                  }
-                </div>
-                <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
-                  <div class="flex items-center gap-1.5 flex-wrap justify-center">
-                    <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
-                    {data.render_source === 'reconstruction' && (
-                      <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu approximatif</span>
-                    )}
-                    {data.render_url === null && (
-                      <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
-                    )}
-                  </div>
-                  {data.render_url
-                    ? <SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="flex-1 min-h-0 overflow-hidden" zoomable />
-                    : <p class="text-gray-600 text-xs">Pas de visuel</p>
-                  }
-                </div>
-              </div>
-            ) : (
-              <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
-                {data.prev_render_url && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame url={data.prev_render_url} kind={data.prev_render_kind ?? 'png'} style="w-full h-full" /></div>}
-                {data.render_url      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="w-full h-full" /></div>}
-                {(data.render_source === 'reconstruction' || data.render_url === null) && (
-                  <div class="absolute top-2 left-1/2 -translate-x-1/2 z-10">
-                    {data.render_source === 'reconstruction'
-                      ? <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu approximatif</span>
-                      : <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
-                    }
-                  </div>
-                )}
-                <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
-                  <span class="text-xs text-gray-500">avant</span>
-                  <input type="range" min={0} max={1} step={0.01} value={opacity}
-                    aria-label="Opacité du calque précédent"
-                    onInput={e => setOpacity(parseFloat((e.target as HTMLInputElement).value))}
-                    class="w-24 accent-purple-500" />
-                  <span class="text-xs text-gray-500">après</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Smart Data panel */}
-          <div class="w-72 flex flex-col overflow-y-auto">
-            <div class="px-4 py-3 border-b border-gray-800">
-              <p class="text-xs font-semibold text-gray-300">Smart Data</p>
-              {delta && delta.totalChanges > 0 && (() => {
-                const authored = data.node_diffs.filter(n => n.significance !== 'minor').length;
-                const derived  = data.node_diffs.filter(n => n.significance === 'minor').length;
-                return <p class="text-xs text-gray-600 mt-0.5">{authored} changement{authored > 1 ? 's' : ''}{derived > 0 ? <span class="text-gray-700"> · {derived} dérivé{derived > 1 ? 's' : ''}</span> : ''}</p>;
-              })()}
+        hasPrev ? (
+          <div class="flex flex-1 overflow-hidden">
+            <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">
+              <DiffChips counts={counts} beforeMode={beforeMode} showDerived={showMinor}
+                onToggleBefore={() => setBeforeMode(v => !v)} onToggleDerived={() => setShowMinor(v => !v)} />
+              {canvasUrl && canvasKind && canvasFrame
+                ? <HighlightCanvas url={canvasUrl} kind={canvasKind} frame={canvasFrame}
+                    highlights={highlights} selectedId={selectedId} onSelect={setSelectedId} />
+                : <div class="flex-1 flex items-center justify-center"><p class="text-gray-600 text-xs">Rendu indisponible.</p></div>}
             </div>
-
-            {!delta && <p class="text-xs text-gray-600 p-4">Première version — aucune diff.</p>}
-            {delta && delta.totalChanges === 0 && <p class="text-xs text-gray-500 p-4">Aucune modification détectée.</p>}
-
-            {delta && (() => {
-              const minorIds = new Set(data.node_diffs.filter(n => n.significance === 'minor').map(n => n.nodeId));
-              const all = [...delta.modified, ...delta.added, ...delta.removed];
-              const shown = all.filter(node => showMinor || !minorIds.has(node.nodeId));
-              return (
-                <>
-                  {shown.map(node => (
-                    <div key={node.nodeId} class="px-4 py-3 border-b border-gray-800/50">
-                      <p class="text-xs font-medium text-gray-200 mb-2 truncate" title={node.nodeName}>
-                        {node.nodeName}
-                        <span class="text-gray-600 font-mono ml-1 text-[10px]">{node.nodeType}</span>
-                      </p>
-                      {node.changes.map((ch, i) => (
-                        <div key={i} class="flex items-start gap-2 py-0.5">
-                          <span class="text-[10px] font-mono text-gray-500 w-24 flex-shrink-0 truncate" title={ch.property}>{ch.property}</span>
-                          <span class="text-[10px] text-purple-400 font-mono leading-tight">
-                            {ch.delta ?? `${String(ch.oldValue)} → ${String(ch.newValue)}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {minorIds.size > 0 && (
-                    <button class="text-[11px] text-gray-500 hover:text-gray-300 px-4 py-2 text-left transition-colors"
-                      onClick={() => setShowMinor(v => !v)} aria-expanded={showMinor}>
-                      {showMinor ? '▾' : '▸'} {minorIds.size} changement{minorIds.size > 1 ? 's' : ''} dérivé{minorIds.size > 1 ? 's' : ''} <span class="text-gray-600">(portés/auto-layout)</span>
-                    </button>
-                  )}
-                </>
-              );
-            })()}
-
-            {delta && delta.added.length > 0 && (
-              <div class="px-4 py-2">
-                <p class="text-[10px] text-green-500 font-semibold uppercase tracking-wide">{delta.added.length} ajout(s)</p>
-              </div>
-            )}
-            {delta && delta.removed.length > 0 && (
-              <div class="px-4 py-2">
-                <p class="text-[10px] text-red-400 font-semibold uppercase tracking-wide">{delta.removed.length} suppression(s)</p>
-              </div>
-            )}
-
-            {version.ai_summary && (
-              <div class="px-4 py-3 mt-auto border-t border-gray-800">
-                <p class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">IA</p>
-                <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
-              </div>
-            )}
+            <div class="w-72 flex flex-col overflow-hidden">
+              <NodeDetail node={selected} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url}
+                currentFrame={data.current_frame} prevFrame={data.prev_frame} />
+              {version.ai_summary && (
+                <div class="px-4 py-3 mt-auto border-t border-gray-800">
+                  <p class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">IA</p>
+                  <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+              <span class="text-2xl">📸</span>
+            </div>
+            <div class="flex flex-col gap-1">
+              <p class="text-sm font-medium text-gray-200">Checkpoint initial</p>
+              <p class="text-xs text-gray-500">Le diff visuel apparaîtra à partir de la v2</p>
+            </div>
+            <div class="flex flex-col gap-1.5 text-xs text-gray-600">
+              <span>{timeAgo(version.created_at)}</span>
+              {version.author_name && <span>par {version.author_name}</span>}
+            </div>
+          </div>
+        )
       )}
     </div>
   );
@@ -1136,7 +1004,7 @@ function NodeDiffCard({ nd, renderUrl, prevRenderUrl, currentFrame, prevFrame }:
   );
 }
 
-// ─── Frame-hero components (T2–T5) — not yet wired into DiffScreen (T6) ─────
+// ─── Frame-hero components (T2–T5) ───────────────────────────────────────────
 
 function FrameImage({ url, kind }: { url: string; kind: 'svg' | 'png' }) {
   const [svg, setSvg] = useState<string | null>(null);
@@ -1296,8 +1164,8 @@ function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDe
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-// T2–T5 not yet wired into DiffScreen (T6). Suppress TS6133 until then.
-void buildHighlights; void (HighlightCanvas as unknown); void (NodeDetail as unknown); void (DiffChips as unknown);
+// NodeDiffCard / SvgFrame retained for T7 cleanup — suppress TS6133 until then.
+void (NodeDiffCard as unknown); void (SvgFrame as unknown);
 
 function Logo({ small = false }: { small?: boolean }) {
   return (
