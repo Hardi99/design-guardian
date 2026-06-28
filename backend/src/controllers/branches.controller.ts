@@ -101,24 +101,26 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   };
 
   // Résout l'URL signée du blob render (PNG > SVG) ou un data-URL legacy, sans download.
-  const resolveRenderUrl = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<{ url: string; kind: 'svg' | 'png' } | null> => {
+  // `source` indique l'origine du rendu : 'blob' = fichier binaire réel, 'legacy' = ancien JSON,
+  // 'reconstruction' = SVG reconstruit depuis les propriétés natives (pas un export Figma).
+  const resolveRenderUrl = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<{ url: string; kind: 'svg' | 'png'; source: 'blob' | 'legacy' | 'reconstruction' } | null> => {
     if (storagePath) {
       const store = getSupabaseStorage().from(SNAPSHOTS_BUCKET);
       for (const kind of ['png', 'svg'] as const) {
         const { data } = await store.createSignedUrl(storagePath.replace('.json', `_render.${kind}`), 3600);
-        if (data?.signedUrl) return { url: data.signedUrl, kind };
+        if (data?.signedUrl) return { url: data.signedUrl, kind, source: 'blob' };
       }
       const { data: legacy } = await store.download(storagePath.replace('.json', '_render.json'));
       if (legacy) {
         try {
           const j = JSON.parse(await legacy.text()) as { svg_b64?: string; png_b64?: string };
-          if (j.png_b64) return { url: `data:image/png;base64,${j.png_b64}`, kind: 'png' };
-          if (j.svg_b64) return { url: `data:image/svg+xml;base64,${j.svg_b64}`, kind: 'svg' };
+          if (j.png_b64) return { url: `data:image/png;base64,${j.png_b64}`, kind: 'png', source: 'legacy' };
+          if (j.svg_b64) return { url: `data:image/svg+xml;base64,${j.svg_b64}`, kind: 'svg', source: 'legacy' };
         } catch { /* fallback */ }
       }
     }
     const recon = toFullSvgB64(snapshot);
-    return recon ? { url: `data:image/svg+xml;base64,${recon}`, kind: 'svg' } : null;
+    return recon ? { url: `data:image/svg+xml;base64,${recon}`, kind: 'svg', source: 'reconstruction' } : null;
   };
 
   const toNodeSvgB64 = (
@@ -246,8 +248,10 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 
   return c.json({
     version: versionData, prev_version: prevVersion,
-    render_url: curUrl?.url ?? null,        render_kind: curUrl?.kind ?? null,
-    prev_render_url: prevUrl?.url ?? null,  prev_render_kind: prevUrl?.kind ?? null,
+    render_url: curUrl?.url ?? null,             render_kind: curUrl?.kind ?? null,
+    render_source: curUrl?.source ?? null,
+    prev_render_url: prevUrl?.url ?? null,        prev_render_kind: prevUrl?.kind ?? null,
+    prev_render_source: prevUrl?.source ?? null,
     node_diffs: nodeDiffs, block_moves: blockMoves,
   });
 });
