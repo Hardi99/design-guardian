@@ -97,6 +97,7 @@ export function getOpenApiSpec() {
             nodeName: { type: 'string' },
             nodeType: { type: 'string' },
             kind: { type: 'string', enum: ['modified', 'added', 'removed'] },
+            significance: { type: 'string', enum: ['notable', 'minor'], description: "'notable' = authored ; 'minor' = dérivé (move porté par le parent / reflow auto-layout)" },
             changes: { type: 'array', items: { $ref: '#/components/schemas/NodeChange' } },
             before_bbox: { type: 'object', nullable: true, description: 'Bounding box of node before change (relative to frame)', properties: { x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' }, h: { type: 'number' } } },
             after_bbox: { type: 'object', nullable: true, description: 'Bounding box of node after change (relative to frame)', properties: { x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' }, h: { type: 'number' } } },
