@@ -53,19 +53,17 @@ export interface DiffState {
   data:            DiffData | null
   loading:         boolean
   err:             string | null
-  mode:            'split' | 'overlay'
+  heavyDone:       boolean
   status:          Version['status']
   statusBusy:      boolean
   restoring:       boolean
   applyingToFigma: boolean
   restoreMsg:      string | null
-  view:            'nodes' | 'frame'
 }
 
 export type DiffAction =
   | { type: 'LOAD_SUCCESS';   data: DiffData }
   | { type: 'LOAD_ERROR';     err: string }
-  | { type: 'SET_MODE';       mode: 'split' | 'overlay' }
   | { type: 'STATUS_START' }
   | { type: 'STATUS_SUCCESS'; status: Version['status'] }
   | { type: 'STATUS_ERROR';   err: string }
@@ -74,17 +72,16 @@ export type DiffAction =
   | { type: 'APPLY_START' }
   | { type: 'APPLY_COMPLETE'; applied: number; skipped?: number; restoreMsg?: string }
   | { type: 'APPLY_ERROR';    err: string }
-  | { type: 'SET_VIEW';       view: 'nodes' | 'frame' }
   | { type: 'HEAVY_LOADED';   data: DiffData }
+  | { type: 'HEAVY_DONE' }
   | { type: 'CLEAR_MSG' }
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
 export function diffReducer(state: DiffState, action: DiffAction): DiffState {
   switch (action.type) {
-    case 'LOAD_SUCCESS':   return { ...state, loading: false, data: action.data }
+    case 'LOAD_SUCCESS':   return { ...state, loading: false, data: action.data, heavyDone: false }
     case 'LOAD_ERROR':     return { ...state, loading: false, err: action.err }
-    case 'SET_MODE':       return { ...state, mode: action.mode }
     case 'STATUS_START':   return { ...state, statusBusy: true }
     case 'STATUS_SUCCESS': return { ...state, statusBusy: false, status: action.status }
     case 'STATUS_ERROR':   return { ...state, statusBusy: false, err: action.err }
@@ -96,9 +93,8 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
       restoreMsg: action.restoreMsg ?? `✓ ${action.applied} nœud(s) restauré(s)${action.skipped ? ` · ${action.skipped} ignoré(s)` : ''}`,
     }
     case 'APPLY_ERROR':    return { ...state, applyingToFigma: false, err: action.err }
-    case 'SET_VIEW':       return { ...state, view: action.view }
     // Le lourd (frames + vignettes) arrive en différé → fusion dans les données affichées.
-    case 'HEAVY_LOADED':   return state.data ? { ...state, data: { ...state.data,
+    case 'HEAVY_LOADED':   return state.data ? { ...state, heavyDone: true, data: { ...state.data,
       render_url: action.data.render_url, render_kind: action.data.render_kind,
       render_source: action.data.render_source,
       prev_render_url: action.data.prev_render_url, prev_render_kind: action.data.prev_render_kind,
@@ -107,6 +103,7 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
       current_frame: action.data.current_frame,
       prev_frame: action.data.prev_frame,
     } } : state
+    case 'HEAVY_DONE':     return { ...state, heavyDone: true }
     case 'CLEAR_MSG':      return { ...state, restoreMsg: null }
     default: return state
   }
@@ -115,8 +112,8 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
 export function initialDiffState(status: Version['status']): DiffState {
   return {
     data: null, loading: true, err: null,
-    mode: 'split', status,
+    heavyDone: false, status,
     statusBusy: false, restoring: false, applyingToFigma: false,
-    restoreMsg: null, view: 'nodes',
+    restoreMsg: null,
   }
 }
