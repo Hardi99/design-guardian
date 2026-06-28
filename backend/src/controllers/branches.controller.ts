@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
-import { generateSvgFromSnapshot, generateSvgFromNode, findNodeById } from '../services/svg-generator.service.js';
+import { generateSvgFromSnapshot, findNodeById } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import { statusSchema, restoreSchema } from '../types/api.js';
 import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
@@ -79,27 +79,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     } catch { return null; }
   };
 
-  // Tente de charger le rendu depuis Storage : blob binaire d'abord, puis legacy JSON, puis reconstruction.
-  const resolveRenderB64 = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<string | null> => {
-    if (storagePath) {
-      const store = getSupabaseStorage().from(SNAPSHOTS_BUCKET);
-      for (const blobExt of ['png', 'svg'] as const) {
-        const { data } = await store.download(storagePath.replace('.json', `_render.${blobExt}`));
-        if (data) return Buffer.from(await data.arrayBuffer()).toString('base64');
-      }
-      // legacy : ancien rendu enveloppé en JSON
-      const { data: legacy } = await store.download(storagePath.replace('.json', '_render.json'));
-      if (legacy) {
-        try {
-          const json = JSON.parse(await legacy.text()) as { svg_b64?: string; png_b64?: string };
-          if (json.svg_b64) return json.svg_b64;
-          if (json.png_b64) return json.png_b64;
-        } catch { /* fallback */ }
-      }
-    }
-    return toFullSvgB64(snapshot);
-  };
-
   // Résout l'URL signée du blob render (PNG > SVG) ou un data-URL legacy, sans download.
   // `source` indique l'origine du rendu : 'blob' = fichier binaire réel, 'legacy' = ancien JSON,
   // 'reconstruction' = SVG reconstruit depuis les propriétés natives (pas un export Figma).
@@ -123,36 +102,12 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     return recon ? { url: `data:image/svg+xml;base64,${recon}`, kind: 'svg', source: 'reconstruction' } : null;
   };
 
-  const toNodeSvgB64 = (
-    snapshot: FigmaSnapshot | null,
-    nodeId: string,
-    fullFrameB64?: string | null
-  ): string | null => {
+  // Helper : bbox d'un nœud relative à la frame root (pour le crop CSS côté plugin).
+  const nodeBbox = (snapshot: FigmaSnapshot | null, nodeId: string): { x: number; y: number; w: number; h: number } | null => {
     if (!snapshot) return null;
-
-    // Crop from the pixel-perfect frame SVG (same source as Frame view)
-    if (fullFrameB64 && !fullFrameB64.startsWith('iVBO')) {
-      try {
-        const node = findNodeById(snapshot.root, nodeId);
-        if (!node) return null;
-        // Crop serré au bbox (petit pad anti-rognage des contours) : moins de pad = moins
-        // de voisins qui bavent. Le viewBox clippe déjà tout ce qui est hors fenêtre.
-        const pad = 2;
-        const vb = `${node.x - snapshot.root.x - pad} ${node.y - snapshot.root.y - pad} ${node.width + pad * 2} ${node.height + pad * 2}`;
-        const svgStr = Buffer.from(fullFrameB64, 'base64').toString('utf-8');
-        const cropped = svgStr.replace(/<svg([^>]*)>/, (_m, attrs) =>
-          `<svg${attrs.replace(/\s+(?:viewBox|width|height)="[^"]*"/g, '')} viewBox="${vb}">`
-        );
-        return Buffer.from(cropped).toString('base64');
-      } catch { /* fallback */ }
-    }
-
-    // Fallback: reconstructed SVG from snapshot properties
-    try {
-      const node = findNodeById(snapshot.root, nodeId);
-      if (!node) return null;
-      return Buffer.from(generateSvgFromNode(node)).toString('base64');
-    } catch { return null; }
+    const node = findNodeById(snapshot.root, nodeId);
+    if (!node) return null;
+    return { x: node.x - snapshot.root.x, y: node.y - snapshot.root.y, w: node.width, h: node.height };
   };
 
   // Frames entières ET crops par-nœud ne sont produits que sur demande (?thumbs=1) :
@@ -182,13 +137,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
   const currentSnap = await resolveSnapshot(getSupabaseStorage(), versionData);
 
-  const [svgB64, prevSvgB64] = wantThumbs
-    ? await Promise.all([
-        resolveRenderB64(versionData.storage_path, currentSnap),
-        resolveRenderB64(prevVersion?.storage_path ?? null, prevSnap),
-      ])
-    : [null, null];
-
   const [curUrl, prevUrl] = wantThumbs
     ? await Promise.all([
         resolveRenderUrl(versionData.storage_path, currentSnap),
@@ -207,7 +155,8 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     nodeId: string; nodeName: string; nodeType: string;
     changes: unknown[]; kind: 'modified' | 'added' | 'removed';
     readable: ReadableChange[];
-    before_svg_b64: string | null; after_svg_b64: string | null;
+    before_bbox: { x: number; y: number; w: number; h: number } | null;
+    after_bbox:  { x: number; y: number; w: number; h: number } | null;
   }> = [];
 
   if (delta) {
@@ -220,24 +169,24 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
         readable: formatNodeChanges(nd as unknown as NodeDelta),
-        before_svg_b64: render ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
-        after_svg_b64:  render ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
+        before_bbox: render ? nodeBbox(prevSnap, nd.nodeId) : null,
+        after_bbox:  render ? nodeBbox(currentSnap, nd.nodeId) : null,
       });
     }
     for (const nd of delta.added) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added', readable: [],
-        before_svg_b64: null,
-        after_svg_b64:  (wantThumbs && renderIds.has(nd.nodeId)) ? toNodeSvgB64(currentSnap, nd.nodeId, svgB64) : null,
+        before_bbox: null,
+        after_bbox:  (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(currentSnap, nd.nodeId) : null,
       });
     }
     for (const nd of delta.removed) {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed', readable: [],
-        before_svg_b64: (wantThumbs && renderIds.has(nd.nodeId)) ? toNodeSvgB64(prevSnap, nd.nodeId, prevSvgB64) : null,
-        after_svg_b64:  null,
+        before_bbox: (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(prevSnap, nd.nodeId) : null,
+        after_bbox:  null,
       });
     }
   }
@@ -252,6 +201,8 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     render_source: curUrl?.source ?? null,
     prev_render_url: prevUrl?.url ?? null,        prev_render_kind: prevUrl?.kind ?? null,
     prev_render_source: prevUrl?.source ?? null,
+    current_frame: currentSnap ? { w: currentSnap.root.width, h: currentSnap.root.height } : null,
+    prev_frame: prevSnap ? { w: prevSnap.root.width, h: prevSnap.root.height } : null,
     node_diffs: nodeDiffs, block_moves: blockMoves,
   });
 });

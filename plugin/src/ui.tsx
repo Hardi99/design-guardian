@@ -1,7 +1,7 @@
 // ─── UI THREAD — Preact + HTTP. Aucun accès API Figma ici. ───────────────────
 
 import { render, h } from 'preact';
-import { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'preact/hooks';
+import { useState, useEffect, useCallback, useReducer, useRef } from 'preact/hooks';
 import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor, RestorationDelta } from './types.js';
 import { useAppStore } from './useAppStore.js';
 import { appStore } from './store.js';
@@ -807,7 +807,7 @@ function DiffScreen() {
                 )}
                 {data.node_diffs
                   .filter(nd => nd.kind !== 'modified' || (nd.readable && nd.readable.length > 0))
-                  .map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} />)}
+                  .map(nd => <NodeDiffCard key={nd.nodeId} nd={nd} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url} currentFrame={data.current_frame} prevFrame={data.prev_frame} />)}
               </div>
             ) : mode === 'split' ? (
               <div class="flex flex-1 overflow-hidden">
@@ -998,21 +998,33 @@ function SvgFrame({ url, kind, style, zoomable }: { url: string; kind: 'svg' | '
   );
 }
 
-function NodeThumb({ b64 }: { b64: string }) {
-  const html = useMemo(() => {
-    if (b64.startsWith('iVBO')) return null;
-    try {
-      return atob(b64)
-        .replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
-        .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
-    } catch { return null; }
-  }, [b64]);
-  if (html === null) return <img src={`data:image/png;base64,${b64}`} class="max-w-full max-h-full object-contain" />;
-  if (!html) return null;
-  return <div class="w-full h-full" dangerouslySetInnerHTML={{ __html: html }} />;
+function NodeCrop({ url, frameW, frameH, bbox }: { url: string; frameW: number; frameH: number; bbox: { x: number; y: number; w: number; h: number } }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el); setBox({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+  const pad = 4;
+  const scale = box.w > 0 && bbox.w > 0 && bbox.h > 0 ? Math.min((box.w - pad * 2) / bbox.w, (box.h - pad * 2) / bbox.h) : 0;
+  const left = (box.w - bbox.w * scale) / 2 - bbox.x * scale;
+  const top  = (box.h - bbox.h * scale) / 2 - bbox.y * scale;
+  return (
+    <div ref={ref} class="relative w-full h-full overflow-hidden">
+      {scale > 0 && <img src={url} style={{ position: 'absolute', width: `${frameW * scale}px`, height: `${frameH * scale}px`, left: `${left}px`, top: `${top}px`, maxWidth: 'none', pointerEvents: 'none' }} />}
+    </div>
+  );
 }
 
-function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
+function NodeDiffCard({ nd, renderUrl, prevRenderUrl, currentFrame, prevFrame }: {
+  nd: NodeDiffVisual;
+  renderUrl: string | null;
+  prevRenderUrl: string | null;
+  currentFrame: { w: number; h: number } | null;
+  prevFrame: { w: number; h: number } | null;
+}) {
   const kindColor = nd.kind === 'added' ? 'text-green-400 bg-green-500/10' : nd.kind === 'removed' ? 'text-red-400 bg-red-500/10' : 'text-purple-400 bg-purple-500/10';
   const kindLabel = nd.kind === 'added' ? '+ ajout' : nd.kind === 'removed' ? '− supprimé' : '~ modifié';
 
@@ -1025,11 +1037,15 @@ function NodeDiffCard({ nd }: { nd: NodeDiffVisual }) {
       </div>
       <div class="flex">
         <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 border-r border-gray-800 min-h-[80px] max-h-24 overflow-hidden">
-          {nd.before_svg_b64 ? <NodeThumb b64={nd.before_svg_b64} /> : <span class="text-gray-700 text-xs">—</span>}
+          {nd.before_bbox && prevRenderUrl && prevFrame
+            ? <NodeCrop url={prevRenderUrl} frameW={prevFrame.w} frameH={prevFrame.h} bbox={nd.before_bbox} />
+            : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">avant</span>
         </div>
         <div class="flex-1 flex flex-col items-center justify-center p-2 gap-1 min-h-[80px] max-h-24 overflow-hidden">
-          {nd.after_svg_b64 ? <NodeThumb b64={nd.after_svg_b64} /> : <span class="text-gray-700 text-xs">—</span>}
+          {nd.after_bbox && renderUrl && currentFrame
+            ? <NodeCrop url={renderUrl} frameW={currentFrame.w} frameH={currentFrame.h} bbox={nd.after_bbox} />
+            : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">après</span>
         </div>
       </div>
