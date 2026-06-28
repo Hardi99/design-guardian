@@ -780,7 +780,7 @@ function DiffScreen() {
           <div class="flex flex-1 overflow-hidden">
             <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">
               <DiffChips counts={counts} beforeMode={beforeMode} showDerived={showMinor}
-                onToggleBefore={() => setBeforeMode(v => !v)} onToggleDerived={() => setShowMinor(v => !v)} />
+                onToggleBefore={() => { setBeforeMode(v => !v); setSelectedId(null); }} onToggleDerived={() => setShowMinor(v => !v)} />
               {canvasUrl && canvasKind && canvasFrame
                 ? <HighlightCanvas url={canvasUrl} kind={canvasKind} frame={canvasFrame}
                     highlights={highlights} selectedId={selectedId} onSelect={setSelectedId} />
@@ -789,12 +789,6 @@ function DiffScreen() {
             <div class="w-72 flex flex-col overflow-hidden">
               <NodeDetail node={selected} renderUrl={data.render_url} prevRenderUrl={data.prev_render_url}
                 currentFrame={data.current_frame} prevFrame={data.prev_frame} />
-              {version.ai_summary && (
-                <div class="px-4 py-3 mt-auto border-t border-gray-800">
-                  <p class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">IA</p>
-                  <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
-                </div>
-              )}
             </div>
           </div>
         ) : (
