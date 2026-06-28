@@ -1148,10 +1148,12 @@ function DiffChips({ counts, beforeMode, showDerived, onToggleBefore, onToggleDe
           {showDerived ? '▾' : '▸'} {counts.derived} dérivés
         </button>
       )}
-      <button onClick={onToggleBefore} aria-pressed={beforeMode}
-        class="ml-auto px-2 py-0.5 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">
-        {beforeMode ? 'Avant ▸' : 'Après ▸'}
-      </button>
+      <div class="ml-auto flex rounded overflow-hidden border border-gray-700">
+        <button onClick={() => { if (!beforeMode) onToggleBefore(); }} aria-pressed={beforeMode}
+          class={`px-2 py-0.5 ${beforeMode ? 'bg-gray-600 text-gray-100' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>Avant</button>
+        <button onClick={() => { if (beforeMode) onToggleBefore(); }} aria-pressed={!beforeMode}
+          class={`px-2 py-0.5 ${!beforeMode ? 'bg-gray-600 text-gray-100' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>Après</button>
+      </div>
     </div>
   );
 }
