@@ -107,6 +107,11 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     if (!snapshot) return null;
     const node = findNodeById(snapshot.root, nodeId);
     if (!node) return null;
+    // AABB visuelle (rotations incluses) si capturée ; sinon repli sur x/y/w/h bruts (anciennes versions).
+    const rb = snapshot.root.aabb;
+    const ox = rb ? rb.x : snapshot.root.x;
+    const oy = rb ? rb.y : snapshot.root.y;
+    if (node.aabb) return { x: node.aabb.x - ox, y: node.aabb.y - oy, w: node.aabb.w, h: node.aabb.h };
     return { x: node.x - snapshot.root.x, y: node.y - snapshot.root.y, w: node.width, h: node.height };
   };
 

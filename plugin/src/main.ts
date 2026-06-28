@@ -586,6 +586,10 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     y: node.absoluteTransform[1][2],
     width:    'width'   in node ? (node as { width: number }).width    : 0,
     height:   'height'  in node ? (node as { height: number }).height  : 0,
+    // AABB visuelle absolue (axis-aligned, rotations/effets inclus) → surlignage/crops corrects pour les nœuds rotés.
+    aabb: ('absoluteBoundingBox' in node && node.absoluteBoundingBox)
+      ? { x: node.absoluteBoundingBox.x, y: node.absoluteBoundingBox.y, w: node.absoluteBoundingBox.width, h: node.absoluteBoundingBox.height }
+      : undefined,
     opacity:  'opacity' in node ? (node as { opacity: number }).opacity : 1,
     visible:  'visible' in node ? (node as { visible: boolean }).visible : true,
     rotation: extractRotation(node),

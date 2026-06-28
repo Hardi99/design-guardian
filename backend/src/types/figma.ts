@@ -53,6 +53,7 @@ export interface NodeSnapshot {
   y: number;
   width: number;
   height: number;
+  aabb?: { x: number; y: number; w: number; h: number }; // AABB visuelle absolue (rotations incluses)
   // Visual properties
   opacity: number;
   visible?: boolean;
