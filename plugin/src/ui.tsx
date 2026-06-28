@@ -747,8 +747,8 @@ function DiffScreen() {
         {data && (
           <button onClick={applyToFigma} disabled={applyingToFigma}
             class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
-            aria-label="Appliquer cette version sur le canvas Figma">
-            {applyingToFigma ? '…' : '↩ Apply to Figma'}
+            aria-label="Restaurer cette version sur le canvas Figma">
+            {applyingToFigma ? '…' : '↩ Restore'}
           </button>
         )}
         {hasPrev && (
