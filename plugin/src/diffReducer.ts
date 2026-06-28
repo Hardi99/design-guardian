@@ -30,14 +30,16 @@ export interface NodeDiffVisual {
 }
 
 export interface DiffData {
-  version:          Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null }
-  prev_version:     (Version & { snapshot_json: unknown }) | null
-  render_url:       string | null
-  render_kind:      'svg' | 'png' | null
-  prev_render_url:  string | null
-  prev_render_kind: 'svg' | 'png' | null
-  node_diffs:       NodeDiffVisual[]
-  block_moves?:     BlockMove[]
+  version:            Version & { snapshot_json: unknown; analysis_json: DeltaJSON | null }
+  prev_version:       (Version & { snapshot_json: unknown }) | null
+  render_url:         string | null
+  render_kind:        'svg' | 'png' | null
+  render_source:      'blob' | 'legacy' | 'reconstruction' | null
+  prev_render_url:    string | null
+  prev_render_kind:   'svg' | 'png' | null
+  prev_render_source: 'blob' | 'legacy' | 'reconstruction' | null
+  node_diffs:         NodeDiffVisual[]
+  block_moves?:       BlockMove[]
 }
 
 // ─── État du reducer ──────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ export type DiffAction =
   | { type: 'RESTORE_START' }
   | { type: 'RESTORE_ERROR';  err: string }
   | { type: 'APPLY_START' }
-  | { type: 'APPLY_COMPLETE'; applied: number; skipped?: number }
+  | { type: 'APPLY_COMPLETE'; applied: number; skipped?: number; restoreMsg?: string }
   | { type: 'APPLY_ERROR';    err: string }
   | { type: 'SET_VIEW';       view: 'nodes' | 'frame' }
   | { type: 'HEAVY_LOADED';   data: DiffData }
@@ -86,14 +88,16 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
     case 'APPLY_START':    return { ...state, applyingToFigma: true, restoreMsg: null }
     case 'APPLY_COMPLETE': return {
       ...state, applyingToFigma: false,
-      restoreMsg: `✓ ${action.applied} nœud(s) restauré(s)${action.skipped ? ` · ${action.skipped} ignoré(s)` : ''}`,
+      restoreMsg: action.restoreMsg ?? `✓ ${action.applied} nœud(s) restauré(s)${action.skipped ? ` · ${action.skipped} ignoré(s)` : ''}`,
     }
     case 'APPLY_ERROR':    return { ...state, applyingToFigma: false, err: action.err }
     case 'SET_VIEW':       return { ...state, view: action.view }
     // Le lourd (frames + vignettes) arrive en différé → fusion dans les données affichées.
     case 'HEAVY_LOADED':   return state.data ? { ...state, data: { ...state.data,
       render_url: action.data.render_url, render_kind: action.data.render_kind,
+      render_source: action.data.render_source,
       prev_render_url: action.data.prev_render_url, prev_render_kind: action.data.prev_render_kind,
+      prev_render_source: action.data.prev_render_source,
       node_diffs: action.data.node_diffs } } : state
     case 'CLEAR_MSG':      return { ...state, restoreMsg: null }
     default: return state

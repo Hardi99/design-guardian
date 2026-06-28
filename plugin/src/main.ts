@@ -352,7 +352,7 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
   await figma.loadAllPagesAsync(); // dynamic-page : le clone d'historique vit sur dg/_history
   // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
   if (versionId && tryRestoreFromClone(versionId)) {
-    send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0 });
+    send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0, mode: 'clone' });
     return;
   }
   // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
@@ -375,7 +375,7 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
       flattenSnapshot(extractSnapshot(root), currMap);
       const result = await applyFullSnapshot(root, snapshot.root, currMap, true);
       figma.commitUndo();
-      send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped });
+      send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped, mode: 'reapply' });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
     }

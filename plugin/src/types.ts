@@ -75,7 +75,7 @@ export type MainToUI =
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
-  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number }
+  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null };
 

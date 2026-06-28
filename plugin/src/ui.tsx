@@ -578,13 +578,25 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
   }, [apiKey, versionId]);
 }
 
+function buildRestoreMsg(msg: { applied?: number; skipped?: number; mode?: 'clone' | 'reapply' }): string | undefined {
+  if (msg.mode === 'clone') return '✓ Restauré à l\'identique';
+  if (msg.mode === 'reapply') {
+    const applied = msg.applied ?? 0;
+    const skipped = msg.skipped ?? 0;
+    return skipped > 0
+      ? `✓ ${applied} restaurés · ⚠ ${skipped} non recréés (supprimés depuis)`
+      : `✓ ${applied} restaurés`;
+  }
+  return undefined; // legacy: le reducer construit le message depuis applied+skipped
+}
+
 function useRestoreListener(dispatch: (a: DiffAction) => void) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number } | undefined;
+      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number; mode?: 'clone' | 'reapply' } | undefined;
       if (!msg || msg.type !== 'RESTORE_COMPLETE') return;
-      dispatch({ type: 'APPLY_COMPLETE', applied: msg.applied ?? 0, skipped: msg.skipped });
+      dispatch({ type: 'APPLY_COMPLETE', applied: msg.applied ?? 0, skipped: msg.skipped, restoreMsg: buildRestoreMsg(msg) });
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => dispatch({ type: 'CLEAR_MSG' }), 4000);
     };
@@ -782,7 +794,15 @@ function DiffScreen() {
                   }
                 </div>
                 <div class="flex-1 flex flex-col items-center justify-center p-3 gap-2 overflow-hidden">
-                  <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
+                  <div class="flex items-center gap-1.5 flex-wrap justify-center">
+                    <p class="text-xs text-gray-600 font-mono">v{version.version_number} — après</p>
+                    {data.render_source === 'reconstruction' && (
+                      <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu reconstruit</span>
+                    )}
+                    {data.render_url === null && (
+                      <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
+                    )}
+                  </div>
                   {data.render_url
                     ? <SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="flex-1 min-h-0 overflow-hidden" zoomable />
                     : <p class="text-gray-600 text-xs">Pas de visuel</p>
@@ -793,6 +813,14 @@ function DiffScreen() {
               <div class="flex-1 flex flex-col items-center justify-center p-4 gap-3 overflow-hidden relative">
                 {data.prev_render_url && <div class="absolute inset-0 p-4" style={{ opacity: 1 - opacity }}><SvgFrame url={data.prev_render_url} kind={data.prev_render_kind ?? 'png'} style="w-full h-full" /></div>}
                 {data.render_url      && <div class="absolute inset-0 p-4" style={{ opacity }}><SvgFrame url={data.render_url} kind={data.render_kind ?? 'png'} style="w-full h-full" /></div>}
+                {(data.render_source === 'reconstruction' || data.render_url === null) && (
+                  <div class="absolute top-2 left-1/2 -translate-x-1/2 z-10">
+                    {data.render_source === 'reconstruction'
+                      ? <span class="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded leading-tight">⚠ Aperçu reconstruit</span>
+                      : <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded leading-tight">Rendu indisponible</span>
+                    }
+                  </div>
+                )}
                 <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 rounded-lg px-3 py-1.5">
                   <span class="text-xs text-gray-500">avant</span>
                   <input type="range" min={0} max={1} step={0.01} value={opacity}
