@@ -30,6 +30,7 @@ interface AppData {
   renderKind:   'svg' | 'png' | undefined
   initErr:      string | null
   diffVersion:  Version | null
+  siblings:     Version[]   // versions de la branche courante (ordre ancien→récent) pour la nav ◀▶ du diff
 }
 
 // État complet = données + actions
@@ -43,6 +44,7 @@ export interface AppState extends AppData {
   setSnapshot:    (s: FigmaSnapshot | null, svg?: string, kind?: 'svg' | 'png') => void
   setInitErr:     (e: string | null)                      => void
   setDiffVersion: (v: Version | null)                     => void
+  setSiblings:    (v: Version[])                          => void
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export const INITIAL_STATE: AppData = {
   renderKind:   undefined,
   initErr:      null,
   diffVersion:  null,
+  siblings:     [],
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -78,6 +81,7 @@ export const appStore = createStore<AppState>()((set) => ({
   setSnapshot:    (snapshot, renderSvgB64, renderKind) => set({ snapshot, renderSvgB64, renderKind }),
   setInitErr:     (initErr)                => set({ initErr }),
   setDiffVersion: (diffVersion)            => set({ diffVersion }),
+  setSiblings:    (siblings)               => set({ siblings }),
 }))
 
 // Remet les données à zéro entre chaque test (beforeEach(() => resetStore()))
