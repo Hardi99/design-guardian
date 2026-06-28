@@ -32,6 +32,7 @@ export interface NodeSnapshot {
   dg_id?: string; // identité stable (cf. spec §5) — optionnel le temps de la migration
   id: string; name: string; type: string;
   x: number; y: number; width: number; height: number; opacity: number;
+  aabb?: { x: number; y: number; w: number; h: number }; // AABB visuelle absolue (rotations incluses)
   visible?: boolean;
   rotation?: number;
   fills: FigmaFill[]; strokes: FigmaStroke[];
