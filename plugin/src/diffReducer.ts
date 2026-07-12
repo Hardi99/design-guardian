@@ -18,8 +18,6 @@ export type ReadableChange =
   | { kind: 'visibility'; label: string; visible: boolean }
   | { kind: 'generic';    label: string; detail: string }
 
-export interface BlockMove { name: string; dx: number; dy: number; count: number }
-
 export interface Bbox { x: number; y: number; w: number; h: number }
 
 export interface NodeDiffVisual {
@@ -42,7 +40,6 @@ export interface DiffData {
   prev_render_kind:   'svg' | 'png' | null
   prev_render_source: 'blob' | 'legacy' | 'reconstruction' | null
   node_diffs:         NodeDiffVisual[]
-  block_moves?:       BlockMove[]
   current_frame:      { w: number; h: number } | null
   prev_frame:         { w: number; h: number } | null
 }

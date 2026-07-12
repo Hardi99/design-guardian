@@ -6,7 +6,7 @@
 
 | Item | Statut |
 |------|--------|
-| ≈142 tests unitaires (Vitest — 79 back + 63 plugin) | ✅ |
+| 300 tests unitaires (Vitest — 181 back + 119 plugin) | ✅ |
 | Cahier de recettes `docs/RECETTES.md` | ✅ |
 | Pipeline CI/CD `.github/workflows/ci.yml` | ✅ |
 | OpenAPI (`openapi.ts` + Swagger UI `/api/docs`) | ✅ |

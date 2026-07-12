@@ -13,7 +13,7 @@ import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
 import { nodeIdsToRender, derivedMoveIds, rankDelta } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
-import { buildTreeMaps, detectBlockMoves } from '../services/block-moves.service.js';
+import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
 
 const branchesRouter = new Hono<ProjectEnv>();
@@ -165,7 +165,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     after_bbox:  { x: number; y: number; w: number; h: number } | null;
   }> = [];
 
-  // Arbre une seule fois → réutilisé pour la détection de moves dérivés ET les block-moves.
+  // Arbre une seule fois → réutilisé pour la détection de moves dérivés (cascade).
   const tree = (delta && currentSnap) ? buildTreeMaps(currentSnap.root) : null;
   // Un déplacement identique à celui du parent = conséquence (nœud porté), pas authored.
   const derived = (delta && tree) ? derivedMoveIds(delta as unknown as DeltaJSON, tree.parent) : new Set<string>();
@@ -207,10 +207,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     }
   }
 
-  const blockMoves = (delta && tree)
-    ? detectBlockMoves(delta as unknown as DeltaJSON, tree.parent, tree.name, 3)
-    : [];
-
   return c.json({
     version: versionData, prev_version: prevVersion,
     render_url: curUrl?.url ?? null,             render_kind: curUrl?.kind ?? null,
@@ -219,7 +215,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     prev_render_source: prevUrl?.source ?? null,
     current_frame: currentSnap ? { w: currentSnap.root.width, h: currentSnap.root.height } : null,
     prev_frame: prevSnap ? { w: prevSnap.root.width, h: prevSnap.root.height } : null,
-    node_diffs: nodeDiffs, block_moves: blockMoves,
+    node_diffs: nodeDiffs,
   });
 });
 

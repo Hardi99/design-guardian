@@ -79,7 +79,7 @@
 - ❌ Environnements définis (local, staging Railway, prod)
 
 ### 2. Tests unitaires par service ⚠️
-- ✅ `diff.service.ts` — 29 tests (géométrie, couleurs, opacité, strokeWeight, cornerRadius, vectorPaths, arbre, totalChanges)
+- ✅ `diff.service.ts` — 37 tests (géométrie, couleurs, opacité, strokeWeight, cornerRadius, vectorPaths, arbre, totalChanges)
 - ❌ Auth : JWT validation, OAuth mocks, hachage mdp
 - ❌ BDD : CRUD Supabase, validation schemas Zod
 - ❌ IA : formatage prompt, parsing réponse OpenAI, gestion erreurs (mocks)
@@ -226,7 +226,7 @@ Commit → Build → Tests unitaires → Quality Gate → Deploy Staging → Tes
 |---|---|
 | `README.md` (français, détaillé) | Base BC01.9 (slides) + BC02.7 (doc technique) |
 | `PIPELINE.md` | Base BC01.8 (architecture) + BC02.7 |
-| 29 tests Vitest `diff.service` | Base BC02.2 + BC02.1 |
+| 37 tests Vitest `diff.service` | Base BC02.2 + BC02.1 |
 | Commits git conventionnels datés | Base BC03.2 (sprints) + BC04.6 (changelog) |
 | Décisions techniques documentées en mémoire | Base BC01.6 (comparatif) + BC03.4 (arbitrages) |
 | Plugin fonctionnel testé | Base BC03.5 (vidéo sprint review) |

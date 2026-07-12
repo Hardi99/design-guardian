@@ -9,7 +9,7 @@ export interface LayoutContext {
 }
 
 // Extrait le contexte de layout d'un nœud du delta (source unique — évite la
-// reconstruction dupliquée dans significance/block-moves/change-format).
+// reconstruction dupliquée dans significance/change-format).
 export function layoutContextOf(nd: NodeDelta): LayoutContext {
   return {
     layoutSizingHorizontal: nd.layoutSizingHorizontal,

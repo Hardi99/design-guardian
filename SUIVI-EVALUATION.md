@@ -64,7 +64,7 @@
 ### Autres blocs jury (preuves déjà en place)
 | Compétence | État | Note |
 |------------|------|------|
-| C2.2.2 Tests unitaires 🔒 | ✅ | 123 tests Vitest |
+| C2.2.2 Tests unitaires 🔒 | ✅ | 300 tests Vitest (181 back + 119 plugin) |
 | C2.3.1 Cahier de recettes 🔒 | ✅ | `docs/RECETTES.md` |
 | C2.4.1 Documentation technique 🔒 | ✅ | OpenAPI + `docs/DEPLOIEMENT.md` |
 | C4.1.2 Supervision + alertes 🔒 | ✅ | Prometheus/Grafana |

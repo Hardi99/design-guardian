@@ -321,20 +321,32 @@
 
 > Mesurée par Vitest (`npm run test:coverage`). **Quality Gate ≥ 80 %** appliqué nativement (seuil dans `vitest.config.ts`) et vérifié en CI (`.github/workflows/ci.yml`).
 
-**Backend — 104 tests / 9 fichiers · couverture services 84 % statements / 86 % lines / 87 % functions**
+**Backend — 181 tests / 21 fichiers · couverture 88,02 % statements / 90,33 % lines / 92,92 % functions / 75,42 % branches** (mesurée `npm run test:coverage`, 2026-07-12)
 
-| Service | Tests | Portée |
+| Fichier de test | Tests | Portée |
 |---------|-------|--------|
-| `diff.service` | 29 | Géométrie, visuel, texte, vecteurs, arbre, totalChanges |
+| `diff.service` | 37 | Géométrie, visuel, texte, vecteurs, arbre, totalChanges |
+| `significance.service` | 27 | Classification authored/derived des changements (seuils de significativité) |
 | `svg-generator.service` | 25 | Rect, Ellipse, Text (multi-ligne + échappement), Frame/Group, Vector, gradients, findNodeById |
 | `payments.service` | 13 | Checkout session, portail, webhooks Stripe (plan ↔ user_id) |
-| `openai.service` | 10 | Zero-change, fallback erreur, réponse AI, structure du prompt |
+| `change-format.service` | 12 | Formatage lisible des changements (changelog) |
+| `openai.service` | 11 | Zero-change, fallback erreur, réponse AI, structure du prompt |
 | `notification.service` | 9 | Email Resend (succès/erreur), SMS Twilio (succès/échec/exception) |
+| `tree.service` | 1 | Construction de l'arbre (parent/name) pour la détection des moves dérivés |
 | `stripe.service` | 8 | `getStripe`, `getPriceId`, PLANS (prix 12/39), `getOrCreateUserCustomer` |
+| `purge.service` | 6 | Purge/cleanup des données (cascade + Storage) |
+| `node-match.service` | 5 | Appariement des nœuds entre versions |
+| `link.service` | 5 | Pont billing↔identité (device-code) |
 | `plugin.middleware` | 5 | Header manquant, clé invalide, clé valide + projectId |
+| `versioning.service` | 4 | Numérotation des versions par branche |
 | `checkpoint-ai.service` | 3 | Génération asynchrone du patch note |
+| `ownership.service` | 3 | Garde cross-tenant (isolation par projet) |
 | `api-schema` | 2 | Validation des schémas Zod |
+| `link.controller` | 2 | Intégration `/api/link` (auth JWT) |
+| `branches.controller` | 1 | Intégration cross-tenant (403 ownership) |
+| `checkpoints.controller` | 1 | Intégration limite plan Free (403) |
+| `plugin.middleware.plan` | 1 | Résolution du plan effectif |
 
-**Plugin — 95 tests / 7 fichiers** (`store`, `diffReducer`, `patchNote`, `identity`, `restoreDiff`, `figmaIdentity`, `utils`)
+**Plugin — 119 tests / 12 fichiers** : `diffReducer` (24), `store` (23), `utils` (18), `restoreDiff` (17), `figmaIdentity` (11), `restoreClone` (5), `identity` (5), `renderFormat` (4), `patchNote` (3), `linkFlow` (3), `diffHighlights` (3), `cornerRadii` (3).
 
-> **Total projet : 199 tests automatisés** (104 backend + 95 plugin), tous exécutés en CI à chaque push/PR sur `master`.
+> **Total projet : 300 tests automatisés** (181 backend + 119 plugin), tous exécutés en CI à chaque push/PR sur `master`.

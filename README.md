@@ -101,7 +101,7 @@ cd backend
 npm install
 cp .env.example .env
 npm run dev          # tsx watch — port 3001
-npm run test:run     # 63 tests unitaires (Vitest)
+npm run test:run     # 181 tests unitaires (Vitest)
 npm run test:coverage # rapport de couverture HTML dans coverage/
 npm run build        # compile vers dist/
 ```

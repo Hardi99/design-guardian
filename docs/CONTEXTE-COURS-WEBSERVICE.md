@@ -76,7 +76,7 @@ Le cours suppose une **web app React** ; Design Guardian est un **plugin Figma**
 - Pyramide tests · **couverture ≥ 80 %** · tests unitaires **par service** (Auth JWT/OAuth mocks · BDD CRUD · IA mocks · Paiement webhooks Stripe · Notif templating).
 - Tests d'intégration : **Inscription (Auth→BDD→Notif)** · **OAuth (Auth→Provider→BDD)** · **Souscription (Paiement→BDD→Notif)** · **Requête IA (Front→IA→BDD)**.
 - **Cahier de recettes** `REC-XXX-001` · Plan anomalies **P1<4h / P2<24h / P3<1sem / P4 backlog** · **CI/CD + Quality Gate** (couv >80 %, 0 bug bloquant, 0 vuln critique, duplication <3 %) · **OpenAPI/Swagger** par service.
-- **DG :** 199 tests (104 back + 95 plugin) + ≥80 % + CI/CD ✅. **Gaps :** le cahier de recettes attend **REC-AUTH-003 (Facebook OAuth)**, **REC-AUTH-005 (SMS)**, **REC-AUTH-007 (validation email)** → liés aux gaps OAuth×3 et SMS ci-dessous. Vérifier **OpenAPI** par service.
+- **DG :** 300 tests (181 back + 119 plugin) + ≥80 % + CI/CD ✅. **Gaps :** le cahier de recettes attend **REC-AUTH-003 (Facebook OAuth)**, **REC-AUTH-005 (SMS)**, **REC-AUTH-007 (validation email)** → liés aux gaps OAuth×3 et SMS ci-dessous. Vérifier **OpenAPI** par service.
 
 ### 📊 BC03 — Pilotage & Management
 - Méthodo (Scrum…) justifiée · **Product Backlog** (US-001…, MoSCoW, story points) · Sprints + vélocité · **KPIs** (vélocité/burndown/lead time/bugs/couverture) · **arbitrages documentés** (Contexte/Options/Analyse/Décision/Justification) · **management d'équipe** · communication client (Sprint Review).
