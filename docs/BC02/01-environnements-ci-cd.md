@@ -13,7 +13,7 @@
 - **Éditeur** : VS Code, TypeScript Strict Mode activé (`tsconfig.json` strict: true)
 - **Langages** : TypeScript 5.x (strictement typé, zéro `any`)
 - **Gestion de sources** : Git + GitHub (branche principal : `master`)
-- **Gestionnaire de paquets** : npm (backend) + npm (plugin) — lock files commités
+- **Gestionnaire de paquets** : bun (backend, utilisé par la CI — `bun.lock`) + npm (plugin) — lock files commités
 - **Runner de tests** : Vitest (configuration `.vitest.config.ts`, environnement `node`)
 - **Compilateur** : `tsc --noEmit` (vérification de type, pas d'émission de fichier)
 - **Serveur d'app** : HonoJS sur `@hono/node-server` (Node.js 20+, port local 3001)
@@ -47,7 +47,7 @@ cd plugin && npm ci && npm run typecheck && npm test
 ```
 git push master
     ↓
-GitHub Actions (.github/workflows/ci.yml:1-74)
+GitHub Actions (.github/workflows/ci.yml:1-73)
     ├─ Job backend (.github/workflows/ci.yml:11-44)
     │   ├─ bun install
     │   ├─ bun run typecheck (.github/workflows/ci.yml:28-29)

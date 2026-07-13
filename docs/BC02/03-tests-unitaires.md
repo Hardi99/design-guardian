@@ -29,7 +29,7 @@ Le harnais suit une pyramide à trois étages, cohérente avec l'architecture Se
 
 Le gros du volume de tests porte sur des **services et reducers purs**, sans dépendance réseau ni base de données :
 
-- **Backend** : les classes `*.service.ts` sont testées en isolation. `DiffService.compareSnapshots()` (`backend/src/services/diff.service.ts`) prend deux snapshots en entrée et renvoie un `DeltaJSON` — aucun accès Supabase, donc testable sans mock (`backend/src/tests/diff.service.test.ts`). Même logique pour `significance.service.ts`, `svg-generator.service.ts`, `change-format.service.ts`, `tree.service.ts`, `node-match.service.ts` (colocalisé : `backend/src/services/node-match.test.ts`).
+- **Backend** : les classes `*.service.ts` sont testées en isolation. `DiffService.compareSnapshots()` (`backend/src/services/diff.service.ts`) prend deux snapshots en entrée et renvoie un `DeltaJSON` — aucun accès Supabase, donc testable sans mock (`backend/src/tests/diff.service.test.ts`). Même logique pour `significance.service.ts`, `svg-generator.service.ts`, `change-format.service.ts`, `tree.service.ts`, `node-match.ts` (colocalisé : `backend/src/services/node-match.test.ts`).
 - **Plugin** : le `diffReducer` (machine à états du diff viewer) et les fonctions `store.ts`/`utils.ts` sont des fonctions pures `(state, action) → state`, testées sans webview ni `figma.*` (`plugin/src/diffReducer.test.ts`, `plugin/src/store.test.ts`, `plugin/src/utils.test.ts`).
 
 ### Intermédiaire — controllers (intégration API)
@@ -84,7 +84,7 @@ La métrique *branches* n'est pas dans les seuils (`vitest.config.ts` ne la list
 
 La ventilation fichier par fichier (nombre de tests, portée fonctionnelle) est **déjà maintenue** dans `docs/RECETTES.md` (section « Couverture tests automatisés ») — elle n'est pas dupliquée ici pour éviter deux sources de vérité. Résumé :
 
-- **Backend** — **181 tests / 21 fichiers**, couverture 88,02 % statements / 90,33 % lines / 92,92 % functions / 75,42 % branches. Fichiers principaux par volume de tests : `diff.service`, `significance.service`, `svg-generator.service`, `payments.service`, `change-format.service`, `openai.service`, `notification.service` — puis `stripe.service`, `purge.service`, `node-match.service`, `link.service`, `plugin.middleware`, `versioning.service`, `checkpoint-ai.service`, `ownership.service`, `api-schema`, et les trois tests d'intégration controllers (`link.controller`, `branches.controller`, `checkpoints.controller`, `plugin.middleware.plan`).
+- **Backend** — **181 tests / 21 fichiers**, couverture 88,02 % statements / 90,33 % lines / 92,92 % functions / 75,42 % branches. Fichiers principaux par volume de tests : `diff.service`, `significance.service`, `svg-generator.service`, `payments.service`, `change-format.service`, `openai.service`, `notification.service` — puis `stripe.service`, `purge.service`, `node-match`, `link.service`, `plugin.middleware`, `versioning.service`, `checkpoint-ai.service`, `ownership.service`, `api-schema`, et les tests d'intégration controllers (`link.controller`, `branches.controller`, `checkpoints.controller`) plus le test de résolution de plan du middleware (`plugin.middleware.plan`).
 - **Plugin** — **119 tests / 12 fichiers** : `diffReducer`, `store`, `utils`, `restoreDiff`, `figmaIdentity`, `restoreClone`, `identity`, `renderFormat`, `patchNote`, `linkFlow`, `diffHighlights`, `cornerRadii`.
 
 → Détail exhaustif (nom de fichier, nombre de tests, portée précise) : `docs/RECETTES.md`, section « Couverture tests automatisés ».
