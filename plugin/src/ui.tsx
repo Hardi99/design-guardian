@@ -152,7 +152,7 @@ function App() {
   if (showUpgrade) return (
     <div class="flex flex-col h-screen bg-gray-950 text-white p-6 gap-4">
       <div class="flex items-center gap-3 border-b border-gray-800 pb-4">
-        <button class="text-gray-500 hover:text-white text-sm" onClick={() => setShowUpgrade(false)}>←</button>
+        <button aria-label="Retour" class="text-gray-500 hover:text-white text-sm" onClick={() => setShowUpgrade(false)}>←</button>
         <span class="font-medium text-sm">Passer à Pro</span>
       </div>
       <div class="flex flex-col gap-3">
@@ -816,7 +816,7 @@ function DiffScreen() {
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-function NodeCrop({ url, frameW, frameH, bbox }: { url: string; frameW: number; frameH: number; bbox: { x: number; y: number; w: number; h: number } }) {
+function NodeCrop({ url, frameW, frameH, bbox, alt }: { url: string; frameW: number; frameH: number; bbox: { x: number; y: number; w: number; h: number }; alt: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -831,7 +831,7 @@ function NodeCrop({ url, frameW, frameH, bbox }: { url: string; frameW: number; 
   const top  = (box.h - bbox.h * scale) / 2 - bbox.y * scale;
   return (
     <div ref={ref} class="relative w-full h-full overflow-hidden">
-      {scale > 0 && <img src={url} style={{ position: 'absolute', width: `${frameW * scale}px`, height: `${frameH * scale}px`, left: `${left}px`, top: `${top}px`, maxWidth: 'none', pointerEvents: 'none' }} />}
+      {scale > 0 && <img src={url} alt={alt} style={{ position: 'absolute', width: `${frameW * scale}px`, height: `${frameH * scale}px`, left: `${left}px`, top: `${top}px`, maxWidth: 'none', pointerEvents: 'none' }} />}
     </div>
   );
 }
@@ -850,7 +850,7 @@ function FrameImage({ url, kind }: { url: string; kind: 'svg' | 'png' }) {
     ); }).catch(() => { if (alive) setSvg(''); });
     return () => { alive = false; };
   }, [url, kind]);
-  if (kind === 'png') return <img src={url} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
+  if (kind === 'png') return <img src={url} alt="Rendu de la frame" class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
   if (svg === null) return <div class="w-full h-full animate-pulse bg-gray-800/40" />;
   if (!svg) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
   return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
@@ -912,13 +912,13 @@ function NodeDetail({ node, renderUrl, prevRenderUrl, currentFrame, prevFrame }:
       <div class="flex border-b border-gray-800">
         <div class="flex-1 min-h-[96px] max-h-32 p-2 border-r border-gray-800 overflow-hidden flex flex-col items-center justify-center gap-1">
           {node.before_bbox && prevRenderUrl && prevFrame
-            ? <NodeCrop url={prevRenderUrl} frameW={prevFrame.w} frameH={prevFrame.h} bbox={node.before_bbox} />
+            ? <NodeCrop url={prevRenderUrl} frameW={prevFrame.w} frameH={prevFrame.h} bbox={node.before_bbox} alt={`Aperçu avant de ${node.nodeName}`} />
             : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">avant</span>
         </div>
         <div class="flex-1 min-h-[96px] max-h-32 p-2 overflow-hidden flex flex-col items-center justify-center gap-1">
           {node.after_bbox && renderUrl && currentFrame
-            ? <NodeCrop url={renderUrl} frameW={currentFrame.w} frameH={currentFrame.h} bbox={node.after_bbox} />
+            ? <NodeCrop url={renderUrl} frameW={currentFrame.w} frameH={currentFrame.h} bbox={node.after_bbox} alt={`Aperçu après de ${node.nodeName}`} />
             : <span class="text-gray-700 text-xs">—</span>}
           <span class="text-[10px] text-gray-600">après</span>
         </div>
