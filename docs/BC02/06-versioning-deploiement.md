@@ -9,11 +9,11 @@
 **Code** — Git + GitHub, commits conventionnels (`type(scope): sujet`), historique daté et consultable :
 
 ```
-75b6dd1 2026-07-13 docs(bc02): C2.2.3 accessibilité OPQUAST + fixes alt/aria ui.tsx
-ea786a7 2026-07-12 refactor: remove dead block_moves feature + resync test counts
-6a6514f 2026-06-28 feat(diff): canvas states + approximate badge + T7 dead-code cleanup
-00250c7 2026-06-28 fix(diff): capture absolute AABB so highlights/crops align on rotated nodes
-024290c 2026-06-28 fix(diff): clearer before/after segmented toggle (active = current view)
+76009d8 2026-07-13 docs(bc02): C2.2.3 accessibilité OPQUAST + fixes alt/aria ui.tsx
+8f7fff2 2026-07-12 refactor: remove dead block_moves feature + resync test counts
+5ab7c0a 2026-06-28 feat(diff): canvas states + approximate badge + T7 dead-code cleanup
+dfd0dab 2026-06-28 fix(diff): capture absolute AABB so highlights/crops align on rotated nodes
+1200670 2026-06-28 fix(diff): clearer before/after segmented toggle (active = current view)
 ```
 
 Types utilisés en pratique : `feat`, `fix`, `docs`, `refactor` — préfixe cohérent sur l'ensemble de l'historique (`git log --oneline`), pas une convention affichée une fois puis abandonnée.

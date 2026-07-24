@@ -22,7 +22,7 @@ Extraction directe via l'API native Figma dans `main.ts` :
 **Résultat débloqué**
 Première visualisation des nodes vectoriels (VECTOR, STAR, POLYGON). Diff géométrique précis au pixel. Snapshot JSON pur, sans permission spéciale dans le manifest.
 
-**Commit** `2076ca8 chore: remove dead SVG export code`
+**Commit** `8492b32 chore: remove dead SVG export code`
 
 ---
 
@@ -48,7 +48,7 @@ Ajout de tous les champs manquants dans `nodeSnapshotSchema`, `figmaFillSchema`,
 **Résultat débloqué**
 Affichage des vrais textes dans le rendu SVG. Diff des propriétés `characters`, `rotation`, `visible`, `effects` désormais opérationnel.
 
-**Commit** `a0126b0 fix: add missing fields to Zod schema (characters, effects, rotation)`
+**Commit** `161b268 fix: add missing fields to Zod schema (characters, effects, rotation)`
 
 ---
 
@@ -84,7 +84,7 @@ function SvgFrame({ b64 }: { b64: string }) {
 **Résultat débloqué**
 Frame view (Split + Overlay) opérationnel pour n'importe quelle taille de frame.
 
-**Commit** `da85c8d fix: inline SVG rendering for frame view to bypass data URI limits`
+**Commit** `50d427b fix: inline SVG rendering for frame view to bypass data URI limits`
 
 ---
 
@@ -105,7 +105,7 @@ Appliqué sur `cornerRadius`, `strokeWeight`, `fontSize`.
 **Résultat débloqué**
 Fin des crashes silencieux sur les nodes avec propriétés mixtes (composants, frames multi-coins).
 
-**Commit** `14df015 fix: handle figma.mixed symbol in cornerRadius`
+**Commit** `8d93dc9 fix: handle figma.mixed symbol in cornerRadius`
 
 ---
 
@@ -134,7 +134,7 @@ figma.currentPage = newPage;
 **Résultat débloqué**
 Isolation design réelle : un designer peut travailler sur `feat/dark-mode` sans toucher `main`. Switcher de branche navigue physiquement vers la page Figma correspondante. C'est l'équivalent de `git checkout` pour le design.
 
-**Commit** `9f6da16 feat: branch isolation via Figma pages`
+**Commit** `750dcff feat: branch isolation via Figma pages`
 
 ---
 

@@ -46,7 +46,7 @@ plugin/src/ui.tsx                 # T6 — fixes accessibilité
 - Sécurité (ancres réelles) : CORS `backend/src/app.ts:23-26` · webhook Stripe signé `backend/src/controllers/payments.controller.ts:48-54` · middleware clé `backend/src/middleware/plugin.middleware.ts:11-12` · rate-limit `backend/src/controllers/link.controller.ts:17-29` · Zod dans 9 controllers + `backend/src/types/api.ts` · RLS/`security_invoker` : migration du 2026-06-11 (fuite `version_tree`) · Dependabot `.github/dependabot.yml`
 - Accessibilité (audit réel `plugin/src/ui.tsx`) : 30 `<button>`, ~20 `aria-label`, plusieurs `aria-pressed` ; **2 `<img>` sans `alt` (L834, L853)** ; **1 seul `onKeyDown`/`tabIndex`** ; inputs bien labellisés (L289-290, L552-553)
 - Manuel utilisation existant : `docs/MODE-EMPLOI-PLUGIN.md`
-- Bugs réels (C2.3.2) : `git log --oneline` — ex. `00250c7` (AABB absolu rotation), `132a006` (MIME bucket), Zod silencieux (`a0126b0`), SVG data-URI lourd (`da85c8d`), `exportAsync`→props natives (`2076ca8`), clone `dg_history`/`loadAllPagesAsync`
+- Bugs réels (C2.3.2) : `git log --oneline` — ex. `dfd0dab` (AABB absolu rotation), `aff3527` (MIME bucket), Zod silencieux (`161b268`), SVG data-URI lourd (`50d427b`), `exportAsync`→props natives (`8492b32`), clone `dg_history`/`loadAllPagesAsync`
 
 **Convention de vérification (tâches doc)** : pas de tests unitaires — la « vérification » est (a) chaque `fichier:ligne` cité existe (`grep`/ouverture), (b) aucun chiffre de test ≠ 300/181/119, (c) le fichier est lié depuis `README.md`.
 
@@ -448,11 +448,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Run: `git log --oneline --grep='fix' -20`
 Sélectionner 5-6 bugs RÉELS représentatifs, ex. :
-- Zod supprimait silencieusement des champs (`a0126b0`) — détection : champs absents en BDD.
-- SVG data-URI lourd échoue dans le webview (`da85c8d`) — fix `dangerouslySetInnerHTML`+`atob`.
+- Zod supprimait silencieusement des champs (`161b268`) — détection : champs absents en BDD.
+- SVG data-URI lourd échoue dans le webview (`50d427b`) — fix `dangerouslySetInnerHTML`+`atob`.
 - `figma.mixed` non sérialisable (cornerRadius/strokeWeight) — fix guards `safeNum/safeStr`.
-- MIME bucket `snapshots` rejette `image/png` (`132a006`).
-- AABB absolu sur nœuds pivotés (`00250c7`).
+- MIME bucket `snapshots` rejette `image/png` (`aff3527`).
+- AABB absolu sur nœuds pivotés (`dfd0dab`).
 - Clone `dg_history` casse → `loadAllPagesAsync` requis (dynamic-page).
 
 - [ ] **Step 2: Écrire le fichier**
@@ -464,7 +464,7 @@ Structure (critères : détectés, qualifiés, traités + analyse d'amélioratio
 
 - [ ] **Step 3: Vérifier que les commits cités existent**
 
-Run: `for sha in a0126b0 da85c8d 132a006 00250c7; do git show -s --oneline $sha 2>/dev/null || echo "MANQUE $sha"; done`
+Run: `for sha in 161b268 50d427b aff3527 dfd0dab; do git show -s --oneline $sha 2>/dev/null || echo "MANQUE $sha"; done`
 Expected: aucun « MANQUE ». Si un SHA n'existe pas, le remplacer par un vrai trouvé via `git log --grep`.
 
 - [ ] **Step 4: Commit**

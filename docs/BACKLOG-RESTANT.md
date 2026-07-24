@@ -1,6 +1,6 @@
 # Design Guardian — Backlog restant à implémenter
 
-> État au 2026-06-26. Ce qui reste APRÈS : audit backend A–F mergé (`9258952`/`743acf7`), précision snapshot mergée (`c833bd0`), cohérence DB + Hono `routePath` (`c524c03`). Tests : backend 181/181, plugin 119/119.
+> État au 2026-06-26. Ce qui reste APRÈS : audit backend A–F mergé (`5dd2770`/`50e60e0`), précision snapshot mergée (`cd679ee`), cohérence DB + Hono `routePath` (`c79ff04`). Tests : backend 181/181, plugin 119/119.
 >
 > Légende effort : **S** ≤ 1 j-h · **M** 1–3 j-h · **L** > 3 j-h. Priorité : 🔴 bloqueur · 🟠 important · 🟡 utile · 🔵 différé.
 
