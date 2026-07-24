@@ -170,16 +170,3 @@ Chaque push vers `master` ou PR déclenche immédiatement :
 - Labels : `dependencies`, `ci`
 
 **Impact** : Dépendances outdated sont testées par la CI à chaque PR Dependabot ; merge uniquement si CI vert.
-
----
-
-## Résumé — Conformité RNCP
-
-| Critère | Preuve | Statut |
-|---|---|---|
-| Environnement de dev complet | VS Code + TypeScript + Git + npm + Vitest + HonoJS | Oui |
-| Outils observabilité | Prometheus/Grafana + /health + /ping + coverage Vitest | Oui |
-| Déploiement continu (git → Railway) | `.github/workflows/ci.yml` + `docs/DEPLOIEMENT.md` pipeline | Oui |
-| Quality Gate ≥ 80 % | `backend/vitest.config.ts` thresholds | Oui |
-| CI à chaque push/PR | `.github/workflows/ci.yml` on push/pull_request | Oui |
-| Gestion dépendances | `.github/dependabot.yml` (npm + GitHub Actions) | Oui |
