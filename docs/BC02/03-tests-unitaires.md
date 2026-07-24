@@ -84,7 +84,9 @@ La métrique *branches* n'est pas dans les seuils (`vitest.config.ts` ne la list
 
 La ventilation fichier par fichier (nombre de tests, portée fonctionnelle) est **déjà maintenue** dans `docs/RECETTES.md` (section « Couverture tests automatisés ») — elle n'est pas dupliquée ici pour éviter deux sources de vérité. Résumé :
 
-- **Backend** — **181 tests / 21 fichiers**, couverture 88,02 % statements / 90,33 % lines / 92,92 % functions / 75,42 % branches. Fichiers principaux par volume de tests : `diff.service`, `significance.service`, `svg-generator.service`, `payments.service`, `change-format.service`, `openai.service`, `notification.service` — puis `stripe.service`, `purge.service`, `node-match`, `link.service`, `plugin.middleware`, `versioning.service`, `checkpoint-ai.service`, `ownership.service`, `api-schema`, et les tests d'intégration controllers (`link.controller`, `branches.controller`, `checkpoints.controller`) plus le test de résolution de plan du middleware (`plugin.middleware.plan`).
+- **Backend** — **181 tests / 21 fichiers**, couverture 88,02 % statements / 90,33 % lines / 92,92 % functions / 75,42 % branches.
+  - Fichiers principaux par volume de tests : `diff.service`, `significance.service`, `svg-generator.service`, `payments.service`, `change-format.service`, `openai.service`, `notification.service`.
+  - Puis : `stripe.service`, `purge.service`, `node-match`, `link.service`, `plugin.middleware`, `versioning.service`, `checkpoint-ai.service`, `ownership.service`, `api-schema`, et les tests d'intégration controllers (`link.controller`, `branches.controller`, `checkpoints.controller`) plus le test de résolution de plan du middleware (`plugin.middleware.plan`).
 - **Plugin** — **119 tests / 12 fichiers** : `diffReducer`, `store`, `utils`, `restoreDiff`, `figmaIdentity`, `restoreClone`, `identity`, `renderFormat`, `patchNote`, `linkFlow`, `diffHighlights`, `cornerRadii`.
 
 → Détail exhaustif (nom de fichier, nombre de tests, portée précise) : `docs/RECETTES.md`, section « Couverture tests automatisés ».
@@ -110,8 +112,3 @@ Ce type de test — valeur pile au seuil, valeur juste en dessous, juste au-dess
 
 Au-delà des frontières numériques, `backend/src/tests/branches.controller.test.ts` illustre une autre classe de test-régression critique pour un produit multi-tenant : la preuve, par construction, qu'une garde de sécurité est effectivement exercée (le commentaire du test documente explicitement le scénario de mutation qui le ferait échouer si la garde disparaissait) — pattern repris pour `checkpoints.controller.test.ts` (limite plan Free) et `link.controller.test.ts` (401 sans JWT).
 
----
-
-**Dernière mise à jour** : juillet 2026
-**Auteur** : Hardi Tabuna (solo)
-**Contexte** : RNCP 39583 — Bloc de Compétences BC02

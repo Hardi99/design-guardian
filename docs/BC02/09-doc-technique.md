@@ -20,12 +20,11 @@ Ces trois manuels sont volontairement **disjoints par public/moment** plutôt qu
 
 ## Choix de technologies
 
-Le backend est un **monolithe modulaire HonoJS** (Node.js), pas des microservices : un seul déploiement à gérer en solo, tout en gardant une séparation nette en 6 domaines (Auth, BDD, Métriques, Notifications, IA, Paiements). **Supabase** fournit PostgreSQL managé + Storage (snapshots) + Auth en une seule brique, ce qui évite d'opérer une base de données et un service d'auth séparés à charge solo. **Railway** héberge ce backend Node.js — retenu plutôt qu'un hébergement edge (Cloudflare Workers) car le calcul du diff géométrique dépasse le budget CPU d'un runtime edge. Côté plugin, **Preact** (plutôt que React) réduit le poids du bundle chargé dans la webview Figma, contrainte propre à l'environnement plugin. **OpenAI `gpt-4o-mini`** génère l'AI Patch Note (résumé des changements) à faible coût (~1 €/1 000 checkpoints), aligné avec un produit facturé 12 €/mois en plan Pro.
+- Le backend est un **monolithe modulaire HonoJS** (Node.js), pas des microservices : un seul déploiement à gérer en solo, tout en gardant une séparation nette en 6 domaines (Auth, BDD, Métriques, Notifications, IA, Paiements).
+- **Supabase** fournit PostgreSQL managé + Storage (snapshots) + Auth en une seule brique, ce qui évite d'opérer une base de données et un service d'auth séparés à charge solo.
+- **Railway** héberge ce backend Node.js — retenu plutôt qu'un hébergement edge (Cloudflare Workers) car le calcul du diff géométrique dépasse le budget CPU d'un runtime edge.
+- Côté plugin, **Preact** (plutôt que React) réduit le poids du bundle chargé dans la webview Figma, contrainte propre à l'environnement plugin.
+- **OpenAI `gpt-4o-mini`** génère l'AI Patch Note (résumé des changements) à faible coût (~1 €/1 000 checkpoints), aligné avec un produit facturé 12 €/mois en plan Pro.
 
 Justification détaillée de chaque choix (schémas d'architecture, alternatives écartées, diagrammes de séquence) : `docs/BC01/01-architecture.md`.
 
----
-
-**Dernière mise à jour** : juillet 2026
-**Auteur** : Hardi Tabuna (solo)
-**Contexte** : RNCP 39583 — Bloc de Compétences BC02

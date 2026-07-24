@@ -92,8 +92,8 @@ La CI échoue automatiquement si la couverture est inférieure à 80 % sur state
 > « Quality Gate : le seuil ≥80% (statements/lines/functions) est appliqué nativement par Vitest (coverage.thresholds dans vitest.config.ts). Cette step échoue automatiquement si la couverture passe sous 80%. »
 
 **Critères additionnels** :
-- Typecheck ✅ (0 erreur TypeScript)
-- Health check ✅ (`/health` OK dans les 30s post-deploy)
+- Typecheck : Oui (0 erreur TypeScript)
+- Health check : Oui (`/health` OK dans les 30s post-deploy)
 - 0 test rouge (tous les 300 tests doivent passer : 181 backend + 119 plugin)
 
 ### Environnements multiples
@@ -141,8 +141,8 @@ Chaque push vers `master` ou PR déclenche immédiatement :
 - Placeholders si secrets absents (tests résilients)
 
 **Feedback CI** :
-- ✅ Tous les jobs passent → PR peut être mergée, Railway auto-déploie
-- ❌ Au moins un job échoue → PR bloquée jusqu'à correction
+- Oui, tous les jobs passent → PR peut être mergée, Railway auto-déploie
+- Non, au moins un job échoue → PR bloquée jusqu'à correction
 
 ### Gestion des dépendances avec Dependabot
 
@@ -177,15 +177,9 @@ Chaque push vers `master` ou PR déclenche immédiatement :
 
 | Critère | Preuve | Statut |
 |---|---|---|
-| Environnement de dev complet | VS Code + TypeScript + Git + npm + Vitest + HonoJS | ✅ |
-| Outils observabilité | Prometheus/Grafana + /health + /ping + coverage Vitest | ✅ |
-| Déploiement continu (git → Railway) | `.github/workflows/ci.yml` + `docs/DEPLOIEMENT.md` pipeline | ✅ |
-| Quality Gate ≥ 80 % | `backend/vitest.config.ts` thresholds | ✅ |
-| CI à chaque push/PR | `.github/workflows/ci.yml` on push/pull_request | ✅ |
-| Gestion dépendances | `.github/dependabot.yml` (npm + GitHub Actions) | ✅ |
-
----
-
-**Dernière mise à jour** : juillet 2026  
-**Auteur** : Hardi Tabuna (solo)  
-**Contexte** : RNCP 39583 — Bloc de Compétences BC02
+| Environnement de dev complet | VS Code + TypeScript + Git + npm + Vitest + HonoJS | Oui |
+| Outils observabilité | Prometheus/Grafana + /health + /ping + coverage Vitest | Oui |
+| Déploiement continu (git → Railway) | `.github/workflows/ci.yml` + `docs/DEPLOIEMENT.md` pipeline | Oui |
+| Quality Gate ≥ 80 % | `backend/vitest.config.ts` thresholds | Oui |
+| CI à chaque push/PR | `.github/workflows/ci.yml` on push/pull_request | Oui |
+| Gestion dépendances | `.github/dependabot.yml` (npm + GitHub Actions) | Oui |

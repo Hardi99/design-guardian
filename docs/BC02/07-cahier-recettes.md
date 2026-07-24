@@ -81,8 +81,3 @@ Repris tel quel de `docs/RECETTES.md` § Plan de correction des anomalies — pr
 
 Le suivi des anomalies effectivement détectées et corrigées (historique git, exemples réels par priorité) est détaillé dans `docs/BC02/08-plan-correction-bogues.md` (C2.3.2), qui s'appuie sur ce même barème.
 
----
-
-**Dernière mise à jour** : juillet 2026
-**Auteur** : Hardi Tabuna (solo)
-**Contexte** : RNCP 39583 — Bloc de Compétences BC02

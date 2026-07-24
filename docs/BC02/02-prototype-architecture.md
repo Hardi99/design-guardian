@@ -26,10 +26,18 @@ Un seul déploiement Railway ; les domaines sont des modules `Hono()` indépenda
 ### 1.2 Deux paires Service/Controller réelles
 
 **`diff.service.ts` ↔ `checkpoints.controller.ts`**
-`DiffService.compareSnapshots(v1, v2)` (`backend/src/services/diff.service.ts:13`) aplatit chaque arbre de nœuds via `flatten()` avec un matcher en couches — `dg_id` stable si présent des deux côtés, sinon `id` Figma si même branche, sinon chemin d'arbre — puis compare position/dimensions/opacité/corner radius/fills/strokes/texte/effets avec une tolérance `EPSILON = 0.01` px (ligne 11), et renvoie un `DeltaJSON` (`modified/added/removed/totalChanges/metadata`). C'est une classe pure, sans accès réseau, testée par `backend/src/tests/diff.service.test.ts`. Le controller `checkpoints.controller.ts` (route `POST /` montée sur `/api/checkpoints`) reçoit le snapshot, vérifie l'appartenance de l'asset au projet, applique la limite du plan Free (10 checkpoints), crée la version via `createVersionAtomic()` (qui appelle `diffService.compareSnapshots()` dans son callback `computeMeta`), répond immédiatement, puis déclenche `generateAndStoreSummary()` en fire-and-forget (`checkpoints.controller.ts:85-90`).
+
+`DiffService.compareSnapshots(v1, v2)` (`backend/src/services/diff.service.ts:13`) aplatit chaque arbre de nœuds via `flatten()` avec un matcher en couches — `dg_id` stable si présent des deux côtés, sinon `id` Figma si même branche, sinon chemin d'arbre — puis compare position/dimensions/opacité/corner radius/fills/strokes/texte/effets avec une tolérance `EPSILON = 0.01` px (ligne 11), et renvoie un `DeltaJSON` (`modified/added/removed/totalChanges/metadata`). C'est une classe pure, sans accès réseau, testée par `backend/src/tests/diff.service.test.ts`.
+
+Le controller `checkpoints.controller.ts` (route `POST /` montée sur `/api/checkpoints`) reçoit le snapshot, vérifie l'appartenance de l'asset au projet, applique la limite du plan Free (10 checkpoints), crée la version via `createVersionAtomic()` (qui appelle `diffService.compareSnapshots()` dans son callback `computeMeta`), répond immédiatement, puis déclenche `generateAndStoreSummary()` en fire-and-forget (`checkpoints.controller.ts:85-90`).
 
 **`versioning.service.ts` ↔ `branches.controller.ts`**
-`versioning.service.ts` porte la logique de stockage : `snapshotPath()`, `uploadSnapshot()`/`downloadSnapshot()` (Supabase Storage, bucket `snapshots`), et surtout `createVersionAtomic()` (`backend/src/services/versioning.service.ts:58`) — boucle de tentatives (`MAX_ATTEMPTS = 5`) qui réclame le prochain `version_number` libre par asset+branche, uploade le snapshot en `upsert:false` (le conflit d'écriture sert de verrou optimiste), puis insère la ligne `versions`, en nettoyant les blobs orphelins en cas d'échec. Le controller `branches.controller.ts` expose `GET /tree` (liste des versions + branches d'un asset), `GET /versions/:id` (version + rendus signés + `node_diffs` calculés via `significance.service.ts`/`change-format.service.ts`/`tree.service.ts`), `POST /versions/:id/restore`, `GET /versions/:id/snapshot`, `PUT /versions/:id/status` (cycle Draft → Review → Approved). La table `versions` porte une colonne `parent_id` (`versioning.service.ts:101` : `parent_id: prevTyped?.id ?? null`) ; le regroupement parent→enfants exploité côté serveur (détection de « moves dérivés ») est fait par un parcours d'arbre en mémoire (`tree.service.ts` : `buildTreeMaps()`), pas par une CTE SQL récursive.
+
+`versioning.service.ts` porte la logique de stockage : `snapshotPath()`, `uploadSnapshot()`/`downloadSnapshot()` (Supabase Storage, bucket `snapshots`), et surtout `createVersionAtomic()` (`backend/src/services/versioning.service.ts:58`) — boucle de tentatives (`MAX_ATTEMPTS = 5`) qui réclame le prochain `version_number` libre par asset+branche, uploade le snapshot en `upsert:false` (le conflit d'écriture sert de verrou optimiste), puis insère la ligne `versions`, en nettoyant les blobs orphelins en cas d'échec.
+
+Le controller `branches.controller.ts` expose `GET /tree` (liste des versions + branches d'un asset), `GET /versions/:id` (version + rendus signés + `node_diffs` calculés via `significance.service.ts`/`change-format.service.ts`/`tree.service.ts`), `POST /versions/:id/restore`, `GET /versions/:id/snapshot`, `PUT /versions/:id/status` (cycle Draft → Review → Approved).
+
+La table `versions` porte une colonne `parent_id` (`versioning.service.ts:101` : `parent_id: prevTyped?.id ?? null`) ; le regroupement parent→enfants exploité côté serveur (détection de « moves dérivés ») est fait par un parcours d'arbre en mémoire (`tree.service.ts` : `buildTreeMaps()`), pas par une CTE SQL récursive.
 
 ### 1.3 Double-thread Figma — API Figma séparée du HTTP
 
@@ -64,9 +72,17 @@ Le typage `Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff'` (`plu
 
 ### 2.3 Preuve d'itération réelle
 
-**Refonte Diff Viewer — frame-héros.** Avant : deux listes parallèles (cartes de nœuds + liste de propriétés), sans contexte spatial. Après : un canvas unique (`HighlightCanvas`, `ui.tsx:866`) qui superpose des rectangles cliquables (`buildHighlights()`, `plugin/src/diffHighlights.ts:6` — filtre les nœuds « mineurs » sauf si `showDerived`, choisit la bbox avant/après selon `beforeMode`, dérive une teinte `modified/added/removed/derived`) sur le rendu de la frame ; un clic ouvre `NodeDetail` (`ui.tsx:896`, crop avant/après + changements lisibles) ; `DiffChips` (`ui.tsx:973`) affiche les compteurs et le toggle Avant/Après, plus un badge « approximatif » quand le rendu vient d'une reconstruction SVG plutôt que d'un blob exporté. Preuve détaillée : `docs/superpowers/specs/2026-06-28-diff-viewer-frame-hero-design.md`. Test de la fonction pure : `plugin/src/diffHighlights.test.ts`.
+**Refonte Diff Viewer — frame-héros.** Avant : deux listes parallèles (cartes de nœuds + liste de propriétés), sans contexte spatial.
 
-**Restore lossless par clone.** Avant : reconstruction manuelle des propriétés au restore (risque de perte des styles/variables/auto-layout). Après : au moment du checkpoint, `main.ts` clone le nœud capturé sur une page dédiée `dg/_history` (fonctions `getOrCreateHistoryPage`, `readHistoryFrames`, `main.ts:425-469`) ; au restore, le plugin retrouve ce clone par version puis l'utilise tel quel — préservation garantie par le moteur Figma plutôt que par une réapplication champ-par-champ. Deux fonctions pures testables sans Figma portent cette logique : `pickHistoryClone(frames, versionId)` (retrouve le clone d'une version) et `framesToPrune(frames, assetId, keepN)` (élague les clones au-delà des `keepN` plus récents par asset) — `plugin/src/restoreClone.ts:11,19`, testées par `plugin/src/restoreClone.test.ts`. Preuve détaillée : `docs/superpowers/specs/2026-06-20-restore-clone-design.md`.
+Après : un canvas unique (`HighlightCanvas`, `ui.tsx:866`) qui superpose des rectangles cliquables (`buildHighlights()`, `plugin/src/diffHighlights.ts:6` — filtre les nœuds « mineurs » sauf si `showDerived`, choisit la bbox avant/après selon `beforeMode`, dérive une teinte `modified/added/removed/derived`) sur le rendu de la frame ; un clic ouvre `NodeDetail` (`ui.tsx:896`, crop avant/après + changements lisibles) ; `DiffChips` (`ui.tsx:973`) affiche les compteurs et le toggle Avant/Après, plus un badge « approximatif » quand le rendu vient d'une reconstruction SVG plutôt que d'un blob exporté.
+
+Preuve détaillée : la spécification de conception « diff viewer frame hero ». Test de la fonction pure : `plugin/src/diffHighlights.test.ts`.
+
+**Restore lossless par clone.** Avant : reconstruction manuelle des propriétés au restore (risque de perte des styles/variables/auto-layout).
+
+Après : au moment du checkpoint, `main.ts` clone le nœud capturé sur une page dédiée `dg/_history` (fonctions `getOrCreateHistoryPage`, `readHistoryFrames`, `main.ts:425-469`) ; au restore, le plugin retrouve ce clone par version puis l'utilise tel quel — préservation garantie par le moteur Figma plutôt que par une réapplication champ-par-champ.
+
+Deux fonctions pures testables sans Figma portent cette logique : `pickHistoryClone(frames, versionId)` (retrouve le clone d'une version) et `framesToPrune(frames, assetId, keepN)` (élague les clones au-delà des `keepN` plus récents par asset) — `plugin/src/restoreClone.ts:11,19`, testées par `plugin/src/restoreClone.test.ts`. Preuve détaillée : la spécification de conception « restore clone ».
 
 ---
 
@@ -110,12 +126,17 @@ En plus de ces cinq écrans, un panneau **Upgrade** (comparatif Free/Pro/Team, `
 
 ### 5.1 Deux mécanismes d'auth distincts, pour deux surfaces distinctes
 
-- **Plugin → backend** : `X-API-Key` (clé UUID par **projet**, pas par utilisateur). `pluginMiddleware` (`backend/src/middleware/plugin.middleware.ts:10`) résout la clé en `projectId` via `projects.api_key`, pose `plan` (Free par défaut), et — si l'en-tête `X-Link-Token` est présent — surcharge le plan par celui du compte lié. La clé Figma (`X-API-Key`) est générée serveur au premier lancement du plugin (`POST /api/projects/auto-init`) et persistée dans le store en mémoire (`useAppStore`), pas dans `figma.clientStorage` — ce sont `dg_file_id` et `dg_link_token` (le jeton de liaison de compte, pas un JWT) qui y sont stockés côté `main.ts`.
+- **Plugin → backend** : `X-API-Key` (clé UUID par **projet**, pas par utilisateur). `pluginMiddleware` (`backend/src/middleware/plugin.middleware.ts:10`) résout la clé en `projectId` via `projects.api_key`, pose `plan` (Free par défaut), et — si l'en-tête `X-Link-Token` est présent — surcharge le plan par celui du compte lié.
+  La clé Figma (`X-API-Key`) est générée serveur au premier lancement du plugin (`POST /api/projects/auto-init`) et persistée dans le store en mémoire (`useAppStore`), pas dans `figma.clientStorage` — ce sont `dg_file_id` et `dg_link_token` (le jeton de liaison de compte, pas un JWT) qui y sont stockés côté `main.ts`.
 - **Webapp → backend** : `Authorization: Bearer <JWT>` (Supabase Auth). `authMiddleware` (`backend/src/middleware/auth.middleware.ts:16`) valide le token via `supabase.auth.getUser(token)` et pose `userId`. Utilisé par les routes `/api/link/info` et `/api/link/approve` — le point où un compte web (facturation) est associé à un plugin.
 
 ### 5.2 Pont d'identité plugin ↔ compte (device-link)
 
-Le plugin n'a pas de login propre ; pour associer un plan payant à un projet Figma, `link.controller.ts` implémente un flux code-court : `POST /api/link/start` (auth `X-API-Key`) crée un code à durée de vie 10 min dans `device_links`, avec un plafond anti-abus de 30 démarrages/heure/projet (`link.controller.ts:17-24`) ; la webapp authentifiée (JWT) l'approuve via `POST /api/link/approve`, qui génère un jeton (`newToken()`/`hashToken()` — seul le hash est stocké durablement, `link.service.ts`) ; le plugin le récupère une seule fois par `GET /api/link/status`, puis l'envoie en `X-Link-Token` sur chaque appel suivant.
+Le plugin n'a pas de login propre ; pour associer un plan payant à un projet Figma, `link.controller.ts` implémente un flux code-court en trois étapes :
+
+1. `POST /api/link/start` (auth `X-API-Key`) crée un code à durée de vie 10 min dans `device_links`, avec un plafond anti-abus de 30 démarrages/heure/projet (`link.controller.ts:17-24`).
+2. La webapp authentifiée (JWT) l'approuve via `POST /api/link/approve`, qui génère un jeton (`newToken()`/`hashToken()` — seul le hash est stocké durablement, `link.service.ts`).
+3. Le plugin le récupère une seule fois par `GET /api/link/status`, puis l'envoie en `X-Link-Token` sur chaque appel suivant.
 
 ### 5.3 Paiements — webhook Stripe signé
 

@@ -1,6 +1,6 @@
 # C2.2.4 — Historique des versions et version viable — Design Guardian
 
-> Compétence RNCP 39583 C2.2.4 — « Mettre en place un système de gestion de versions, retraçant l'historique des évolutions du logiciel, disponible aux collaborateurs autorisés » + « livrer une dernière version fonctionnelle et viable du logiciel manipulable en autonomie ». Preuves : `CHANGELOG.md`, `git log`, `docs/superpowers/specs/2026-06-20-restore-clone-design.md`, `docs/MODE-EMPLOI-PLUGIN.md`.
+> Compétence RNCP 39583 C2.2.4 — « Mettre en place un système de gestion de versions, retraçant l'historique des évolutions du logiciel, disponible aux collaborateurs autorisés » + « livrer une dernière version fonctionnelle et viable du logiciel manipulable en autonomie ». Preuves : `CHANGELOG.md`, `git log`, la spécification de conception « restore clone », `docs/MODE-EMPLOI-PLUGIN.md`.
 
 ---
 
@@ -46,7 +46,8 @@ Git (commits) + `CHANGELOG.md` (paliers Semver), décrits ci-dessus. Historique 
 C'est la fonction produit : chaque **checkpoint** capturé par un designer dans le plugin est un point d'historique — auteur (`figma.currentUser`), horodatage, résumé IA (AI Patch Note), diff géométrique contre la version précédente (tolérance 0,01px). Deux mécanismes assurent que cet historique reste manipulable, pas juste consultable :
 
 - **Diff/changelog** — `DiffService` compare deux snapshots propriété par propriété ; le résultat alimente à la fois le Diff Viewer (Split/Overlay/Nodes) et l'AI Patch Note. Détail : `docs/BC02/02-prototype-architecture.md` §2.
-- **Restore lossless** — depuis la refonte documentée dans `docs/superpowers/specs/2026-06-20-restore-clone-design.md`, chaque checkpoint sauvegardé avec succès est aussi **cloné** sur une page dédiée `dg/_history` (`plugin/src/main.ts:425` — `HISTORY_PAGE`), taggé par version/asset/numéro de version (`plugin/src/main.ts:453-460`), et élagué aux `N` clones les plus récents par asset (`framesToPrune`, `plugin/src/restoreClone.ts`). Au restore, le plugin réutilise ce clone tel quel (préservation garantie par le moteur Figma — variables, styles, instances, auto-layout — plutôt que par une réapplication champ-par-champ) ; en son absence (checkpoint ancien, élagué), il retombe sur la reconstruction par propriétés (`handleRestoreToFigma`), sans régression. Fonctions pures testées séparément de la glue Figma : `plugin/src/restoreClone.test.ts`.
+- **Restore lossless** — depuis la refonte documentée dans la spécification de conception « restore clone », chaque checkpoint sauvegardé avec succès est aussi **cloné** sur une page dédiée `dg/_history` (`plugin/src/main.ts:425` — `HISTORY_PAGE`), taggé par version/asset/numéro de version (`plugin/src/main.ts:453-460`), et élagué aux `N` clones les plus récents par asset (`framesToPrune`, `plugin/src/restoreClone.ts`).
+  Au restore, le plugin réutilise ce clone tel quel (préservation garantie par le moteur Figma — variables, styles, instances, auto-layout — plutôt que par une réapplication champ-par-champ) ; en son absence (checkpoint ancien, élagué), il retombe sur la reconstruction par propriétés (`handleRestoreToFigma`), sans régression. Fonctions pures testées séparément de la glue Figma : `plugin/src/restoreClone.test.ts`.
 
 Ce second niveau est ce qui distingue Design Guardian d'un simple journal de commits : l'historique n'est pas seulement *lisible* (résumé IA, diff visuel), il est **manipulable en autonomie** par le designer — il peut revenir à un état antérieur sans intervention technique.
 
@@ -86,10 +87,4 @@ Le nom du fichier (`backend/src/controllers/branches.controller.ts`) date de l'�
 | `GET /versions/:id/snapshot` | Snapshot brut d'une version (consommé par le restore côté canvas) | `branches.controller.ts:309-325` |
 | `PUT /versions/:id/status` | Cycle Gold status (`draft → review → approved`) | `branches.controller.ts:331-353` |
 
-Le nom du fichier est un vestige de nommage, pas le signe d'une fonctionnalité morte — une re-dénomination (`versions.controller.ts`) est identifiée comme cosmétique et volontairement non tranchée dans le backlog (« re-scoping éventuel... non inclus : risque/portée, à trancher séparément », `docs/superpowers/plans/2026-06-25-backend-audit-fixes.md:1207`).
-
----
-
-**Dernière mise à jour** : juillet 2026
-**Auteur** : Hardi Tabuna (solo)
-**Contexte** : RNCP 39583 — Bloc de Compétences BC02
+Le nom du fichier est un vestige de nommage, pas le signe d'une fonctionnalité morte — une re-dénomination (`versions.controller.ts`) est identifiée comme cosmétique et volontairement non tranchée dans le backlog (« re-scoping éventuel... non inclus : risque/portée, à trancher séparément », le plan de conception « backend audit fixes »).
