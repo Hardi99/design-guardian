@@ -12,6 +12,17 @@ import { decodeBase64Utf8 } from './utils.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
+// documentAccess: "dynamic-page" → charger toutes les pages est coûteux sur les gros
+// fichiers. On le diffère jusqu'au premier accès cross-page réel (historique, branches)
+// au lieu de bloquer le démarrage. Idempotent : un seul appel réseau, quel que soit
+// le nombre de handlers qui le déclenchent.
+let pagesLoaded = false;
+async function ensurePagesLoaded(): Promise<void> {
+  if (pagesLoaded) return;
+  await figma.loadAllPagesAsync();
+  pagesLoaded = true;
+}
+
 // Generate a cryptographically random hex ID.
 function generateFileId(): string {
   const bytes = new Uint8Array(16);
@@ -27,9 +38,10 @@ function generateFileId(): string {
 // 3. figma.clientStorage    — legacy per-user fallback (promotes to shared on write)
 // 4. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
-  // documentAccess: "dynamic-page" → il faut charger les pages avant d'accéder à leurs
-  // children (page d'historique dg/_history, pages de branches). Sinon get_children throw.
-  await figma.loadAllPagesAsync();
+  // Auto-init : ne lit que figma.root / figma.fileKey / figma.currentPage.id (racine +
+  // page courante, toujours accessibles) — aucun accès cross-page ici, donc pas besoin
+  // d'ensurePagesLoaded(). Le chargement des pages est différé aux handlers qui en ont
+  // vraiment besoin (historique, branches).
   let fileKey: string =
     (figma.fileKey as string | undefined) ??
     figma.root.getPluginData('dg_file_id') ??
@@ -82,8 +94,8 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'LINK_PERSIST_TOKEN': await figma.clientStorage.setAsync('dg_link_token', msg.token); break;
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
-    case 'SWITCH_BRANCH':     handleSwitchBranch(msg.branchName); break;
-    case 'STORE_HISTORY_CLONE': handleStoreHistoryClone(msg.nodeId, msg.versionId, msg.versionNumber); break;
+    case 'SWITCH_BRANCH':     await handleSwitchBranch(msg.branchName); break;
+    case 'STORE_HISTORY_CLONE': await handleStoreHistoryClone(msg.nodeId, msg.versionId, msg.versionNumber); break;
     case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.versionId, msg.snapshot, msg.render_svg_b64); break;
   }
 };
@@ -349,7 +361,7 @@ function tryRestoreFromClone(versionId: string): boolean {
 
 async function handleRestoreToFigma(versionId: string | undefined, snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
   if (renderSvgB64 && renderSvgB64.startsWith('iVBO')) renderSvgB64 = undefined; // PNG → pas de createNodeFromSvg
-  await figma.loadAllPagesAsync(); // dynamic-page : le clone d'historique vit sur dg/_history
+  await ensurePagesLoaded(); // dynamic-page : le clone d'historique vit sur dg/_history
   // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
   if (versionId && tryRestoreFromClone(versionId)) {
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0, mode: 'clone' });
@@ -447,7 +459,8 @@ function readHistoryFrames(page: PageNode): HistoryFrameInfo[] {
 
 // Phase 2 : le checkpoint est sauvé → finaliser le clone pending (version id + vnum),
 // puis élaguer aux N derniers de l'asset.
-function handleStoreHistoryClone(nodeId: string, versionId: string, versionNumber: number): void {
+async function handleStoreHistoryClone(nodeId: string, versionId: string, versionNumber: number): Promise<void> {
+  await ensurePagesLoaded(); // dg/_history vit sur une autre page → children pas accessibles sans load
   const page = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
   if (!page) return;
   const pending = page.children.find(c => c.getPluginData('dg_history_pending') === nodeId);
@@ -491,7 +504,7 @@ async function handleSnapshot(): Promise<void> {
   if (!node) { send({ type: 'ERROR', message: 'Sélectionne un élément dans Figma.' }); return; }
   if (figma.currentPage.selection.length > 1) { send({ type: 'ERROR', message: 'Sélectionne un seul élément.' }); return; }
 
-  await figma.loadAllPagesAsync(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
+  await ensurePagesLoaded(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
 
   const figmaSnapshot: FigmaSnapshot = {
     figmaNodeId: node.id,
@@ -717,6 +730,7 @@ async function handleCreateBranch(branchName: string): Promise<void> {
     send({ type: 'ERROR', message: 'Sélectionne au moins un frame pour créer la branche.' });
     return;
   }
+  await ensurePagesLoaded(); // liste + bascule des pages dg/* → toutes les pages doivent être chargées
   const pageName = `dg/${branchName}`;
   const existing = figma.root.children.find(p => p.name === pageName) as PageNode | undefined;
   if (existing) {
@@ -737,7 +751,8 @@ async function handleCreateBranch(branchName: string): Promise<void> {
   send({ type: 'BRANCH_CREATED', branchName });
 }
 
-function handleSwitchBranch(branchName: string): void {
+async function handleSwitchBranch(branchName: string): Promise<void> {
+  await ensurePagesLoaded(); // bascule vers une page dg/* → toutes les pages doivent être chargées
   let page: PageNode | undefined;
   if (branchName === 'main') {
     // Use stored main page ID first — reliable even if the file has multiple non-dg pages
