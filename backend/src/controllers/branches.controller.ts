@@ -2,12 +2,12 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
-import { generateSvgFromSnapshot, findNodeById } from '../services/svg-generator.service.js';
+import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import { statusSchema, restoreSchema } from '../types/api.js';
 import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
 import { DiffService } from '../services/diff.service.js';
-import { enrichDeltaGeometry } from '../services/geometry.service.js';
+import { enrichDeltaGeometry, nodeBboxRelative } from '../services/geometry.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -103,19 +103,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     return recon ? { url: `data:image/svg+xml;base64,${recon}`, kind: 'svg', source: 'reconstruction' } : null;
   };
 
-  // Helper : bbox d'un nœud relative à la frame root (pour le crop CSS côté plugin).
-  const nodeBbox = (snapshot: FigmaSnapshot | null, nodeId: string): { x: number; y: number; w: number; h: number } | null => {
-    if (!snapshot) return null;
-    const node = findNodeById(snapshot.root, nodeId);
-    if (!node) return null;
-    // AABB visuelle (rotations incluses) si capturée ; sinon repli sur x/y/w/h bruts (anciennes versions).
-    const rb = snapshot.root.aabb;
-    const ox = rb ? rb.x : snapshot.root.x;
-    const oy = rb ? rb.y : snapshot.root.y;
-    if (node.aabb) return { x: node.aabb.x - ox, y: node.aabb.y - oy, w: node.aabb.w, h: node.aabb.h };
-    return { x: node.x - snapshot.root.x, y: node.y - snapshot.root.y, w: node.width, h: node.height };
-  };
-
   // Frames entières ET crops par-nœud ne sont produits que sur demande (?thumbs=1) :
   // l'appel par défaut renvoie le changelog (texte) instantané ; le plugin recharge
   // le lourd (frames + vignettes) en différé. Défaut Nodes = zéro SVG.
@@ -192,9 +179,9 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     const renderIds = nodeIdsToRender(delta, MAX_NODE_RENDERS, derived);
     for (const nd of delta.modified) {
       const render = wantThumbs && renderIds.has(nd.nodeId);
-      // Bbox « après » : stockée par T3/T4 dans le delta ; repli nodeBbox(currentSnap)
+      // Bbox « après » : stockée par T3/T4 dans le delta ; repli nodeBboxRelative(currentSnap)
       // uniquement si absente (version legacy — currentSnap alors téléchargé plus haut).
-      const afterBbox = nd.bbox ?? (render && currentSnap ? nodeBbox(currentSnap, nd.nodeId) : null);
+      const afterBbox = nd.bbox ?? (render && currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
@@ -202,7 +189,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         significance: nd.significance ?? (notableModIds.has(nd.nodeId) ? 'notable' : 'minor'),
         // Le delta courant ne porte pas de bbox « avant » pour les modified : repli
         // prevSnap seulement si téléchargé (legacy) ; sinon null (crop avant = secondaire).
-        before_bbox: render ? (prevSnap ? nodeBbox(prevSnap, nd.nodeId) : null) : null,
+        before_bbox: render ? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null) : null,
         after_bbox:  render ? afterBbox : null,
       });
     }
@@ -212,7 +199,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added', readable: [], significance: 'notable',
         before_bbox: null,
-        after_bbox:  render ? (nd.bbox ?? (currentSnap ? nodeBbox(currentSnap, nd.nodeId) : null)) : null,
+        after_bbox:  render ? (nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null)) : null,
       });
     }
     for (const nd of delta.removed) {
@@ -220,7 +207,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed', readable: [], significance: 'notable',
-        before_bbox: render ? (nd.bbox ?? (prevSnap ? nodeBbox(prevSnap, nd.nodeId) : null)) : null,
+        before_bbox: render ? (nd.bbox ?? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null)) : null,
         after_bbox:  null,
       });
     }
