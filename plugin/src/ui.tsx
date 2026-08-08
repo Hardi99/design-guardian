@@ -867,7 +867,7 @@ function NodeCrop({ url, frameW, frameH, bbox, alt }: { url: string; frameW: num
 
 // ─── Frame-hero components (T2–T5) ───────────────────────────────────────────
 
-function FrameImage({ url, kind }: { url: string; kind: 'svg' | 'png' }) {
+function FrameImage({ url, kind, onReady }: { url: string; kind: 'svg' | 'png'; onReady?: () => void }) {
   const [svg, setSvg] = useState<string | null>(null);
   useEffect(() => {
     if (kind !== 'svg') { setSvg(null); return; }
@@ -879,7 +879,8 @@ function FrameImage({ url, kind }: { url: string; kind: 'svg' | 'png' }) {
     ); }).catch(() => { if (alive) setSvg(''); });
     return () => { alive = false; };
   }, [url, kind]);
-  if (kind === 'png') return <img src={url} alt="Rendu de la frame" class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
+  useEffect(() => { if (kind === 'svg' && svg) onReady?.(); }, [svg, kind]);
+  if (kind === 'png') return <img src={url} alt="Rendu de la frame" onLoad={() => onReady?.()} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
   if (svg === null) return <div class="w-full h-full animate-pulse bg-gray-800/40" />;
   if (!svg) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
   return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
@@ -909,8 +910,11 @@ function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }:
   // (re)cadre au fit quand le conteneur/frame change tant qu'on n'a pas zoomé
   const fitView = (): View => ({ scale: fit, tx: (box.w - frame.w * fit) / 2, ty: (box.h - frame.h * fit) / 2 });
   useEffect(() => { setView(fitView()); }, [fit, frame.w, frame.h, box.w, box.h]);
+  // Surlignages affichés seulement une fois le rendu de la frame chargé (sinon encadrés « flottants » sur un canvas vide).
+  const [imgReady, setImgReady] = useState(false);
+  useEffect(() => { setImgReady(false); }, [url]);
 
-  const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean; onBg: boolean; captured: boolean } | null>(null);
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const rect = ref.current!.getBoundingClientRect();
@@ -922,18 +926,23 @@ function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }:
     setView({ scale: next.scale, tx: cx - (cx - view.tx) * k, ty: cy - (cy - view.ty) * k });
   };
   const onPointerDown = (e: PointerEvent) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, moved: false };
+    // NE PAS capturer le pointeur ici : sinon les <button> de surlignage ne reçoivent
+    // plus leur 'click' (crops jamais affichés). Capture différée au 1er déplacement réel.
+    const onBg = !(e.target as HTMLElement).closest('button');
+    drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, moved: false, onBg, captured: false };
   };
   const onPointerMove = (e: PointerEvent) => {
     const d = drag.current; if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-    setView(v => ({ scale: v.scale, tx: d.tx + dx, ty: d.ty + dy }));
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+      d.moved = true;
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); d.captured = true; } catch { /* best-effort */ }
+    }
+    if (d.moved) setView(v => ({ scale: v.scale, tx: d.tx + dx, ty: d.ty + dy }));
   };
   const onPointerUp = () => {
     const d = drag.current; drag.current = null;
-    if (d && !d.moved) onSelect(null); // clic net = déselection (comportement conservé)
+    if (d && !d.moved && d.onBg) onSelect(null); // clic net sur le FOND = déselection (pas sur un surlignage)
   };
 
   return (
@@ -942,8 +951,8 @@ function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }:
       onDblClick={() => setView(fitView())}>
       <div class="absolute top-0 left-0 origin-top-left"
         style={{ width: `${frame.w}px`, height: `${frame.h}px`, transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}>
-        <div class="absolute inset-0"><FrameImage url={url} kind={kind} /></div>
-        {view.scale > 0 && highlights.map(hl => (
+        <div class="absolute inset-0"><FrameImage url={url} kind={kind} onReady={() => setImgReady(true)} /></div>
+        {imgReady && view.scale > 0 && highlights.map(hl => (
           <button key={hl.nodeId}
             aria-label={`Voir le changement de ${hl.nodeId}`}
             onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
