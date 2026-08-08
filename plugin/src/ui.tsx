@@ -326,6 +326,9 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   useEffect(() => {
     setLoading(true);
+    // Rechargement de la timeline d'un asset : le cache diff (versionId -> payload) peut
+    // contenir des entrées d'un autre asset/branche, on repart propre à chaque fois.
+    clearDiffCache();
     api<{ versions: Version[]; branches: string[] }>(apiKey, `/api/branches/tree?asset_id=${asset.id}`)
       .then(d => { setVersions(d.versions ?? []); setBranches(d.branches ?? ['main']); })
       .catch(e => setErr((e as Error).message))
@@ -566,19 +569,44 @@ function CheckpointScreen() {
 
 // ─── Diff Viewer ──────────────────────────────────────────────────────────────
 
+// Cache client des payloads diff (lourds, avec vignettes), par versionId. Niveau module
+// pour survivre au remount de DiffScreen (key={version.id} lors de la nav ◀▶).
+const diffCache = new Map<string, DiffData>();
+// Vidé au rechargement de la liste des versions d'un asset (HomeScreen) : c'est le seul
+// point où une navigation ◀▶ pourrait autrement servir un payload obsolète depuis le cache.
+export function clearDiffCache() { diffCache.clear(); }
+
 function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
+  const siblings = useAppStore(s => s.siblings);
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
-    api<DiffData>(apiKey, `/api/branches/versions/${versionId}`)
-      .then(data => {
-        dispatch({ type: 'LOAD_SUCCESS', data });
-        // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
-        // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
-        api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
-          .then(full => dispatch({ type: 'HEAVY_LOADED', data: full }))
-          .catch(() => dispatch({ type: 'HEAVY_DONE' }));
-      })
-      .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
+    const cached = diffCache.get(versionId);
+    if (cached) {
+      // Déjà prefetché (nav ◀▶ vers un voisin) : rendu immédiat, pas de round-trip réseau.
+      dispatch({ type: 'LOAD_SUCCESS', data: cached });
+      dispatch({ type: 'HEAVY_LOADED', data: cached });
+    } else {
+      api<DiffData>(apiKey, `/api/branches/versions/${versionId}`)
+        .then(data => {
+          dispatch({ type: 'LOAD_SUCCESS', data });
+          // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
+          // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
+          api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
+            .then(full => { diffCache.set(versionId, full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
+            .catch(() => dispatch({ type: 'HEAVY_DONE' }));
+        })
+        .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
+    }
+    // Prefetch en tâche de fond des 2 versions voisines (léger+thumbs) pour rendre la nav
+    // ◀▶ suivante quasi instantanée. Silencieux : un échec ici ne doit pas gêner l'écran courant.
+    const idx = siblings.findIndex(s => s.id === versionId);
+    for (const neighbor of [siblings[idx - 1], siblings[idx + 1]]) {
+      if (neighbor && !diffCache.has(neighbor.id)) {
+        api<DiffData>(apiKey, `/api/branches/versions/${neighbor.id}?thumbs=1`)
+          .then(d => diffCache.set(neighbor.id, d))
+          .catch(() => {});
+      }
+    }
   }, [apiKey, versionId]);
 }
 
