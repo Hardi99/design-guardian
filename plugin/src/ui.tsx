@@ -12,6 +12,7 @@ import { timeAgo } from './utils.js';
 import { pollPatchNote } from './patchNote.js';
 import { linkReducer } from './linkFlow.js';
 import { buildHighlights, type Highlight } from './diffHighlights.js';
+import { clampView, type View } from './canvasView.js';
 import './ui.css';
 
 const API_BASE = 'https://design-guardian.up.railway.app';
@@ -875,20 +876,56 @@ function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }:
     ro.observe(el); setBox({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
-  const scale = box.w > 0 && frame.w > 0 && frame.h > 0 ? Math.min(box.w / frame.w, box.h / frame.h) : 0;
-  const offX = (box.w - frame.w * scale) / 2;
-  const offY = (box.h - frame.h * scale) / 2;
+  const fit = box.w > 0 && frame.w > 0 && frame.h > 0 ? Math.min(box.w / frame.w, box.h / frame.h) : 0;
+  const [view, setView] = useState<View>({ scale: 0, tx: 0, ty: 0 });
+  // (re)cadre au fit quand le conteneur/frame change tant qu'on n'a pas zoomé
+  const fitView = (): View => ({ scale: fit, tx: (box.w - frame.w * fit) / 2, ty: (box.h - frame.h * fit) / 2 });
+  useEffect(() => { setView(fitView()); }, [fit, frame.w, frame.h, box.w, box.h]);
+
+  const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const rect = ref.current!.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    const factor = Math.exp(-e.deltaY * 0.0015);
+    const next = clampView({ scale: view.scale * factor, tx: 0, ty: 0 }, fit, fit * 8);
+    const k = next.scale / view.scale;
+    // zoom centré sur le curseur : conserve le point sous le curseur
+    setView({ scale: next.scale, tx: cx - (cx - view.tx) * k, ty: cy - (cy - view.ty) * k });
+  };
+  const onPointerDown = (e: PointerEvent) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, moved: false };
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    const d = drag.current; if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
+    setView(v => ({ scale: v.scale, tx: d.tx + dx, ty: d.ty + dy }));
+  };
+  const onPointerUp = () => {
+    const d = drag.current; drag.current = null;
+    if (d && !d.moved) onSelect(null); // clic net = déselection (comportement conservé)
+  };
+
   return (
-    <div ref={ref} class="relative flex-1 min-h-0 overflow-hidden" onClick={() => onSelect(null)}>
-      <FrameImage url={url} kind={kind} />
-      {scale > 0 && highlights.map(hl => (
-        <button key={hl.nodeId}
-          aria-label={`Voir le changement de ${hl.nodeId}`}
-          onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
-          class={`absolute border-2 rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-white/70 bg-white/5' : 'hover:bg-white/5'}`}
-          style={{ left: `${offX + hl.bbox.x * scale}px`, top: `${offY + hl.bbox.y * scale}px`, width: `${Math.max(6, hl.bbox.w * scale)}px`, height: `${Math.max(6, hl.bbox.h * scale)}px` }}
-        />
-      ))}
+    <div ref={ref} class="relative flex-1 min-h-0 overflow-hidden cursor-grab active:cursor-grabbing"
+      onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+      onDblClick={() => setView(fitView())}>
+      <div class="absolute top-0 left-0 origin-top-left"
+        style={{ width: `${frame.w}px`, height: `${frame.h}px`, transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}>
+        <div class="absolute inset-0"><FrameImage url={url} kind={kind} /></div>
+        {view.scale > 0 && highlights.map(hl => (
+          <button key={hl.nodeId}
+            aria-label={`Voir le changement de ${hl.nodeId}`}
+            onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
+            class={`absolute rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-white/70 bg-white/5' : 'hover:bg-white/5'}`}
+            style={{ left: `${hl.bbox.x}px`, top: `${hl.bbox.y}px`, width: `${Math.max(6, hl.bbox.w)}px`, height: `${Math.max(6, hl.bbox.h)}px`, borderWidth: `${2 / view.scale}px`, borderStyle: 'solid' }}
+          />
+        ))}
+      </div>
+      <button aria-label="Réinitialiser la vue" onClick={() => setView(fitView())}
+        class="absolute bottom-2 right-2 z-10 px-2 py-1 text-[10px] bg-gray-800/80 text-gray-300 rounded hover:bg-gray-700">Réinitialiser</button>
     </div>
   );
 }
