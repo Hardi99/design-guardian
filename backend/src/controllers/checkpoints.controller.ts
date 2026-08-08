@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { DiffService } from '../services/diff.service.js';
+import { enrichDeltaGeometry } from '../services/geometry.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { checkpointsCreatedTotal } from '../services/metrics.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
@@ -70,7 +71,8 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       if (!prev?.storage_path) return { analysisJson: null, aiSummary: null };
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
-      const delta = diffService.compareSnapshots(prevSnapshot, body.snapshot_json as FigmaSnapshot);
+      const rawDelta = diffService.compareSnapshots(prevSnapshot, body.snapshot_json as FigmaSnapshot);
+      const delta = enrichDeltaGeometry(rawDelta, body.snapshot_json as FigmaSnapshot, prevSnapshot ?? null);
       if (delta.totalChanges > 0) { pendingDelta = delta; return { analysisJson: delta, aiSummary: null }; }
       return { analysisJson: delta, aiSummary: 'Aucune modification détectée.' };
     },

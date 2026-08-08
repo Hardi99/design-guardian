@@ -7,6 +7,7 @@ import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from 
 import { statusSchema, restoreSchema } from '../types/api.js';
 import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
 import { DiffService } from '../services/diff.service.js';
+import { enrichDeltaGeometry } from '../services/geometry.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -262,7 +263,8 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
       if (!prev?.storage_path) return { analysisJson: null, aiSummary: baseSummary };
       const headSnap = await downloadSnapshot(storage, prev.storage_path);
       if (!headSnap) return { analysisJson: null, aiSummary: baseSummary };
-      const delta = diffService.compareSnapshots(headSnap, snapshot);
+      const rawDelta = diffService.compareSnapshots(headSnap, snapshot);
+      const delta = enrichDeltaGeometry(rawDelta, snapshot, headSnap ?? null);
       if (delta.totalChanges > 0) pendingDelta = delta;
       return { analysisJson: delta.totalChanges > 0 ? delta : null, aiSummary: baseSummary };
     },
