@@ -11,7 +11,7 @@ import { enrichDeltaGeometry } from '../services/geometry.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
-import type { FigmaSnapshot, DeltaJSON, NodeDelta } from '../types/figma.js';
+import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import { nodeIdsToRender, derivedMoveIds, rankDelta } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps } from '../services/tree.service.js';
@@ -121,9 +121,17 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // le lourd (frames + vignettes) en différé. Défaut Nodes = zéro SVG.
   const wantThumbs = c.req.query('thumbs') === '1';
 
+  // Mini SVGs par nœud pour la vue node-diff — géométrie (frame + bbox par-nœud) stockée
+  // par T3/T4 dans analysis_json depuis la capture. Calculée avant les downloads pour
+  // décider si un snapshot est réellement nécessaire (versions legacy uniquement).
+  const delta = versionData.analysis_json as DeltaJSON | null;
+  const storedFrame = delta?.frame ?? null;
+  // Version legacy (pré-géométrie stockée) ssi au moins un nœud du delta n'a pas de bbox.
+  const needSnapForBbox = wantThumbs && !!delta &&
+    [...delta.modified, ...delta.added, ...delta.removed].some(n => n.bbox === undefined);
+
   // Fetch parent version — storage_path + snapshot_json pour compatibilité
   let prevVersion = null;
-  let prevSnap: FigmaSnapshot | null = null;
 
   if (versionData.parent_id) {
     const { data: prev } = await supabase
@@ -132,16 +140,17 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
       .eq('id', versionData.parent_id)
       .single();
 
-    if (prev) {
-      prevVersion = prev;
-      // Le snapshot parent ne sert qu'aux frames/crops (différés) → on ne le télécharge
-      // QUE sur ?thumbs=1. Inutile sur l'appel par défaut (évite 1 download Storage).
-      if (wantThumbs) prevSnap = await resolveSnapshot(getSupabaseStorage(), prev);
-    }
+    if (prev) prevVersion = prev;
   }
 
-  // Résoudre le snapshot courant depuis Storage ou DB selon l'âge de la version
-  const currentSnap = await resolveSnapshot(getSupabaseStorage(), versionData);
+  // Snapshots téléchargés SEULEMENT en repli legacy (géométrie manquante en base) :
+  // le chemin nominal (frame + bbox stockés) ne fait plus aucun download Storage.
+  const currentSnap = (needSnapForBbox || (wantThumbs && !storedFrame))
+    ? await resolveSnapshot(getSupabaseStorage(), versionData)
+    : null;
+  const prevSnap = (wantThumbs && needSnapForBbox && prevVersion)
+    ? await resolveSnapshot(getSupabaseStorage(), prevVersion)
+    : null;
 
   const [curUrl, prevUrl] = wantThumbs
     ? await Promise.all([
@@ -149,13 +158,6 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         resolveRenderUrl(prevVersion?.storage_path ?? null, prevSnap),
       ])
     : [null, null];
-
-  // Mini SVGs par nœud pour la vue node-diff
-  const delta = versionData.analysis_json as {
-    modified: Array<{ nodeId: string; nodeName: string; nodeType: string; changes: unknown[] }>;
-    added:    Array<{ nodeId: string; nodeName: string; nodeType: string }>;
-    removed:  Array<{ nodeId: string; nodeName: string; nodeType: string }>;
-  } | null;
 
   const nodeDiffs: Array<{
     nodeId: string; nodeName: string; nodeType: string;
@@ -167,46 +169,64 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   }> = [];
 
   // Arbre une seule fois → réutilisé pour la détection de moves dérivés (cascade).
+  // N'est reconstruit QUE si un snapshot a été téléchargé (repli legacy) : sur le
+  // chemin nominal (géométrie stockée, pas de download) les moves dérivés ne sont
+  // plus filtrés côté cascade-tree — limitation acceptée, cf. rapport de tâche.
   const tree = (delta && currentSnap) ? buildTreeMaps(currentSnap.root) : null;
   // Un déplacement identique à celui du parent = conséquence (nœud porté), pas authored.
-  const derived = (delta && tree) ? derivedMoveIds(delta as unknown as DeltaJSON, tree.parent) : new Set<string>();
+  const derived = (delta && tree) ? derivedMoveIds(delta, tree.parent) : new Set<string>();
   // Nœuds modifiés AUTHORED (≥1 changement notable, move porté exclu) → tout le reste = mineur/dérivé.
   const notableModIds = delta
-    ? new Set(rankDelta(delta as unknown as DeltaJSON, derived).notableModified.map(n => n.nodeId))
+    ? new Set(rankDelta(delta, derived).notableModified.map(n => n.nodeId))
     : new Set<string>();
 
   if (delta) {
     // On ne génère un crop QUE pour les nœuds NOTABLES (+ ajoutés/supprimés), plafonné :
     // un gros diff en cascade ne doit pas produire des centaines de crops.
-    const renderIds = nodeIdsToRender(delta as unknown as DeltaJSON, MAX_NODE_RENDERS, derived);
+    const renderIds = nodeIdsToRender(delta, MAX_NODE_RENDERS, derived);
     for (const nd of delta.modified) {
       const render = wantThumbs && renderIds.has(nd.nodeId);
+      // Bbox « après » : stockée par T3/T4 dans le delta ; repli nodeBbox(currentSnap)
+      // uniquement si absente (version legacy — currentSnap alors téléchargé plus haut).
+      const afterBbox = nd.bbox ?? (render && currentSnap ? nodeBbox(currentSnap, nd.nodeId) : null);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
-        readable: formatNodeChanges(nd as unknown as NodeDelta),
+        readable: formatNodeChanges(nd),
         significance: notableModIds.has(nd.nodeId) ? 'notable' : 'minor',
-        before_bbox: render ? nodeBbox(prevSnap, nd.nodeId) : null,
-        after_bbox:  render ? nodeBbox(currentSnap, nd.nodeId) : null,
+        // Le delta courant ne porte pas de bbox « avant » pour les modified : repli
+        // prevSnap seulement si téléchargé (legacy) ; sinon null (crop avant = secondaire).
+        before_bbox: render ? (prevSnap ? nodeBbox(prevSnap, nd.nodeId) : null) : null,
+        after_bbox:  render ? afterBbox : null,
       });
     }
     for (const nd of delta.added) {
+      const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added', readable: [], significance: 'notable',
         before_bbox: null,
-        after_bbox:  (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(currentSnap, nd.nodeId) : null,
+        after_bbox:  render ? (nd.bbox ?? (currentSnap ? nodeBbox(currentSnap, nd.nodeId) : null)) : null,
       });
     }
     for (const nd of delta.removed) {
+      const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed', readable: [], significance: 'notable',
-        before_bbox: (wantThumbs && renderIds.has(nd.nodeId)) ? nodeBbox(prevSnap, nd.nodeId) : null,
+        before_bbox: render ? (nd.bbox ?? (prevSnap ? nodeBbox(prevSnap, nd.nodeId) : null)) : null,
         after_bbox:  null,
       });
     }
   }
+
+  // Frame courante : géométrie stockée en priorité, repli snapshot (legacy) sinon.
+  const current_frame = storedFrame ?? (currentSnap ? { w: currentSnap.root.width, h: currentSnap.root.height } : null);
+  // Frame précédente : repli prevSnap si téléchargé (legacy), sinon la frame que le
+  // parent avait lui-même stockée à sa propre capture (= sa propre frame « courante »).
+  const prev_frame = prevSnap
+    ? { w: prevSnap.root.width, h: prevSnap.root.height }
+    : ((prevVersion?.analysis_json as DeltaJSON | null)?.frame ?? null);
 
   return c.json({
     version: versionData, prev_version: prevVersion,
@@ -214,8 +234,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     render_source: curUrl?.source ?? null,
     prev_render_url: prevUrl?.url ?? null,        prev_render_kind: prevUrl?.kind ?? null,
     prev_render_source: prevUrl?.source ?? null,
-    current_frame: currentSnap ? { w: currentSnap.root.width, h: currentSnap.root.height } : null,
-    prev_frame: prevSnap ? { w: prevSnap.root.width, h: prevSnap.root.height } : null,
+    current_frame, prev_frame,
     node_diffs: nodeDiffs,
   });
 });
