@@ -109,6 +109,7 @@ export interface NodeDelta {
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
+  bbox?: { x: number; y: number; w: number; h: number }; // bbox relative à la root — cf. geometry.service
 }
 
 // The complete diff output — stored in analysis_json and sent to OpenAI
@@ -123,4 +124,5 @@ export interface DeltaJSON {
     epsilon: number;
     processingTimeMs: number;
   };
+  frame?: { w: number; h: number }; // dims de la root du snapshot courant — cf. geometry.service
 }
