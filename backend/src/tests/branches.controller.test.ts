@@ -99,12 +99,15 @@ describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
 });
 
 /**
- * GET /api/branches/versions/:id — stored geometry (task 5, subsumes B1).
+ * GET /api/branches/versions/:id — stored geometry + significance (task 5, subsumes B1;
+ * significance stamping added in the T5 correction round).
  *
- * `analysis_json` (DeltaJSON) already carries `frame` + per-node `bbox` when written by
- * T3/T4's enrichDeltaGeometry at checkpoint-creation time. On ?thumbs=1 the handler must
- * read that geometry straight from the row instead of downloading the snapshot from
- * Storage — resolveSnapshot must NOT be called on this path.
+ * `analysis_json` (DeltaJSON) already carries `frame` + per-node `bbox` + per-modified-node
+ * `significance` when written by stampSignificance/enrichDeltaGeometry at checkpoint-creation
+ * time. On ?thumbs=1 the handler must read that geometry AND that significance straight from
+ * the row instead of downloading the snapshot from Storage (which would be needed to rebuild
+ * the parent/child tree for cascade-move detection) — resolveSnapshot must NOT be called on
+ * this path.
  *
  * Limitation: we assert non-invocation of `resolveSnapshot` directly (spied via the real
  * versioning.service module) rather than inspecting Storage HTTP calls, since the
@@ -125,14 +128,26 @@ describe('GET /api/branches/versions/:id — stored geometry (no snapshot downlo
       storage_path: null,
       snapshot_json: null,
       analysis_json: {
-        modified: [{
-          nodeId: 'n1', nodeName: 'Rect', nodeType: 'RECTANGLE',
-          changes: [{ property: 'x', oldValue: 0, newValue: 10 }],
-          bbox: { x: 1, y: 2, w: 30, h: 40 },
-        }],
+        modified: [
+          {
+            nodeId: 'n1', nodeName: 'Rect', nodeType: 'RECTANGLE',
+            changes: [{ property: 'x', oldValue: 0, newValue: 10 }],
+            bbox: { x: 1, y: 2, w: 30, h: 40 },
+            significance: 'notable',
+          },
+          // Large x move (would score 'notable' by magnitude alone, cf. SIGNIFICANCE_THRESHOLDS)
+          // but stamped 'minor' at capture (cascade move carried by a moved parent). Proves the
+          // GET path TRUSTS the stored value instead of recomputing from scratch.
+          {
+            nodeId: 'n2', nodeName: 'Child', nodeType: 'RECTANGLE',
+            changes: [{ property: 'x', oldValue: 0, newValue: 50 }],
+            bbox: { x: 5, y: 6, w: 10, h: 10 },
+            significance: 'minor',
+          },
+        ],
         added: [],
         removed: [],
-        totalChanges: 1,
+        totalChanges: 2,
         metadata: { v1CapturedAt: '2026-01-01T00:00:00Z', v2CapturedAt: '2026-01-02T00:00:00Z', epsilon: 0.01, processingTimeMs: 5 },
         frame: { w: 800, h: 600 },
       },
@@ -140,7 +155,7 @@ describe('GET /api/branches/versions/:id — stored geometry (no snapshot downlo
     };
   });
 
-  it('reads stored frame/bbox without downloading a snapshot', async () => {
+  it('reads stored frame/bbox/significance without downloading a snapshot', async () => {
     const app = createApp();
     const res = await app.request('/api/branches/versions/v2?thumbs=1', {
       headers: { 'X-API-Key': 'key-of-p1' },
@@ -151,10 +166,19 @@ describe('GET /api/branches/versions/:id — stored geometry (no snapshot downlo
 
     const body = await res.json() as {
       current_frame: { w: number; h: number } | null;
-      node_diffs: Array<{ nodeId: string; after_bbox: { x: number; y: number; w: number; h: number } | null }>;
+      node_diffs: Array<{
+        nodeId: string;
+        significance: 'notable' | 'minor';
+        after_bbox: { x: number; y: number; w: number; h: number } | null;
+      }>;
     };
     expect(body.current_frame).toEqual({ w: 800, h: 600 });
-    const modified = body.node_diffs.find(n => n.nodeId === 'n1');
-    expect(modified?.after_bbox).toEqual({ x: 1, y: 2, w: 30, h: 40 });
+
+    const n1 = body.node_diffs.find(n => n.nodeId === 'n1');
+    expect(n1?.after_bbox).toEqual({ x: 1, y: 2, w: 30, h: 40 });
+    expect(n1?.significance).toBe('notable');
+
+    const n2 = body.node_diffs.find(n => n.nodeId === 'n2');
+    expect(n2?.significance).toBe('minor');
   });
 });

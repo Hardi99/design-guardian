@@ -1,4 +1,5 @@
-import type { PropertyChange, DeltaJSON, NodeDelta } from '../types/figma.js';
+import type { PropertyChange, DeltaJSON, NodeDelta, FigmaSnapshot } from '../types/figma.js';
+import { buildTreeMaps } from './tree.service.js';
 
 export type Significance = 'notable' | 'minor';
 
@@ -124,6 +125,22 @@ export function derivedMoveIds(delta: DeltaJSON, parent: Map<string, string | nu
     if (pm && Math.abs(pm.dx - m.dx) < EPS && Math.abs(pm.dy - m.dy) < EPS) derived.add(id);
   }
   return derived;
+}
+
+/**
+ * Stampe `significance` sur chaque nœud modifié À LA CAPTURE (arbre complet disponible ici),
+ * pour que le GET puisse la relire sans retélécharger de snapshot (cf. task 5 perf).
+ * added/removed non stampés : toujours 'notable' au GET, pas besoin de le stocker.
+ * Non-mutant : renvoie un nouveau DeltaJSON (le diff 0.01px source reste intact).
+ */
+export function stampSignificance(delta: DeltaJSON, currentSnap: FigmaSnapshot): DeltaJSON {
+  const { parent } = buildTreeMaps(currentSnap.root);
+  const derived = derivedMoveIds(delta, parent);
+  const notable = new Set(rankDelta(delta, derived).notableModified.map(n => n.nodeId));
+  return {
+    ...delta,
+    modified: delta.modified.map(n => ({ ...n, significance: notable.has(n.nodeId) ? 'notable' : 'minor' })),
+  };
 }
 
 export function rankDelta(delta: DeltaJSON, derivedIds?: Set<string>): RankedDelta {

@@ -110,6 +110,7 @@ export interface NodeDelta {
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   bbox?: { x: number; y: number; w: number; h: number }; // bbox relative à la root — cf. geometry.service
+  significance?: 'notable' | 'minor'; // stampé à la capture (cascade auto-layout résolue) — cf. significance.service
 }
 
 // The complete diff output — stored in analysis_json and sent to OpenAI

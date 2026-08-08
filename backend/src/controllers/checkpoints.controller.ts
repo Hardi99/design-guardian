@@ -10,6 +10,7 @@ import { sendCheckpointNotification } from '../services/notification.service.js'
 import { createCheckpointSchema } from '../types/api.js';
 import { isNodeMismatch } from '../services/node-match.js';
 import { createVersionAtomic, downloadSnapshot } from '../services/versioning.service.js';
+import { stampSignificance } from '../services/significance.service.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -72,7 +73,10 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
       const rawDelta = diffService.compareSnapshots(prevSnapshot, body.snapshot_json as FigmaSnapshot);
-      const delta = enrichDeltaGeometry(rawDelta, body.snapshot_json as FigmaSnapshot, prevSnapshot ?? null);
+      const delta = enrichDeltaGeometry(
+        stampSignificance(rawDelta, body.snapshot_json as FigmaSnapshot),
+        body.snapshot_json as FigmaSnapshot, prevSnapshot ?? null,
+      );
       if (delta.totalChanges > 0) { pendingDelta = delta; return { analysisJson: delta, aiSummary: null }; }
       return { analysisJson: delta, aiSummary: 'Aucune modification détectée.' };
     },

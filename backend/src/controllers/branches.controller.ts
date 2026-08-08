@@ -12,7 +12,7 @@ import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
-import { nodeIdsToRender, derivedMoveIds, rankDelta } from '../services/significance.service.js';
+import { nodeIdsToRender, derivedMoveIds, rankDelta, stampSignificance } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
@@ -168,17 +168,23 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     after_bbox:  { x: number; y: number; w: number; h: number } | null;
   }> = [];
 
-  // Arbre une seule fois → réutilisé pour la détection de moves dérivés (cascade).
-  // N'est reconstruit QUE si un snapshot a été téléchargé (repli legacy) : sur le
-  // chemin nominal (géométrie stockée, pas de download) les moves dérivés ne sont
-  // plus filtrés côté cascade-tree — limitation acceptée, cf. rapport de tâche.
-  const tree = (delta && currentSnap) ? buildTreeMaps(currentSnap.root) : null;
-  // Un déplacement identique à celui du parent = conséquence (nœud porté), pas authored.
-  const derived = (delta && tree) ? derivedMoveIds(delta, tree.parent) : new Set<string>();
-  // Nœuds modifiés AUTHORED (≥1 changement notable, move porté exclu) → tout le reste = mineur/dérivé.
-  const notableModIds = delta
-    ? new Set(rankDelta(delta, derived).notableModified.map(n => n.nodeId))
-    : new Set<string>();
+  // Significativité PAR NŒUD : stockée à la capture (stampSignificance, cf. significance.service)
+  // en priorité — l'arbre complet (nécessaire à la détection des moves « portés » en cascade)
+  // n'existe qu'au moment de la capture, donc on ne le reconstruit PAS ici sur le chemin
+  // nominal. 'derived' (ids dont le move est une conséquence du parent, pas authored) est
+  // déduit du stockage (nd.significance === 'minor') ou, en repli legacy, de l'arbre
+  // reconstruit à partir d'un snapshot déjà téléchargé plus haut (currentSnap).
+  const hasStoredSig = !!delta && delta.modified.some(n => n.significance !== undefined);
+  let derived = new Set<string>();
+  let notableModIds = new Set<string>();
+  if (delta && hasStoredSig) {
+    derived = new Set(delta.modified.filter(n => n.significance === 'minor').map(n => n.nodeId));
+    notableModIds = new Set(delta.modified.filter(n => n.significance === 'notable').map(n => n.nodeId));
+  } else if (delta && currentSnap) {
+    const tree = buildTreeMaps(currentSnap.root);
+    derived = derivedMoveIds(delta, tree.parent);
+    notableModIds = new Set(rankDelta(delta, derived).notableModified.map(n => n.nodeId));
+  }
 
   if (delta) {
     // On ne génère un crop QUE pour les nœuds NOTABLES (+ ajoutés/supprimés), plafonné :
@@ -193,7 +199,7 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
         readable: formatNodeChanges(nd),
-        significance: notableModIds.has(nd.nodeId) ? 'notable' : 'minor',
+        significance: nd.significance ?? (notableModIds.has(nd.nodeId) ? 'notable' : 'minor'),
         // Le delta courant ne porte pas de bbox « avant » pour les modified : repli
         // prevSnap seulement si téléchargé (legacy) ; sinon null (crop avant = secondaire).
         before_bbox: render ? (prevSnap ? nodeBbox(prevSnap, nd.nodeId) : null) : null,
@@ -283,7 +289,7 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
       const headSnap = await downloadSnapshot(storage, prev.storage_path);
       if (!headSnap) return { analysisJson: null, aiSummary: baseSummary };
       const rawDelta = diffService.compareSnapshots(headSnap, snapshot);
-      const delta = enrichDeltaGeometry(rawDelta, snapshot, headSnap ?? null);
+      const delta = enrichDeltaGeometry(stampSignificance(rawDelta, snapshot), snapshot, headSnap ?? null);
       if (delta.totalChanges > 0) pendingDelta = delta;
       return { analysisJson: delta.totalChanges > 0 ? delta : null, aiSummary: baseSummary };
     },
