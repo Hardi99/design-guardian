@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { compress } from 'hono/compress';
 import { getSupabaseClient } from './config/supabase.js';
 import { getEnv } from './config/env.js';
 import { authRouter } from './controllers/auth.controller.js';
@@ -26,6 +27,7 @@ export function createApp() {
   const corsOrigins = getEnv().CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
 
   app.use('*', logger());
+  app.use('*', compress());
   app.use('*', cors({ origin: corsOrigins.length > 0 ? corsOrigins : '*' }));
   app.use('*', metricsMiddleware);
 
