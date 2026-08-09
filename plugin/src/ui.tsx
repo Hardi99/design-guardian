@@ -104,6 +104,7 @@ function App() {
   const setApiKey     = useAppStore(s => s.setApiKey);
   const setPlan       = useAppStore(s => s.setPlan);
   const setAuthor     = useAppStore(s => s.setAuthor);
+  const setAssets     = useAppStore(s => s.setAssets);
   const setSnapshot   = useAppStore(s => s.setSnapshot);
   const setInitErr    = useAppStore(s => s.setInitErr);
   const diffVersionId = useAppStore(s => s.diffVersion?.id ?? null);
@@ -120,9 +121,10 @@ function App() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: msg.fileName }),
-            }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string } };
+            }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string }; assets: Asset[] };
             setApiKey(data.api_key);
             setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
+            setAssets(data.assets);
             setScreen('assets');
           } catch {
             setInitErr('Impossible de joindre le serveur.');
@@ -212,11 +214,11 @@ const ASSET_TYPES = ['ui', 'logo', 'icon', 'packaging', 'illustration', 'other']
 
 function AssetsScreen() {
   const apiKey     = useAppStore(s => s.apiKey)!;
+  const assets     = useAppStore(s => s.assets);
+  const setAssets  = useAppStore(s => s.setAssets);
   const setAsset   = useAppStore(s => s.setAsset);
   const setScreen  = useAppStore(s => s.setScreen);
 
-  const [assets,    setAssets]    = useState<Asset[]>([]);
-  const [loading,   setLoading]   = useState(true);
   const [newName,   setNewName]   = useState('');
   const [newType,   setNewType]   = useState<typeof ASSET_TYPES[number]>('ui');
   const [saving,    setSaving]    = useState(false);
@@ -224,23 +226,17 @@ function AssetsScreen() {
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [err,       setErr]       = useState<string | null>(null);
 
-  useEffect(() => {
-    api<{ assets: Asset[] }>(apiKey, '/api/assets')
-      .then(d => setAssets(d.assets))
-      .catch(e => setErr((e as Error).message))
-      .finally(() => setLoading(false));
-  }, [apiKey]);
-
   const onSelect = useCallback((a: Asset) => { setAsset(a); setScreen('home'); }, []);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id); setConfirmId(null); setErr(null);
     try {
       await api(apiKey, `/api/assets/${id}`, { method: 'DELETE' });
-      setAssets(prev => prev.filter(x => x.id !== id));
+      const { assets: fresh } = await api<{ assets: Asset[] }>(apiKey, '/api/assets');
+      setAssets(fresh);
     } catch (err) { setErr((err as Error).message); }
     finally { setDeleting(null); }
-  }, [apiKey]);
+  }, [apiKey, setAssets]);
 
   const create = useCallback(async () => {
     if (!newName.trim()) return;
@@ -249,16 +245,17 @@ function AssetsScreen() {
       const { asset } = await api<{ asset: Asset }>(apiKey, '/api/assets', {
         method: 'POST', body: JSON.stringify({ name: newName.trim(), asset_type: newType }),
       });
+      const { assets: fresh } = await api<{ assets: Asset[] }>(apiKey, '/api/assets');
+      setAssets(fresh);
       onSelect(asset);
     } catch (e) { setErr((e as Error).message); }
     finally { setSaving(false); }
-  }, [newName, newType, apiKey, onSelect]);
+  }, [newName, newType, apiKey, onSelect, setAssets]);
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       <Topbar label="Choisir un asset" />
       <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-        {loading && <Spinner />}
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
         {assets.map(a => (
           <div key={a.id} class="flex flex-col gap-1">
@@ -285,21 +282,19 @@ function AssetsScreen() {
             )}
           </div>
         ))}
-        {!loading && (
-          <div class="mt-2 flex flex-col gap-2">
-            <label htmlFor="new-asset-name" class="text-xs text-gray-500 uppercase tracking-wide">Nouvel asset</label>
-            <input id="new-asset-name" class="input" placeholder="Nom de l'asset…" value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
-            <div class="flex gap-1 flex-wrap">
-              {ASSET_TYPES.map(t => (
-                <button key={t} aria-pressed={newType === t} class={`px-2.5 py-1 rounded text-xs transition-colors ${newType === t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setNewType(t)}>{t}</button>
-              ))}
-            </div>
-            <button class="btn-primary" onClick={create} disabled={saving || !newName.trim()}>
-              {saving ? 'Création…' : 'Créer l\'asset'}
-            </button>
-            {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
+        <div class="mt-2 flex flex-col gap-2">
+          <label htmlFor="new-asset-name" class="text-xs text-gray-500 uppercase tracking-wide">Nouvel asset</label>
+          <input id="new-asset-name" class="input" placeholder="Nom de l'asset…" value={newName} onInput={e => setNewName((e.target as HTMLInputElement).value)} />
+          <div class="flex gap-1 flex-wrap">
+            {ASSET_TYPES.map(t => (
+              <button key={t} aria-pressed={newType === t} class={`px-2.5 py-1 rounded text-xs transition-colors ${newType === t ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => setNewType(t)}>{t}</button>
+            ))}
           </div>
-        )}
+          <button class="btn-primary" onClick={create} disabled={saving || !newName.trim()}>
+            {saving ? 'Création…' : 'Créer l\'asset'}
+          </button>
+          {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
+        </div>
       </div>
     </div>
   );

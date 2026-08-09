@@ -23,6 +23,7 @@ interface AppData {
   apiKey:       string | null
   plan:         Plan
   author:       PluginAuthor | null
+  assets:       Asset[]
   asset:        Asset | null
   branch:       string
   snapshot:     FigmaSnapshot | null
@@ -39,6 +40,7 @@ export interface AppState extends AppData {
   setApiKey:      (key: string)                           => void
   setPlan:        (p: Plan)                               => void
   setAuthor:      (a: PluginAuthor)                       => void
+  setAssets:      (a: Asset[])                             => void
   setAsset:       (a: Asset | null)                       => void
   setBranch:      (b: string)                             => void
   setSnapshot:    (s: FigmaSnapshot | null, svg?: string, kind?: 'svg' | 'png') => void
@@ -55,6 +57,7 @@ export const INITIAL_STATE: AppData = {
   apiKey:       null,
   plan:         'free',
   author:       null,
+  assets:       [],
   asset:        null,
   branch:       'main',
   snapshot:     null,
@@ -74,6 +77,7 @@ export const appStore = createStore<AppState>()((set) => ({
   setApiKey:      (apiKey)                 => set({ apiKey }),
   setPlan:        (plan)                   => set({ plan }),
   setAuthor:      (author)                 => set({ author }),
+  setAssets:      (assets)                 => set({ assets }),
   // Changer d'asset réinitialise la branche : les branches sont PAR-asset, pas
   // globales. Sans ça, un nouvel asset hérite de la branche de l'ancien (bug fantôme).
   setAsset:       (asset)                  => set({ asset, branch: 'main' }),
