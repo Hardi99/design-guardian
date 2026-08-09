@@ -22,6 +22,7 @@ export type AutoInitRequest = z.infer<typeof autoInitSchema>;
 export interface AutoInitResponse {
   api_key: string;
   project: { id: string; name: string; plan: string };
+  assets: Asset[];
 }
 
 // ── Assets (plugin) ───────────────────────────────────────────────────────────

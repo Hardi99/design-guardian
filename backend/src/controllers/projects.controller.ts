@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../config/supabase.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createProjectSchema, autoInitSchema } from '../types/api.js';
@@ -7,6 +8,11 @@ import type { ProjectResponse, ProjectsListResponse, AutoInitResponse, ErrorResp
 import type { AppEnv } from '../types/hono.js';
 
 const projectsRouter = new Hono<AppEnv>();
+
+async function loadAssets(supabase: SupabaseClient, projectId: string) {
+  const { data } = await supabase.from('assets').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+  return data ?? [];
+}
 
 // Simple in-memory rate limiter: max 10 auto-init calls per IP per minute.
 const _autoInitBucket = new Map<string, { n: number; resetAt: number }>();
@@ -36,6 +42,7 @@ projectsRouter.post('/auto-init', zValidator('json', autoInitSchema), async (c) 
     return c.json<AutoInitResponse>({
       api_key: existing.api_key,
       project: { id: existing.id, name: existing.name, plan: existing.plan },
+      assets: await loadAssets(db, existing.id),
     });
   }
 
@@ -49,6 +56,7 @@ projectsRouter.post('/auto-init', zValidator('json', autoInitSchema), async (c) 
   return c.json<AutoInitResponse>({
     api_key: created.api_key,
     project: { id: created.id, name: created.name, plan: created.plan },
+    assets: await loadAssets(db, created.id),
   }, 201);
 });
 
