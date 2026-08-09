@@ -1,4 +1,4 @@
-import type { Asset } from './store.js';
+import type { Asset, Version } from './store.js';
 
 // ─── Figma native property types ─────────────────────────────────────────────
 
@@ -81,7 +81,8 @@ export type MainToUI =
   | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null }
-  | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null };
+  | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
+  | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -100,4 +101,6 @@ export type UIToMain =
   | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
   | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
-  | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] };
+  | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
+  | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
+  | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };

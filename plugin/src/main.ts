@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
-import type { Asset } from './store.js';
+import type { Asset, Version } from './store.js';
 import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
@@ -106,6 +106,15 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.versionId, msg.snapshot, msg.render_svg_b64); break;
     case 'PERSIST_STATE':
       await figma.clientStorage.setAsync('dg_cache_' + msg.fileKey, { apiKey: msg.apiKey, plan: msg.plan, assets: msg.assets });
+      break;
+    case 'REQUEST_VERSION_CACHE': {
+      const c = await figma.clientStorage.getAsync('dg_vcache_' + msg.assetId) as
+        { versions: Version[]; branches: string[] } | undefined;
+      if (c) send({ type: 'VERSION_CACHE', assetId: msg.assetId, versions: c.versions, branches: c.branches });
+      break;
+    }
+    case 'PERSIST_VERSION_CACHE':
+      await figma.clientStorage.setAsync('dg_vcache_' + msg.assetId, { versions: msg.versions, branches: msg.branches });
       break;
   }
 };

@@ -339,17 +339,43 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const [loading,    setLoading]    = useState(true);
   const [newBranch,  setNewBranch]  = useState('');
   const [err,        setErr]        = useState<string | null>(null);
+  // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
+  // après le fetch frais ne doit pas écraser l'affichage à jour.
+  const freshLoaded = useRef(false);
 
   useEffect(() => {
     setLoading(true);
+    freshLoaded.current = false;
     // Rechargement de la timeline d'un asset : le cache diff (versionId -> payload) peut
     // contenir des entrées d'un autre asset/branche, on repart propre à chaque fois.
     clearDiffCache();
+    send({ type: 'REQUEST_VERSION_CACHE', assetId: asset.id });
     api<{ versions: Version[]; branches: string[] }>(apiKey, `/api/branches/tree?asset_id=${asset.id}`)
-      .then(d => { setVersions(d.versions ?? []); setBranches(d.branches ?? ['main']); })
+      .then(d => {
+        freshLoaded.current = true;
+        setVersions(d.versions ?? []);
+        setBranches(d.branches ?? ['main']);
+        send({ type: 'PERSIST_VERSION_CACHE', assetId: asset.id, versions: d.versions ?? [], branches: d.branches ?? ['main'] });
+      })
       .catch(e => setErr((e as Error).message))
       .finally(() => setLoading(false));
   }, [apiKey, asset.id]);
+
+  // Cache stale-while-revalidate : affichage instantané de la timeline à la réouverture
+  // d'un asset connu. Le fetch frais ci-dessus (source de vérité) écrase dès qu'il répond.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data.pluginMessage as MainToUI;
+      if (!msg || msg.type !== 'VERSION_CACHE') return;
+      if (msg.assetId !== asset.id) return; // bon asset uniquement (changement d'asset entre-temps)
+      if (freshLoaded.current) return;      // le frais gagne s'il est déjà arrivé
+      setVersions(msg.versions);
+      setBranches(msg.branches);
+      setLoading(false);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [asset.id]);
 
   const visible = versions.filter(v => v.branch_name === branch);
 
