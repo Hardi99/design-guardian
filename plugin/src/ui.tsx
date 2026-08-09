@@ -584,6 +584,11 @@ const diffCache = new Map<string, DiffData>();
 // point où une navigation ◀▶ pourrait autrement servir un payload obsolète depuis le cache.
 export function clearDiffCache() { diffCache.clear(); }
 
+// Cache client des SVG fetchés (transformés), par URL. Niveau module pour survivre au
+// remount de FrameImage lors de la nav ◀▶ : revenir sur une version déjà vue = rendu
+// instantané, pas de re-fetch réseau.
+const svgCache = new Map<string, string>();
+
 function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
   const siblings = useAppStore(s => s.siblings);
   useEffect(() => {
@@ -879,12 +884,16 @@ function FrameImage({ url, kind, onReady }: { url: string; kind: 'svg' | 'png'; 
   const [svg, setSvg] = useState<string | null>(null);
   useEffect(() => {
     if (kind !== 'svg') { setSvg(null); return; }
+    const hit = svgCache.get(url);
+    if (hit !== undefined) { setSvg(hit); return; }
     let alive = true;
     setSvg(null);
-    fetch(url).then(r => r.text()).then(t => { if (alive) setSvg(
-      t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
-       .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"')
-    ); }).catch(() => { if (alive) setSvg(''); });
+    fetch(url).then(r => r.text()).then(t => {
+      const out = t.replace(/(<svg[^>]*)\s+(?:width|height)="[^"]*"/g, '$1')
+                   .replace('<svg', '<svg style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet"');
+      svgCache.set(url, out);
+      if (alive) setSvg(out);
+    }).catch(() => { if (alive) setSvg(''); });
     return () => { alive = false; };
   }, [url, kind]);
   useEffect(() => { if (kind === 'svg' && svg) onReady?.(); }, [svg, kind]);
