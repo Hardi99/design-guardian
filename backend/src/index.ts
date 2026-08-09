@@ -1,6 +1,7 @@
 /**
  * Node.js entry point (local development)
  */
+import './instrument.js'; // DOIT rester en premier — initialise Sentry avant tout autre module
 import { serve } from '@hono/node-server';
 import { loadEnv, getEnv } from './config/env.js';
 import { createApp } from './app.js';

@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@sentry/browser": "^10.69.0",
     "preact": "^10.29.2",
     "zustand": "^5.0.13"
   },

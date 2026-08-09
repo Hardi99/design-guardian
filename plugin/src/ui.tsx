@@ -13,7 +13,10 @@ import { pollPatchNote } from './patchNote.js';
 import { linkReducer } from './linkFlow.js';
 import { buildHighlights, type Highlight } from './diffHighlights.js';
 import { clampView, type View } from './canvasView.js';
+import { initSentry } from './sentry.js';
 import './ui.css';
+
+initSentry();
 
 const API_BASE = 'https://design-guardian.up.railway.app';
 let currentLinkToken: string | null = null;
