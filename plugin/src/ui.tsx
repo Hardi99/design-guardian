@@ -126,8 +126,21 @@ function App() {
             setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
             setAssets(data.assets);
             setScreen('assets');
+            // Rafraîchit le cache stale-while-revalidate (source de vérité = ce fetch frais).
+            send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
           } catch {
             setInitErr('Impossible de joindre le serveur.');
+          }
+          break;
+        }
+        case 'CACHED_STATE': {
+          // Affichage STALE immédiat (2e ouverture) : le fetch auto-init frais (ci-dessus)
+          // écrasera cet état dès qu'il répond — cette branche ne fait qu'accélérer le 1er rendu.
+          if (msg.assets) {
+            if (msg.apiKey) setApiKey(msg.apiKey);
+            if (msg.plan) setPlan(maxPlan(appStore.getState().plan, msg.plan as Plan));
+            setAssets(msg.assets);
+            setScreen('assets');
           }
           break;
         }

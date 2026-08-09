@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVectorPath, FigmaEffect, FigmaSnapshot } from './types';
+import type { Asset } from './store.js';
 import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
@@ -70,6 +71,12 @@ function generateFileId(): string {
   send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
   const linkToken = (await figma.clientStorage.getAsync('dg_link_token')) as string | undefined;
   send({ type: 'LINK_TOKEN', token: linkToken ?? null });
+
+  // Cache stale-while-revalidate : affichage instantané des assets à la 2e ouverture,
+  // rafraîchis ensuite par l'auto-init réseau (source de vérité, cf. handler PERSIST_STATE).
+  const cached = (await figma.clientStorage.getAsync('dg_cache_' + fileKey)) as
+    { apiKey: string; plan: string; assets: Asset[] } | undefined;
+  if (cached) send({ type: 'CACHED_STATE', apiKey: cached.apiKey, plan: cached.plan, assets: cached.assets });
 })();
 
 const user = figma.currentUser;
@@ -97,6 +104,9 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'SWITCH_BRANCH':     await handleSwitchBranch(msg.branchName); break;
     case 'STORE_HISTORY_CLONE': await handleStoreHistoryClone(msg.nodeId, msg.versionId, msg.versionNumber); break;
     case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.versionId, msg.snapshot, msg.render_svg_b64); break;
+    case 'PERSIST_STATE':
+      await figma.clientStorage.setAsync('dg_cache_' + msg.fileKey, { apiKey: msg.apiKey, plan: msg.plan, assets: msg.assets });
+      break;
   }
 };
 

@@ -1,3 +1,5 @@
+import type { Asset } from './store.js';
+
 // ─── Figma native property types ─────────────────────────────────────────────
 
 export interface FigmaColor { r: number; g: number; b: number; a: number }
@@ -78,7 +80,8 @@ export type MainToUI =
   | { type: 'BRANCH_SWITCHED'; branchName: string }
   | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
   | { type: 'ERROR'; message: string }
-  | { type: 'LINK_TOKEN'; token: string | null };
+  | { type: 'LINK_TOKEN'; token: string | null }
+  | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -96,4 +99,5 @@ export type UIToMain =
   | { type: 'SWITCH_BRANCH'; branchName: string }
   | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
   | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
-  | { type: 'LINK_PERSIST_TOKEN'; token: string };
+  | { type: 'LINK_PERSIST_TOKEN'; token: string }
+  | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] };
