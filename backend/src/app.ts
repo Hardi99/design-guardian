@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { compress } from 'hono/compress';
+import { HTTPException } from 'hono/http-exception';
+import * as Sentry from '@sentry/node';
 import { getSupabaseClient } from './config/supabase.js';
 import { getEnv } from './config/env.js';
 import { authRouter } from './controllers/auth.controller.js';
@@ -96,6 +98,15 @@ export function createApp() {
   app.route('/api/notifications', notificationsRouter);
   app.route('/api/payments', paymentsRouter);
   app.route('/api/link', linkRouter);
+
+  // Gestion centralisée des erreurs : les HTTPException gardent leur réponse
+  // (4xx/5xx intentionnelles) ; toute autre erreur non gérée est remontée à
+  // Sentry puis renvoyée en 500 générique (pas de fuite de stack au client).
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse();
+    Sentry.captureException(err);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  });
 
   return app;
 }

@@ -25,6 +25,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default(''),   // origines autorisées, séparées par des virgules ; vide = toutes
   METRICS_TOKEN: z.string().default(''),  // si défini, /metrics exige ce bearer token
   WEBAPP_URL: z.string().default(''),     // URL de la webapp (ex: https://designguardian.app) — guard prod ajouté en A5
+  SENTRY_DSN: z.string().default(''),     // supervision erreurs ; vide = Sentry désactivé (lu aussi directement par instrument.ts)
 });
 
 type Env = z.infer<typeof envSchema>;
