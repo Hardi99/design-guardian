@@ -36,6 +36,15 @@ export type CreateAssetRequest = z.infer<typeof createAssetSchema>;
 export interface AssetResponse      { asset: Asset }
 export interface AssetsListResponse { assets: Asset[] }
 
+// ── NPS (plugin — instrument de satisfaction) ─────────────────────────────────
+
+export const npsSchema = z.object({
+  score: z.number().int().min(0).max(10),
+  comment: z.string().max(1000).optional(),
+  respondent: z.string().max(200).optional(),
+});
+export type NpsRequest = z.infer<typeof npsSchema>;
+
 // ── Checkpoints (plugin) ──────────────────────────────────────────────────────
 
 const figmaColorSchema = z.object({
