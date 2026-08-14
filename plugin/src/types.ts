@@ -82,7 +82,8 @@ export type MainToUI =
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null }
   | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
-  | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };
+  | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  | { type: 'NPS_SHOW' };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -103,4 +104,7 @@ export type UIToMain =
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
   | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
   | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
-  | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };
+  | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  | { type: 'NPS_CAPTURED' }
+  | { type: 'NPS_SUBMIT' }
+  | { type: 'NPS_DISMISS' };

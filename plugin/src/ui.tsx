@@ -108,7 +108,10 @@ function App() {
   const setSnapshot   = useAppStore(s => s.setSnapshot);
   const setInitErr    = useAppStore(s => s.setInitErr);
   const diffVersionId = useAppStore(s => s.diffVersion?.id ?? null);
+  const apiKey        = useAppStore(s => s.apiKey);
+  const authorName    = useAppStore(s => s.author?.name ?? undefined);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [npsOpen, setNpsOpen] = useState(false);
 
   useEffect(() => {
     const handler = async (e: MessageEvent) => {
@@ -153,6 +156,7 @@ function App() {
           break;
         }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
+        case 'NPS_SHOW':       setNpsOpen(true); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64, msg.render_kind); setScreen('checkpoint'); break;
         case 'BRANCH_CREATED': break;
         case 'BRANCH_SWITCHED': break;
@@ -199,12 +203,67 @@ function App() {
     </div>
   );
 
-  if (screen === 'loading')    return <LoadingScreen />;
-  if (screen === 'assets')     return <AssetsScreen />;
-  if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
-  if (screen === 'diff')       return <DiffScreen key={diffVersionId} />;
-  if (screen === 'checkpoint') return <CheckpointScreen />;
-  return <Spinner full />;
+  let body;
+  if (screen === 'loading')         body = <LoadingScreen />;
+  else if (screen === 'assets')     body = <AssetsScreen />;
+  else if (screen === 'home')       body = <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
+  else if (screen === 'diff')       body = <DiffScreen key={diffVersionId} />;
+  else if (screen === 'checkpoint') body = <CheckpointScreen />;
+  else                              body = <Spinner full />;
+
+  return (
+    <>
+      {body}
+      {npsOpen && <NpsPrompt apiKey={apiKey} respondent={authorName} onClose={() => setNpsOpen(false)} />}
+    </>
+  );
+}
+
+// ─── NPS — prompt de satisfaction (throttlé côté main) ──────────────────────────
+
+function NpsPrompt({ apiKey, respondent, onClose }: { apiKey: string | null; respondent?: string; onClose: () => void }) {
+  const [score, setScore] = useState<number | null>(null);
+  const [comment, setComment] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const submit = async () => {
+    if (score === null || !apiKey) return;
+    setSending(true);
+    try {
+      await api(apiKey, '/api/nps', {
+        method: 'POST',
+        body: JSON.stringify({ score, comment: comment.trim() || undefined, respondent }),
+      });
+    } catch { /* best-effort : l'état 'done' est posé quoi qu'il arrive pour ne pas re-solliciter */ }
+    send({ type: 'NPS_SUBMIT' });
+    onClose();
+  };
+  const dismiss = () => { send({ type: 'NPS_DISMISS' }); onClose(); };
+
+  return (
+    <div role="dialog" aria-label="Enquête de satisfaction"
+      class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-gray-800 p-4 flex flex-col gap-3 shadow-lg">
+      <div class="flex items-start justify-between gap-2">
+        <p class="text-xs text-white">Quelle est la probabilité que vous recommandiez Design Guardian ?</p>
+        <button aria-label="Fermer" class="text-gray-500 hover:text-white text-xs shrink-0" onClick={dismiss}>✕</button>
+      </div>
+      <div class="flex gap-1 flex-wrap">
+        {Array.from({ length: 11 }, (_, n) => (
+          <button key={n} aria-label={`Note ${n}`} aria-pressed={score === n}
+            class={`w-6 h-6 rounded text-xs ${score === n ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+            onClick={() => setScore(n)}>{n}</button>
+        ))}
+      </div>
+      <input value={comment} onInput={e => setComment((e.target as HTMLInputElement).value)}
+        placeholder="Un commentaire ? (optionnel)"
+        class="bg-gray-800 text-white text-xs rounded px-2 py-1.5 outline-none border border-gray-800 focus:border-purple-600" />
+      <button disabled={score === null || sending}
+        class="bg-purple-600 hover:bg-purple-500 text-white text-xs rounded px-3 py-1.5 disabled:opacity-40"
+        onClick={submit}>
+        {sending ? 'Envoi…' : 'Envoyer'}
+      </button>
+    </div>
+  );
 }
 
 // ─── Loading ──────────────────────────────────────────────────────────────────
@@ -524,6 +583,7 @@ function CheckpointScreen() {
       // Finalise le clone d'historique (capturé en pending au snapshot) → restore lossless.
       send({ type: 'STORE_HISTORY_CLONE', nodeId: snapshot.figmaNodeId, versionId: data.version.id, versionNumber: data.version.version_number });
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
+      send({ type: 'NPS_CAPTURED' }); // throttle NPS (main décide si on affiche le prompt)
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
   }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64, renderKind]);

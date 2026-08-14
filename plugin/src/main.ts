@@ -10,6 +10,7 @@ import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
+import { shouldShowNps, NPS_SNOOZE_MS, type NpsState } from './nps.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -115,6 +116,20 @@ figma.ui.onmessage = async (raw: unknown) => {
     }
     case 'PERSIST_VERSION_CACHE':
       await figma.clientStorage.setAsync('dg_vcache_' + msg.assetId, { versions: msg.versions, branches: msg.branches });
+      break;
+    case 'NPS_CAPTURED': {
+      // Throttle NPS : compte les captures réussies ; décide via shouldShowNps (pure).
+      const count = ((await figma.clientStorage.getAsync('dg_nps_captures') as number | undefined) ?? 0) + 1;
+      await figma.clientStorage.setAsync('dg_nps_captures', count);
+      const state = (await figma.clientStorage.getAsync('dg_nps_state') as NpsState | undefined) ?? {};
+      if (shouldShowNps(state, count, Date.now())) send({ type: 'NPS_SHOW' });
+      break;
+    }
+    case 'NPS_SUBMIT':
+      await figma.clientStorage.setAsync('dg_nps_state', { done: true } satisfies NpsState);
+      break;
+    case 'NPS_DISMISS':
+      await figma.clientStorage.setAsync('dg_nps_state', { snoozeUntil: Date.now() + NPS_SNOOZE_MS } satisfies NpsState);
       break;
   }
 };
