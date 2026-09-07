@@ -117,13 +117,13 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   const needSnapForBbox = wantThumbs && !!delta &&
     [...delta.modified, ...delta.added, ...delta.removed].some(n => n.bbox === undefined);
 
-  // Fetch parent version — storage_path + snapshot_json pour compatibilité
+  // Fetch parent version (storage_path pour le repli legacy éventuel).
   let prevVersion = null;
 
   if (versionData.parent_id) {
     const { data: prev } = await supabase
       .from('versions')
-      .select('id, version_number, branch_name, status, author_name, created_at, analysis_json, snapshot_json, storage_path')
+      .select('id, version_number, branch_name, status, author_name, created_at, analysis_json, storage_path')
       .eq('id', versionData.parent_id)
       .single();
 
@@ -253,7 +253,7 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
   }
   const src = owned.version as unknown as {
     asset_id: string; version_number: number; branch_name: string;
-    figma_node_id: string | null; snapshot_json: FigmaSnapshot | null; storage_path: string | null;
+    figma_node_id: string | null; storage_path: string | null;
   };
 
   const snapshot = await resolveSnapshot(storage, src);

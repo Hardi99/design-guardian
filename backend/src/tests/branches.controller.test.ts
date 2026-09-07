@@ -113,7 +113,7 @@ describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
  * versioning.service module) rather than inspecting Storage HTTP calls, since the
  * existing supabase mock in this file has no Storage download implementation at all —
  * if the handler *did* fall through to resolveSnapshot's real code it would throw
- * (no storage_path / snapshot_json branch executes safely with the current mock),
+ * (no storage_path branch executes safely with the current mock),
  * which would also fail the test, just less legibly than the explicit spy assertion.
  */
 describe('GET /api/branches/versions/:id — stored geometry (no snapshot download)', () => {
@@ -126,7 +126,6 @@ describe('GET /api/branches/versions/:id — stored geometry (no snapshot downlo
       status: 'draft',
       parent_id: null,
       storage_path: null,
-      snapshot_json: null,
       analysis_json: {
         modified: [
           {

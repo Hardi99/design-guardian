@@ -1,4 +1,4 @@
-import type { DeltaJSON, FigmaSnapshot } from './figma.js';
+import type { DeltaJSON } from './figma.js';
 
 export interface Profile {
   id: string;
@@ -42,13 +42,13 @@ export interface Version {
   parent_id: string | null;
   branch_name: string;
   version_number: number;
-  author_id: string | null;         // nullable — use author_* fields below
+  // Attribution = snapshot figé de l'auteur à la capture (robuste à la disparition du
+  // profil) ; pas de FK author_id (retirée en migration 017 car jamais renseignée).
   author_figma_id: string | null;   // from figma.currentUser.id
   author_name: string | null;       // from figma.currentUser.name
   author_avatar_url: string | null; // from figma.currentUser.photoUrl
   figma_node_id: string | null;
-  snapshot_json: FigmaSnapshot | null; // null pour les versions post-migration 008
-  storage_path: string | null;         // path dans le bucket 'snapshots'
+  storage_path: string | null;         // path dans le bucket 'snapshots' (source de vérité du snapshot)
   analysis_json: DeltaJSON | null;
   ai_summary: string | null;
   // Source de vérité de l'approbation = `status` (+ approved_at/by).

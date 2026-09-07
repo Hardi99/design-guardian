@@ -24,10 +24,9 @@ export async function downloadSnapshot(storage: StorageApi, path: string): Promi
 
 export async function resolveSnapshot(
   storage: StorageApi,
-  version: { snapshot_json: FigmaSnapshot | null; storage_path: string | null },
+  version: { storage_path: string | null },
 ): Promise<FigmaSnapshot | null> {
-  if (version.storage_path) return downloadSnapshot(storage, version.storage_path);
-  return version.snapshot_json ?? null;
+  return version.storage_path ? downloadSnapshot(storage, version.storage_path) : null;
 }
 
 export interface PrevVersion { id: string; version_number: number; storage_path: string | null }
@@ -105,7 +104,6 @@ export async function createVersionAtomic(
           author_name: input.author.name,
           author_avatar_url: input.author.avatar_url ?? null,
           figma_node_id: input.figmaNodeId ?? null,
-          snapshot_json: null,
           storage_path: path,
           analysis_json: meta.analysisJson,
           ai_summary: meta.aiSummary,
