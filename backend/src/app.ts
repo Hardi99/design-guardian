@@ -33,6 +33,20 @@ export function createApp() {
   app.use('*', cors({ origin: corsOrigins.length > 0 ? corsOrigins : '*' }));
   app.use('*', metricsMiddleware);
 
+  // Supervision des 5xx *retournés* (ex. `c.json(err, 500)`) : `app.onError` ne capte
+  // que les erreurs *levées*. Sans ça, un incident renvoyé proprement — comme la panne
+  // de capture du 2026-09-09 (colonne droppée) — reste invisible dans Sentry. On capte
+  // ici le statut + la route ; le message précis reste dans le corps de la réponse.
+  app.use('*', async (c, next) => {
+    await next();
+    if (c.res.status >= 500) {
+      Sentry.captureMessage(`HTTP ${c.res.status} ${c.req.method} ${c.req.path}`, {
+        level: 'error',
+        tags: { http_status: String(c.res.status), method: c.req.method, path: c.req.path },
+      });
+    }
+  });
+
   app.get('/', (c) =>
     c.json({ name: 'Design Guardian API', version: '1.0.0', status: 'running' }),
   );
