@@ -873,6 +873,16 @@ function DiffScreen() {
                 currentFrame={data.current_frame} prevFrame={data.prev_frame} />
             </div>
           </div>
+        ) : data.render_url && data.render_kind && data.current_frame ? (
+          // v1 : pas de diff (aucun parent), mais on montre le rendu de la version
+          // initiale — le jury voit la baseline avant le restore, plus de "preview vide".
+          <div class="flex flex-1 flex-col overflow-hidden relative">
+            <div class="px-3 py-1.5 text-[11px] text-gray-500 border-b border-gray-800 flex items-center gap-1.5 flex-shrink-0">
+              <span>📸</span><span>Version initiale — le comparatif démarre à la v2</span>
+            </div>
+            <HighlightCanvas url={data.render_url} kind={data.render_kind} frame={data.current_frame}
+              highlights={[]} selectedId={null} onSelect={() => {}} />
+          </div>
         ) : (
           <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
             <div class="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
@@ -880,7 +890,7 @@ function DiffScreen() {
             </div>
             <div class="flex flex-col gap-1">
               <p class="text-sm font-medium text-gray-200">Checkpoint initial</p>
-              <p class="text-xs text-gray-500">Le diff visuel apparaîtra à partir de la v2</p>
+              <p class="text-xs text-gray-500">{heavyDone ? 'Le diff visuel apparaîtra à partir de la v2' : 'Chargement du rendu…'}</p>
             </div>
             <div class="flex flex-col gap-1.5 text-xs text-gray-600">
               <span>{timeAgo(version.created_at)}</span>
