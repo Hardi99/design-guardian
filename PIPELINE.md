@@ -9,7 +9,7 @@ Selection → main.ts           POST /api/checkpoints            DiffScreen
   extractSnapshot()     →       compareSnapshots()               svg_b64 → <img data:...>
   (native properties)           generatePatchNote() (OpenAI)
   snapshot_json         →     INSERT versions (snapshot_json)
-                              GET /api/branches/versions/:id
+                              GET /api/versions/versions/:id
                                 generateSvgFromSnapshot()  →   base64 inline
 ```
 
@@ -68,7 +68,7 @@ Aucun fichier binaire stocké. Supabase Storage n'est **pas** utilisé pour le d
 
 ## Étape 5 — Reconstruction SVG (svg-generator.service.ts, Backend)
 
-À chaque `GET /api/branches/versions/:id`, le SVG est reconstruit **à la volée** depuis `snapshot_json` :
+À chaque `GET /api/versions/versions/:id`, le SVG est reconstruit **à la volée** depuis `snapshot_json` :
 
 ```typescript
 generateSvgFromSnapshot(snapshot) → SVG string → base64
@@ -141,7 +141,7 @@ backend/src/
     openai.service.ts      ← generatePatchNote
   controllers/
     checkpoints.controller.ts ← POST /api/checkpoints
-    branches.controller.ts    ← GET /api/branches/versions/:id + status
+    versions.controller.ts    ← GET /api/versions/versions/:id + status
   types/
     figma.ts               ← FigmaSnapshot, DeltaJSON, NodeDelta, ...
 
