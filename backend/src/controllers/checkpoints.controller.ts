@@ -7,9 +7,9 @@ import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { checkpointsCreatedTotal } from '../services/metrics.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import { sendCheckpointNotification } from '../services/notification.service.js';
-import { createCheckpointSchema } from '../types/api.js';
+import { createCheckpointSchema, uploadRenderSchema } from '../types/api.js';
 import { isNodeMismatch } from '../services/node-match.js';
-import { createVersionAtomic, downloadSnapshot } from '../services/versioning.service.js';
+import { createVersionAtomic, downloadSnapshot, uploadRender } from '../services/versioning.service.js';
 import { stampSignificance } from '../services/significance.service.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
@@ -119,6 +119,29 @@ checkpointsRouter.get('/:id', pluginMiddleware, async (c) => {
 
   if (error || !data) return c.json<ErrorResponse>({ error: 'Checkpoint not found' }, 404);
   return c.json({ version: data });
+});
+
+// POST /api/checkpoints/:id/render — upload différé du rendu (option A). Le nouveau plugin
+// pousse le rendu ici après le POST /checkpoints, hors du chemin critique de la capture.
+// Ownership : la version doit appartenir à un asset du projet courant.
+checkpointsRouter.post('/:id/render', pluginMiddleware, zValidator('json', uploadRenderSchema), async (c) => {
+  const id = c.req.param('id');
+  if (!id) return c.json<ErrorResponse>({ error: 'Checkpoint id is required' }, 400);
+  const { render_svg_b64, render_kind } = c.req.valid('json');
+
+  const { data: version, error } = await getSupabaseClient()
+    .from('versions')
+    .select('storage_path, assets!inner(project_id)')
+    .eq('id', id)
+    .eq('assets.project_id', c.get('projectId'))
+    .single();
+
+  if (error || !version) return c.json<ErrorResponse>({ error: 'Checkpoint not found' }, 404);
+  if (!version.storage_path) return c.json<ErrorResponse>({ error: 'Version has no snapshot to attach a render to' }, 400);
+
+  const { error: upErr } = await uploadRender(getSupabaseStorage(), version.storage_path as string, render_svg_b64, render_kind);
+  if (upErr) return c.json<ErrorResponse>({ error: upErr.message }, 502);
+  return c.json({ ok: true });
 });
 
 // POST /api/checkpoints/:id/regenerate — relance la génération du Patch Note

@@ -125,6 +125,13 @@ export const createCheckpointSchema = z.object({
   }),
 });
 export type CreateCheckpointRequest = z.infer<typeof createCheckpointSchema>;
+
+// Upload différé du rendu (option A) : le nouveau plugin envoie le rendu ici, après le
+// POST /checkpoints, au lieu de l'embarquer dans le chemin critique de la capture.
+export const uploadRenderSchema = z.object({
+  render_svg_b64: z.string().min(1),
+  render_kind: z.enum(['svg', 'png']).default('svg'),
+});
 export interface CheckpointResponse {
   version: Version;
   analysis: DeltaJSON | null;
