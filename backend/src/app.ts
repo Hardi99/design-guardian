@@ -10,7 +10,7 @@ import { authRouter } from './controllers/auth.controller.js';
 import { projectsRouter } from './controllers/projects.controller.js';
 import { assetsRouter } from './controllers/assets.controller.js';
 import { checkpointsRouter } from './controllers/checkpoints.controller.js';
-import { branchesRouter } from './controllers/branches.controller.js';
+import { versionsRouter } from './controllers/versions.controller.js';
 import { notificationsRouter } from './controllers/notifications.controller.js';
 import { paymentsRouter } from './controllers/payments.controller.js';
 import { linkRouter } from './controllers/link.controller.js';
@@ -108,7 +108,11 @@ export function createApp() {
   app.route('/api/projects', projectsRouter);
   app.route('/api/assets', assetsRouter);
   app.route('/api/checkpoints', checkpointsRouter);
-  app.route('/api/branches', branchesRouter);
+  app.route('/api/versions', versionsRouter);
+  // Alias historique : le plugin déployé appelle encore /api/branches (les routes portent
+  // surtout des *versions* : diff, restore, snapshot, status ; seule /tree liste les branches).
+  // À retirer quand tous les plugins sont passés au préfixe /api/versions.
+  app.route('/api/branches', versionsRouter);
   app.route('/api/notifications', notificationsRouter);
   app.route('/api/payments', paymentsRouter);
   app.route('/api/link', linkRouter);

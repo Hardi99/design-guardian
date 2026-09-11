@@ -17,7 +17,7 @@ import { formatNodeChanges, type ReadableChange } from '../services/change-forma
 import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
 
-const branchesRouter = new Hono<ProjectEnv>();
+const versionsRouter = new Hono<ProjectEnv>();
 const diffService = new DiffService();
 
 const SNAPSHOTS_BUCKET = 'snapshots';
@@ -26,10 +26,10 @@ const SNAPSHOTS_BUCKET = 'snapshots';
 const MAX_NODE_RENDERS = 60;
 
 /**
- * GET /api/branches/tree?asset_id=...
+ * GET /api/versions/tree?asset_id=...
  * Returns all versions for an asset, flat list sorted by created_at.
  */
-branchesRouter.get('/tree', pluginMiddleware, async (c) => {
+versionsRouter.get('/tree', pluginMiddleware, async (c) => {
   const { asset_id } = c.req.query();
   if (!asset_id) return c.json<ErrorResponse>({ error: 'asset_id required' }, 400);
 
@@ -55,10 +55,10 @@ branchesRouter.get('/tree', pluginMiddleware, async (c) => {
 });
 
 /**
- * GET /api/branches/versions/:id
+ * GET /api/versions/versions/:id
  * Returns a single version with snapshot + analysis + inline SVGs (full frame + per-node diffs)
  */
-branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
+versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   const supabase = getSupabaseClient();
 
   const { data: version, error } = await supabase
@@ -233,13 +233,13 @@ branchesRouter.get('/versions/:id', pluginMiddleware, async (c) => {
 });
 
 /**
- * POST /api/branches/versions/:id/restore
+ * POST /api/versions/versions/:id/restore
  * Creates a new checkpoint on the given branch using an older version's snapshot.
  * The snapshot is fetched from Storage server-side — the frontend never needs to send it.
  * EXPLICABLE : diffs the restored state against the target branch's current head and
  * fires an AI patch note (fire-and-forget).
  */
-branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json', restoreSchema), async (c) => {
+versionsRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json', restoreSchema), async (c) => {
   const supabase = getSupabaseClient();
   const storage = getSupabaseStorage();
   const { branch_name, author } = c.req.valid('json');
@@ -316,11 +316,11 @@ branchesRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
 });
 
 /**
- * GET /api/branches/versions/:id/snapshot
+ * GET /api/versions/versions/:id/snapshot
  * Returns the raw snapshot JSON for a version (fetched from Storage).
  * Used by the plugin to get the data needed for canvas restore.
  */
-branchesRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
+versionsRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
   const supabase = getSupabaseClient();
   const { data: version } = await supabase
     .from('versions')
@@ -339,10 +339,10 @@ branchesRouter.get('/versions/:id/snapshot', pluginMiddleware, async (c) => {
 });
 
 /**
- * PUT /api/branches/versions/:id/status
+ * PUT /api/versions/versions/:id/status
  * Update version status: draft | review | approved
  */
-branchesRouter.put('/versions/:id/status', pluginMiddleware, zValidator('json', statusSchema), async (c) => {
+versionsRouter.put('/versions/:id/status', pluginMiddleware, zValidator('json', statusSchema), async (c) => {
   const id = c.req.param('id');
   const { status } = c.req.valid('json');
 
@@ -366,4 +366,4 @@ branchesRouter.put('/versions/:id/status', pluginMiddleware, zValidator('json', 
   return c.json<ApproveVersionResponse>({ version: data });
 });
 
-export { branchesRouter };
+export { versionsRouter };

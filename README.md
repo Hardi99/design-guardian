@@ -151,7 +151,7 @@ La fiabilité du moteur de diff est centrale : une erreur de calcul de delta dé
 - **Couverture 80%** sur les services core (diff, openai, svg-generator)
 - **Cahier de recettes** : scénarios REC-XXX-001 couvrant checkpoint, diff, restore, Gold Status
 - **CI/CD GitHub Actions** : build TypeScript, tests Vitest, déploiement Railway automatique
-- **OpenAPI** : documentation des routes (`/api/checkpoints`, `/api/branches/tree`, `/api/projects/auto-init`)
+- **OpenAPI** : documentation des routes (`/api/checkpoints`, `/api/versions/tree`, `/api/projects/auto-init`)
 
 ### BC03 — Pilotage projet (25%)
 

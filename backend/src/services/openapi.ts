@@ -362,7 +362,7 @@ export function getOpenApiSpec() {
           },
         },
       },
-      '/api/branches/tree': {
+      '/api/versions/tree': {
         get: {
           tags: ['Versions'],
           summary: 'Get all versions for an asset (branch tree)',
@@ -387,7 +387,7 @@ export function getOpenApiSpec() {
           },
         },
       },
-      '/api/branches/versions/{id}': {
+      '/api/versions/versions/{id}': {
         get: {
           tags: ['Versions'],
           summary: 'Get full version detail with visual diff',
@@ -421,7 +421,7 @@ export function getOpenApiSpec() {
           },
         },
       },
-      '/api/branches/versions/{id}/snapshot': {
+      '/api/versions/versions/{id}/snapshot': {
         get: {
           tags: ['Versions'],
           summary: 'Get raw snapshot JSON (for Apply to Figma)',
@@ -433,7 +433,7 @@ export function getOpenApiSpec() {
           },
         },
       },
-      '/api/branches/versions/{id}/restore': {
+      '/api/versions/versions/{id}/restore': {
         post: {
           tags: ['Versions'],
           summary: 'Restore an older version as a new checkpoint',
@@ -460,7 +460,7 @@ export function getOpenApiSpec() {
           },
         },
       },
-      '/api/branches/versions/{id}/status': {
+      '/api/versions/versions/{id}/status': {
         put: {
           tags: ['Versions'],
           summary: 'Update version status',

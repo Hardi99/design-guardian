@@ -353,7 +353,7 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
     // contenir des entrées d'un autre asset/branche, on repart propre à chaque fois.
     clearDiffCache();
     send({ type: 'REQUEST_VERSION_CACHE', assetId: asset.id });
-    api<{ versions: Version[]; branches: string[] }>(apiKey, `/api/branches/tree?asset_id=${asset.id}`)
+    api<{ versions: Version[]; branches: string[] }>(apiKey, `/api/versions/tree?asset_id=${asset.id}`)
       .then(d => {
         freshLoaded.current = true;
         setVersions(d.versions ?? []);
@@ -652,12 +652,12 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
       dispatch({ type: 'LOAD_SUCCESS', data: cached });
       dispatch({ type: 'HEAVY_LOADED', data: cached });
     } else {
-      api<DiffData>(apiKey, `/api/branches/versions/${versionId}`)
+      api<DiffData>(apiKey, `/api/versions/versions/${versionId}`)
         .then(data => {
           dispatch({ type: 'LOAD_SUCCESS', data });
           // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
           // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
-          api<DiffData>(apiKey, `/api/branches/versions/${versionId}?thumbs=1`)
+          api<DiffData>(apiKey, `/api/versions/versions/${versionId}?thumbs=1`)
             .then(full => { diffCache.set(versionId, full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
             .catch(() => dispatch({ type: 'HEAVY_DONE' }));
         })
@@ -668,7 +668,7 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
     const idx = siblings.findIndex(s => s.id === versionId);
     for (const neighbor of [siblings[idx - 1], siblings[idx + 1]]) {
       if (neighbor && !diffCache.has(neighbor.id)) {
-        api<DiffData>(apiKey, `/api/branches/versions/${neighbor.id}?thumbs=1`)
+        api<DiffData>(apiKey, `/api/versions/versions/${neighbor.id}?thumbs=1`)
           .then(d => diffCache.set(neighbor.id, d))
           .catch(() => {});
       }
@@ -711,7 +711,7 @@ function useCycleStatus(dispatch: (a: DiffAction) => void, apiKey: string, versi
     const next: Version['status'] = status === 'draft' ? 'review' : status === 'review' ? 'approved' : 'draft';
     dispatch({ type: 'STATUS_START' });
     try {
-      await api(apiKey, `/api/branches/versions/${versionId}/status`, {
+      await api(apiKey, `/api/versions/versions/${versionId}/status`, {
         method: 'PUT', body: JSON.stringify({ status: next }),
       });
       dispatch({ type: 'STATUS_SUCCESS', status: next });
@@ -723,7 +723,7 @@ function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: string, vers
   return useCallback(async () => {
     dispatch({ type: 'APPLY_START' });
     try {
-      const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/branches/versions/${versionId}/snapshot`);
+      const { snapshot } = await api<{ snapshot: FigmaSnapshot }>(apiKey, `/api/versions/versions/${versionId}/snapshot`);
       const renderSvg = (renderKind === 'svg' && renderUrl)
         ? await fetch(renderUrl).then(r => r.text()).then(t => btoa(unescape(encodeURIComponent(t)))).catch(() => undefined)
         : undefined;
@@ -740,7 +740,7 @@ function useRestore(
     if (!author) return;
     dispatch({ type: 'RESTORE_START' });
     try {
-      await api(apiKey, `/api/branches/versions/${versionId}/restore`, {
+      await api(apiKey, `/api/versions/versions/${versionId}/restore`, {
         method: 'POST',
         body: JSON.stringify({
           branch_name: branch,

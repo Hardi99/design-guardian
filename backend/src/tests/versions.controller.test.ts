@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Integration test: PUT /api/branches/versions/:id/status — cross-tenant ownership guard (fix A1).
+ * Integration test: PUT /api/versions/versions/:id/status — cross-tenant ownership guard (fix A1).
  *
  * Call chain under test:
  *  1. pluginMiddleware  → from('projects').select('id,plan').eq(api_key).maybeSingle()
@@ -81,7 +81,7 @@ vi.mock('../services/versioning.service.js', async (importOriginal) => {
 
 import { createApp } from '../app.js';
 
-describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
+describe('PUT /api/versions/versions/:id/status — cross-tenant', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.versionRow = { id: 'v1', status: 'draft', assets: { project_id: 'OTHER' } };
@@ -89,7 +89,7 @@ describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
 
   it('returns 403 when the version belongs to a different project (ownership guard)', async () => {
     const app = createApp();
-    const res = await app.request('/api/branches/versions/v1/status', {
+    const res = await app.request('/api/versions/versions/v1/status', {
       method: 'PUT',
       headers: { 'X-API-Key': 'key-of-p1', 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'approved' }),
@@ -99,7 +99,7 @@ describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
 });
 
 /**
- * GET /api/branches/versions/:id — stored geometry + significance (task 5, subsumes B1;
+ * GET /api/versions/versions/:id — stored geometry + significance (task 5, subsumes B1;
  * significance stamping added in the T5 correction round).
  *
  * `analysis_json` (DeltaJSON) already carries `frame` + per-node `bbox` + per-modified-node
@@ -116,7 +116,7 @@ describe('PUT /api/branches/versions/:id/status — cross-tenant', () => {
  * (no storage_path branch executes safely with the current mock),
  * which would also fail the test, just less legibly than the explicit spy assertion.
  */
-describe('GET /api/branches/versions/:id — stored geometry (no snapshot download)', () => {
+describe('GET /api/versions/versions/:id — stored geometry (no snapshot download)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.versionRow = {
@@ -156,7 +156,7 @@ describe('GET /api/branches/versions/:id — stored geometry (no snapshot downlo
 
   it('reads stored frame/bbox/significance without downloading a snapshot', async () => {
     const app = createApp();
-    const res = await app.request('/api/branches/versions/v2?thumbs=1', {
+    const res = await app.request('/api/versions/versions/v2?thumbs=1', {
       headers: { 'X-API-Key': 'key-of-p1' },
     });
 

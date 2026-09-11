@@ -1,5 +1,5 @@
 // UserEnv   — Supabase JWT auth (web app: /api/projects)
-// ProjectEnv — API key auth   (plugin:   /api/assets, /api/checkpoints, /api/branches)
+// ProjectEnv — API key auth   (plugin:   /api/assets, /api/checkpoints, /api/versions)
 export type UserEnv    = { Variables: { userId: string } };
 export type ProjectEnv = { Variables: { projectId: string; plan: string } };
 
