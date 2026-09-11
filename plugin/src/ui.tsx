@@ -10,6 +10,7 @@ import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
 import { pollPatchNote } from './patchNote.js';
+import { awaitCheckpointSummary } from './realtime.js';
 import { linkReducer } from './linkFlow.js';
 import { buildHighlights, type Highlight } from './diffHighlights.js';
 import { clampView, type View } from './canvasView.js';
@@ -539,22 +540,28 @@ function CheckpointScreen() {
     finally { setLoading(false); }
   }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64, renderKind]);
 
-  // Récupération asynchrone du AI Patch Note (généré en arrière-plan côté serveur).
+  // Récupération du AI Patch Note (généré en arrière-plan côté serveur).
+  // Primaire : PUSH via Realtime (le backend broadcaste dès le résumé prêt).
+  // Filet : polling (couvre la panne WS ET la course « broadcast émis avant l'abonnement »).
   useEffect(() => {
     if (!saved) return;
     if (saved.summary) { setPatchNote(saved.summary); setPatchState('idle'); return; }
     if (saved.changes <= 0) { setPatchState('idle'); return; } // 0 changement : pas de génération
     setPatchState('pending');
     let cancelled = false;
-    pollPatchNote(
-      () => api<{ version: { ai_summary: string | null } }>(apiKey, `/api/checkpoints/${saved.versionId}`)
-              .then((d) => ({ ai_summary: d.version.ai_summary })),
-      { intervalMs: 2000, maxTries: 8 },
-    ).then((summary) => {
+    (async () => {
+      let summary = await awaitCheckpointSummary(saved.versionId, 10000);
+      if (!summary && !cancelled) {
+        summary = await pollPatchNote(
+          () => api<{ version: { ai_summary: string | null } }>(apiKey, `/api/checkpoints/${saved.versionId}`)
+                  .then((d) => ({ ai_summary: d.version.ai_summary })),
+          { intervalMs: 2000, maxTries: 4 },
+        );
+      }
       if (cancelled) return;
       if (summary) { setPatchNote(summary); setPatchState('idle'); }
       else setPatchState('timeout');
-    });
+    })();
     return () => { cancelled = true; };
   }, [saved, apiKey]);
 
