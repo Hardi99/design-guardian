@@ -29,6 +29,22 @@ export async function resolveSnapshot(
   return version.storage_path ? downloadSnapshot(storage, version.storage_path) : null;
 }
 
+// Le rendu (image) vit à côté de son snapshot : `…/vN.json` → `…/vN_render.{svg|png}`.
+export function renderPathFor(storagePath: string, kind: 'svg' | 'png'): string {
+  return storagePath.replace('.json', `_render.${kind}`);
+}
+
+// Upload du rendu au path dérivé. Utilisé par l'endpoint d'upload différé (le rendu ne
+// voyage plus dans le POST /checkpoints du chemin critique) et, en repli, par les anciens
+// clients qui l'envoient encore dans le POST. `upsert` : un re-render écrase l'ancien.
+export async function uploadRender(
+  storage: StorageApi, storagePath: string, renderB64: string, kind: 'svg' | 'png',
+): Promise<{ error: { message: string } | null }> {
+  const ctype = kind === 'png' ? 'image/png' : 'image/svg+xml';
+  return storage.from(SNAPSHOTS_BUCKET)
+    .upload(renderPathFor(storagePath, kind), Buffer.from(renderB64, 'base64'), { contentType: ctype, upsert: true });
+}
+
 export interface PrevVersion { id: string; version_number: number; storage_path: string | null }
 
 export interface CreateVersionInput {
@@ -78,19 +94,17 @@ export async function createVersionAtomic(
 
     // À partir d'ici un snapshot existe en Storage : toute sortie anormale (computeMeta
     // qui throw, échec d'insert) doit nettoyer le blob orphelin (+ son rendu _render.{ext}).
-    const ext   = input.renderKind === 'png' ? 'png' : 'svg';
-    const ctype = input.renderKind === 'png' ? 'image/png' : 'image/svg+xml';
-    const renderPath = path.replace('.json', `_render.${ext}`);
+    const kind = input.renderKind === 'png' ? 'png' : 'svg';
+    const renderPath = renderPathFor(path, kind);
     try {
       const meta = await input.computeMeta(prevTyped);
 
+      // Repli rétrocompatible : les anciens clients envoient encore le rendu dans le POST.
+      // Le nouveau chemin le pousse via POST /checkpoints/:id/render (hors flux critique).
+      // Best-effort mais on LOGGUE l'erreur (un rejet silencieux faisait retomber en reconstruction).
       if (input.renderB64) {
-        // Best-effort (un échec render ne doit pas faire échouer le checkpoint), mais on
-        // LOGGUE l'erreur : un rejet silencieux (ex. restriction MIME du bucket) faisait
-        // retomber l'aperçu en reconstruction sans aucun signal.
-        const { error: renderErr } = await storage.from(SNAPSHOTS_BUCKET)
-          .upload(renderPath, Buffer.from(input.renderB64, 'base64'), { contentType: ctype, upsert: true });
-        if (renderErr) console.warn(`[render] upload ${renderPath} failed (${ctype}):`, renderErr.message);
+        const { error: renderErr } = await uploadRender(storage, path, input.renderB64, kind);
+        if (renderErr) console.warn(`[render] upload ${renderPath} failed:`, renderErr.message);
       }
 
       const { data: version, error: insErr } = await db

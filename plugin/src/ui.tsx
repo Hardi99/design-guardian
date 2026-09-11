@@ -510,6 +510,8 @@ function CheckpointScreen() {
   const save = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
+      // Le rendu (image) ne voyage PLUS dans ce POST : il est poussé juste après, hors du
+      // chemin critique, pour que "Checkpoint sauvegardé" s'affiche sans attendre son upload.
       const data = await api<{ version: { id: string; version_number: number }; ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
         apiKey, '/api/checkpoints', {
           method: 'POST',
@@ -518,8 +520,6 @@ function CheckpointScreen() {
             branch_name:     branchName.trim() || 'main',
             figma_node_id:   snapshot.figmaNodeId,
             snapshot_json:   snapshot,
-            render_svg_b64:  renderSvgB64,
-            render_kind:     renderKind,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
           }),
         }
@@ -527,6 +527,14 @@ function CheckpointScreen() {
       // Finalise le clone d'historique (capturé en pending au snapshot) → restore lossless.
       send({ type: 'STORE_HISTORY_CLONE', nodeId: snapshot.figmaNodeId, versionId: data.version.id, versionNumber: data.version.version_number });
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
+      // Upload différé du rendu (best-effort, non bloquant) : si ça échoue, le viewer
+      // retombe sur la reconstruction — aucune conséquence sur la validité du checkpoint.
+      if (renderSvgB64) {
+        void api(apiKey, `/api/checkpoints/${data.version.id}/render`, {
+          method: 'POST',
+          body: JSON.stringify({ render_svg_b64: renderSvgB64, render_kind: renderKind ?? 'svg' }),
+        }).catch(() => { /* best-effort */ });
+      }
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
   }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64, renderKind]);
@@ -589,6 +597,16 @@ function CheckpointScreen() {
     </div>
   );
 
+  // Feedback franc pendant la capture : un écran plein plutôt qu'un simple libellé de bouton,
+  // pour que le clic ait un effet visible immédiat (la latence perçue chutait sans ça).
+  if (loading) return (
+    <div class="flex flex-col h-screen bg-gray-950 text-white items-center justify-center gap-4">
+      <Spinner />
+      <p class="text-sm text-gray-300">Capture en cours…</p>
+      <p class="text-xs text-gray-600">{snapshot.figmaNodeName}</p>
+    </div>
+  );
+
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       <Topbar label="Nouveau checkpoint" onBack={() => setScreen('home')} />
@@ -604,9 +622,7 @@ function CheckpointScreen() {
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
       </div>
       <div class="p-4 border-t border-gray-800">
-        <button class="btn-primary w-full" onClick={save} disabled={loading}>
-          {loading ? 'Sauvegarde…' : 'Save Checkpoint'}
-        </button>
+        <button class="btn-primary w-full" onClick={save}>Save Checkpoint</button>
       </div>
     </div>
   );
