@@ -3,6 +3,7 @@ import { getEnv } from '../config/env.js';
 import { OpenAIService } from './openai.service.js';
 import { aiSummariesGeneratedTotal } from './metrics.service.js';
 import { sendCheckpointNotification } from './notification.service.js';
+import { broadcastSummary } from './realtime.service.js';
 import type { DeltaJSON } from '../types/figma.js';
 
 let openai: OpenAIService | null = null;
@@ -42,6 +43,9 @@ export async function generateAndStoreSummary(p: GenerateSummaryParams): Promise
   }
 
   aiSummariesGeneratedTotal.inc({ status: 'success' });
+
+  // Push Realtime : le plugin abonné au canal reçoit le résumé sans poller (best-effort).
+  await broadcastSummary(p.versionId, summary);
 
   if (p.notifyEmail) {
     sendCheckpointNotification({

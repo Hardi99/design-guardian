@@ -15,6 +15,7 @@
     "allowedDomains": [
       "https://design-guardian.up.railway.app",
       "https://zrlwwxarwgfkdwgshocb.supabase.co",
+      "wss://zrlwwxarwgfkdwgshocb.supabase.co",
       "https://o4509507471867904.ingest.de.sentry.io"
     ],
     "devAllowedDomains": [
