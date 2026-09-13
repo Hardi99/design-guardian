@@ -1,5 +1,6 @@
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import { findNodeById } from './svg-generator.service.js';
+import { instanceRootMap } from './tree.service.js';
 
 export type Bbox = { x: number; y: number; w: number; h: number };
 
@@ -14,16 +15,33 @@ export function nodeBboxRelative(snapshot: FigmaSnapshot, nodeId: string): Bbox 
   return { x: node.x - snapshot.root.x, y: node.y - snapshot.root.y, w: node.width, h: node.height };
 }
 
-/** Ajoute `frame` (dims root) + `bbox` par-nœud au delta, pour éviter de retélécharger le snapshot au GET. */
+/**
+ * Ajoute `frame` (dims root) + `bbox` par-nœud au delta, pour éviter de retélécharger le
+ * snapshot au GET. Attache aussi `instanceRoot`/`instanceName`/`instanceBbox` aux nœuds internes
+ * d'icônes/composants (INSTANCE) → le plugin replie leurs changements en UN SEUL élément
+ * (une boîte = l'icône), au lieu d'un encadré par sous-vecteur. Géométrie mesurée dans le
+ * snapshot d'origine du nœud : courant pour modified/added, précédent pour removed (cf. `bbox`).
+ */
 export function enrichDeltaGeometry(delta: DeltaJSON, currentSnap: FigmaSnapshot, prevSnap: FigmaSnapshot | null): DeltaJSON {
   const rb = currentSnap.root.aabb;
   const frame = { w: rb ? rb.w : currentSnap.root.width, h: rb ? rb.h : currentSnap.root.height };
-  const put = (arr: DeltaJSON['modified'], snap: FigmaSnapshot | null) =>
-    arr.map(nd => ({ ...nd, bbox: snap ? (nodeBboxRelative(snap, nd.nodeId) ?? undefined) : undefined }));
+  const curInst = instanceRootMap(currentSnap.root);
+  const prevInst = prevSnap ? instanceRootMap(prevSnap.root) : null;
+  const put = (arr: DeltaJSON['modified'], snap: FigmaSnapshot | null, inst: ReturnType<typeof instanceRootMap> | null) =>
+    arr.map(nd => {
+      const root = inst?.get(nd.nodeId);
+      return {
+        ...nd,
+        bbox: snap ? (nodeBboxRelative(snap, nd.nodeId) ?? undefined) : undefined,
+        instanceRoot: root?.id,
+        instanceName: root?.name,
+        instanceBbox: root && snap ? (nodeBboxRelative(snap, root.id) ?? undefined) : undefined,
+      };
+    });
   return {
     ...delta, frame,
-    modified: put(delta.modified, currentSnap),
-    added: put(delta.added, currentSnap),
-    removed: put(delta.removed, prevSnap),
+    modified: put(delta.modified, currentSnap, curInst),
+    added: put(delta.added, currentSnap, curInst),
+    removed: put(delta.removed, prevSnap, prevInst),
   };
 }

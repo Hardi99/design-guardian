@@ -138,10 +138,13 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
           // but stamped 'minor' at capture (cascade move carried by a moved parent). Proves the
           // GET path TRUSTS the stored value instead of recomputing from scratch.
           {
-            nodeId: 'n2', nodeName: 'Child', nodeType: 'RECTANGLE',
+            nodeId: 'n2', nodeName: 'Vector', nodeType: 'VECTOR',
             changes: [{ property: 'x', oldValue: 0, newValue: 50 }],
             bbox: { x: 5, y: 6, w: 10, h: 10 },
             significance: 'minor',
+            // Nœud interne d'une icône (INSTANCE) : doit exposer son regroupement au plugin.
+            instanceRoot: 'icon1', instanceName: 'icon/wifi',
+            instanceBbox: { x: 2, y: 2, w: 20, h: 20 },
           },
         ],
         added: [],
@@ -177,11 +180,19 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
     expect(n1?.after_bbox).toEqual({ x: 1, y: 2, w: 30, h: 40 });
     expect(n1?.significance).toBe('notable');
 
-    const n2 = body.node_diffs.find(n => n.nodeId === 'n2');
+    const n2 = body.node_diffs.find(n => n.nodeId === 'n2') as (typeof body.node_diffs[number] & {
+      instance_root: string | null; instance_name: string | null;
+      instance_after_bbox: { x: number; y: number; w: number; h: number } | null;
+    }) | undefined;
     expect(n2?.significance).toBe('minor');
     // Un nœud DÉRIVÉ (minor) doit AUSSI exposer sa bbox (stockée) → sinon le toggle
     // "dérivés" ne peut rien surligner et les déplacements portés sont invisibles.
     expect(n2?.after_bbox).toEqual({ x: 5, y: 6, w: 10, h: 10 });
+    // Regroupement icône : le nœud interne expose son instance_root + la bbox de l'icône
+    // (boîte UNIQUE du groupe côté plugin).
+    expect(n2?.instance_root).toBe('icon1');
+    expect(n2?.instance_name).toBe('icon/wifi');
+    expect(n2?.instance_after_bbox).toEqual({ x: 2, y: 2, w: 20, h: 20 });
   });
 
   it('expose les bbox même SANS thumbs (surlignage dès le fetch léger, cf. nav ◀▶)', async () => {

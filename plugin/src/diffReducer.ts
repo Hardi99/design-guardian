@@ -28,6 +28,13 @@ export interface NodeDiffVisual {
   significance: 'notable' | 'minor';
   before_bbox: Bbox | null;
   after_bbox: Bbox | null;
+  // Regroupement icône/composant : nœuds internes d'une même INSTANCE → 1 seul élément.
+  // `instance_root` = id de l'icône (clé de groupe) ; `instance_*_bbox` = sa boîte UNIQUE.
+  // Absents (null/undefined) pour un nœud hors instance → il reste sa propre tête de groupe.
+  instance_root?: string | null;
+  instance_name?: string | null;
+  instance_before_bbox?: Bbox | null;
+  instance_after_bbox?: Bbox | null;
 }
 
 export interface DiffData {

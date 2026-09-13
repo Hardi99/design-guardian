@@ -150,6 +150,12 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     significance: 'notable' | 'minor';
     before_bbox: { x: number; y: number; w: number; h: number } | null;
     after_bbox:  { x: number; y: number; w: number; h: number } | null;
+    // Regroupement icône/composant : les nœuds internes d'une INSTANCE partagent le même
+    // instance_root → le plugin les replie en 1 seul élément (boîte = instance_*_bbox).
+    instance_root: string | null;
+    instance_name: string | null;
+    instance_before_bbox: { x: number; y: number; w: number; h: number } | null;
+    instance_after_bbox:  { x: number; y: number; w: number; h: number } | null;
   }> = [];
 
   // Significativité PAR NŒUD : stockée à la capture (stampSignificance, cf. significance.service)
@@ -188,6 +194,10 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         // prevSnap seulement si téléchargé (legacy) ; sinon null (crop avant = secondaire).
         before_bbox: prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null,
         after_bbox:  nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null),
+        instance_root: nd.instanceRoot ?? null,
+        instance_name: nd.instanceName ?? null,
+        instance_before_bbox: null, // avant = null sur le chemin nominal (comme before_bbox)
+        instance_after_bbox:  nd.instanceBbox ?? null,
       });
     }
     for (const nd of delta.added) {
@@ -196,6 +206,10 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         changes: [], kind: 'added', readable: [], significance: 'notable',
         before_bbox: null,
         after_bbox:  nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null),
+        instance_root: nd.instanceRoot ?? null,
+        instance_name: nd.instanceName ?? null,
+        instance_before_bbox: null,
+        instance_after_bbox:  nd.instanceBbox ?? null,
       });
     }
     for (const nd of delta.removed) {
@@ -204,6 +218,10 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         changes: [], kind: 'removed', readable: [], significance: 'notable',
         before_bbox: nd.bbox ?? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null),
         after_bbox:  null,
+        instance_root: nd.instanceRoot ?? null,
+        instance_name: nd.instanceName ?? null,
+        instance_before_bbox: nd.instanceBbox ?? null,
+        instance_after_bbox:  null,
       });
     }
   }
