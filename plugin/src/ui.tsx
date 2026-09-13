@@ -12,7 +12,7 @@ import { timeAgo } from './utils.js';
 import { pollPatchNote } from './patchNote.js';
 import { awaitCheckpointSummary } from './realtime.js';
 import { linkReducer } from './linkFlow.js';
-import { buildHighlights, type Highlight } from './diffHighlights.js';
+import { buildHighlights, groupDiffs, type Highlight } from './diffHighlights.js';
 import { clampView, type View } from './canvasView.js';
 import { initSentry } from './sentry.js';
 import './ui.css';
@@ -801,12 +801,15 @@ function DiffScreen() {
   const hasPrev = !!data?.prev_version;
   const nodeDiffs = data?.node_diffs ?? [];
   const highlights = buildHighlights(nodeDiffs, beforeMode, showMinor);
-  const selected = nodeDiffs.find(n => n.nodeId === selectedId) ?? null;
+  // Compteur PAR GROUPE : les nœuds internes d'une icône comptent pour 1 (pas 1 par vecteur).
+  const groups = groupDiffs(nodeDiffs);
+  // Sélection : un highlight porte la clé de groupe (icône) → on retrouve un membre représentatif.
+  const selected = nodeDiffs.find(n => (n.instance_root ?? n.nodeId) === selectedId) ?? null;
   const counts = {
-    modified: nodeDiffs.filter(n => n.kind === 'modified' && n.significance !== 'minor').length,
-    added:    nodeDiffs.filter(n => n.kind === 'added').length,
-    removed:  nodeDiffs.filter(n => n.kind === 'removed').length,
-    derived:  nodeDiffs.filter(n => n.significance === 'minor').length,
+    modified: groups.filter(g => g.kind === 'modified' && g.significance !== 'minor').length,
+    added:    groups.filter(g => g.kind === 'added').length,
+    removed:  groups.filter(g => g.kind === 'removed').length,
+    derived:  groups.filter(g => g.significance === 'minor').length,
   };
   const canvasUrl    = beforeMode ? data?.prev_render_url    : data?.render_url;
   const canvasKind   = beforeMode ? data?.prev_render_kind   : data?.render_kind;

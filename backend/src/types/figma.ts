@@ -111,6 +111,12 @@ export interface NodeDelta {
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   bbox?: { x: number; y: number; w: number; h: number }; // bbox relative à la root — cf. geometry.service
   significance?: 'notable' | 'minor'; // stampé à la capture (cascade auto-layout résolue) — cf. significance.service
+  // Regroupement des nœuds internes d'icônes/composants : `instanceRoot` = id de l'INSTANCE
+  // la plus haute qui contient ce nœud (les enfants d'une icône se replient en 1 seul élément).
+  // `instanceBbox` = bbox de cette instance (la boîte UNIQUE du groupe). Absents hors instance.
+  instanceRoot?: string;
+  instanceName?: string;
+  instanceBbox?: { x: number; y: number; w: number; h: number };
 }
 
 // The complete diff output — stored in analysis_json and sent to OpenAI
