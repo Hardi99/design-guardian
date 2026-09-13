@@ -12,7 +12,7 @@ import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
-import { nodeIdsToRender, derivedMoveIds, rankDelta, stampSignificance } from '../services/significance.service.js';
+import { derivedMoveIds, rankDelta, stampSignificance } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
@@ -21,9 +21,6 @@ const versionsRouter = new Hono<ProjectEnv>();
 const diffService = new DiffService();
 
 const SNAPSHOTS_BUCKET = 'snapshots';
-// Plafond dur de rendus SVG par-nœud dans la vue diff : protège l'endpoint d'un
-// gros delta (cascade auto-layout) qui générerait des centaines de SVG → OOM/500.
-const MAX_NODE_RENDERS = 60;
 
 /**
  * GET /api/versions/tree?asset_id=...
@@ -174,14 +171,14 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   }
 
   if (delta) {
-    // On ne génère un crop QUE pour les nœuds NOTABLES (+ ajoutés/supprimés), plafonné :
-    // un gros diff en cascade ne doit pas produire des centaines de crops.
-    const renderIds = nodeIdsToRender(delta, MAX_NODE_RENDERS, derived);
+    // Bbox par-nœud (position, 4 nombres) : stockée à la capture (enrichDeltaGeometry) pour
+    // TOUS les nœuds → on la renvoie systématiquement, **dérivés inclus**. Sans ça, le toggle
+    // « dérivés » ne pouvait rien surligner et les déplacements portés étaient invisibles ;
+    // et les highlights dépendaient du chargement des vignettes (disparition à la nav ◀▶).
+    // Les IMAGES (crops) restent composées côté client à partir de la frame + bbox — aucune
+    // génération serveur ici. Repli nodeBboxRelative(currentSnap) seulement pour les versions
+    // legacy sans géométrie stockée (currentSnap alors téléchargé plus haut).
     for (const nd of delta.modified) {
-      const render = wantThumbs && renderIds.has(nd.nodeId);
-      // Bbox « après » : stockée par T3/T4 dans le delta ; repli nodeBboxRelative(currentSnap)
-      // uniquement si absente (version legacy — currentSnap alors téléchargé plus haut).
-      const afterBbox = nd.bbox ?? (render && currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: nd.changes, kind: 'modified',
@@ -189,25 +186,23 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         significance: nd.significance ?? (notableModIds.has(nd.nodeId) ? 'notable' : 'minor'),
         // Le delta courant ne porte pas de bbox « avant » pour les modified : repli
         // prevSnap seulement si téléchargé (legacy) ; sinon null (crop avant = secondaire).
-        before_bbox: render ? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null) : null,
-        after_bbox:  render ? afterBbox : null,
+        before_bbox: prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null,
+        after_bbox:  nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null),
       });
     }
     for (const nd of delta.added) {
-      const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'added', readable: [], significance: 'notable',
         before_bbox: null,
-        after_bbox:  render ? (nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null)) : null,
+        after_bbox:  nd.bbox ?? (currentSnap ? nodeBboxRelative(currentSnap, nd.nodeId) : null),
       });
     }
     for (const nd of delta.removed) {
-      const render = wantThumbs && renderIds.has(nd.nodeId);
       nodeDiffs.push({
         nodeId: nd.nodeId, nodeName: nd.nodeName, nodeType: nd.nodeType,
         changes: [], kind: 'removed', readable: [], significance: 'notable',
-        before_bbox: render ? (nd.bbox ?? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null)) : null,
+        before_bbox: nd.bbox ?? (prevSnap ? nodeBboxRelative(prevSnap, nd.nodeId) : null),
         after_bbox:  null,
       });
     }

@@ -967,7 +967,7 @@ function FrameImage({ url, kind, onReady }: { url: string; kind: 'svg' | 'png'; 
     return () => { alive = false; };
   }, [url, kind]);
   useEffect(() => { if (kind === 'svg' && svg) onReady?.(); }, [svg, kind]);
-  if (kind === 'png') return <img src={url} alt="Rendu de la frame" onLoad={() => onReady?.()} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
+  if (kind === 'png') return <img src={url} alt="Rendu de la frame" draggable={false} onLoad={() => onReady?.()} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
   if (svg === null) return <div class="w-full h-full animate-pulse bg-gray-800/40" />;
   if (!svg) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
   return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
@@ -1033,7 +1033,7 @@ function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }:
   };
 
   return (
-    <div ref={ref} class="relative flex-1 min-h-0 overflow-hidden cursor-grab active:cursor-grabbing"
+    <div ref={ref} class="relative flex-1 min-h-0 overflow-hidden select-none cursor-grab active:cursor-grabbing"
       onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       onDblClick={() => setView(fitView())}>
       <div class="absolute top-0 left-0 origin-top-left"
