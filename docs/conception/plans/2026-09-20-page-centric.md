@@ -51,7 +51,15 @@ En revanche la Phase 1 est **robuste au résultat du spike** : quelle que soit l
 
 ---
 
-## Task 1 : Spike de mesure — GATE BLOQUANT
+## Task 1 : Spike de mesure — GATE BLOQUANT — ✅ RÉALISÉE le 2026-09-20
+
+> **Résultat : 🛑 seuil « > 15 s » franchi.** Page « 📲 Hi-fi Prototype » : 14 896 calques, 331 frames, **93,8 s** d'extraction, **10,1 Mo** de JSON. Page « Cover & Brief » : 169 calques, 0,54 s, 123 Ko.
+>
+> **Conséquence :** la capture « page entière » est abandonnée. Le spec a été révisé le même jour vers un modèle de **frames suivies** (cf. §10 et l'en-tête de révision du spec). Le code du spike a été intégralement retiré (`git checkout`), aucun résidu.
+>
+> **Les tâches 2 à 7 ci-dessous restent valables sans modification** : la racine synthétique contient ses enfants de premier niveau, qu'il s'agisse des 331 frames de la page ou des 12 frames suivies — le modèle géométrique est identique.
+>
+> Les étapes ci-dessous sont conservées telles qu'exécutées, à titre de trace.
 
 **Objectif :** produire des chiffres, pas du code conservé. Tout ce qui est écrit ici est **retiré à la fin de la tâche**.
 
@@ -762,8 +770,8 @@ git commit -m "test(page-centric): la racine synthétique ne produit aucun diff"
 
 ## Suite
 
-Rédiger le plan des **Phases 2 à 4** une fois le gate de la Tâche 1 franchi, en tenant compte des chiffres mesurés :
+Le gate de la Tâche 1 a été franchi **par la négative** : le spec a été révisé vers les **frames suivies**. Le plan des phases suivantes est à rédiger sur cette base révisée :
 
-- Phase 2 — capture sans sélection, racine synthétique **avec `dg_id`**, garde `dg/*`, rendus des viewports modifiés.
-- Phase 3 — endpoint `GET /api/versions/versions/:id/layers` + arbre de calques dans le plugin.
-- Phase 4 — restore par viewport + clones bornés aux viewports modifiés.
+- **Phase 2** — découverte des frames (énumération sans extraction profonde), suivi via `dg_tracked` en `pluginData`, liste + recherche + **estimation du coût** (3-6 ms/calque, taux mesuré), capture des frames suivies, racine synthétique **avec `dg_id`**, garde `dg/*`, `tracked[]` et classement `scope_in`/`scope_out`, rendus des frames modifiées.
+- **Phase 3** — liste des frames dans le viewer, alimentée par `viewports[]` **déjà présent dans la réponse** : plus d'endpoint `/layers`, plus d'arbre de calques, plus de virtualisation.
+- **Phase 4** — restore par frame + clones bornés aux frames modifiées.
