@@ -7,7 +7,11 @@
 
 La version initiale de ce spec proposait **une capture = tous les calques de la page**. Le spike 1 a donné **93,8 s et 10,1 Mo** sur une page réelle de 14 896 calques : gate franchi, conception revue vers les frames suivies.
 
-Le **spike 2** a ensuite décomposé ce total : **29,2 s réellement, dont 64,6 s d'écritures d'identité évitables** (§10.2, §10.4). Le mur était à 69 % de notre fait. L'arbitrage « couverture totale ou frames suivies » est donc **rouvert et en attente** (§10.6) — mais le modèle décrit ci-dessous vaut dans les deux cas, seul le périmètre par défaut change.
+Le **spike 2** a décomposé ce total : **~64,6 s d'écritures d'identité évitables** (§10.2, §10.4). Le mur était en grande partie de notre fait, ce qui a rouvert l'arbitrage.
+
+Le **spike 3** a mesuré la chaîne complète et l'a **refermé** (§10.6, §10.7) : ~50 s au total, dont ~85 % d'extraction incompressible. **Le modèle retenu est bien « frames suivies »** — cette fois sur un coût réel, pas sur un artefact. Deux optimisations transverses en sont sorties, à traiter en lot séparé (§10.8).
+
+> **Note de méthode.** Trois spikes successifs, dont deux ont corrigé les conclusions du précédent. La leçon tient en une ligne : *un total n'est pas un diagnostic, et une mesure unique n'est pas un fait.* L'extraction a varié de 29,2 s à 43,2 s pour la même opération.
 
 | | Avant le spike | Après |
 |---|---|---|
@@ -275,14 +279,42 @@ Les 29,2 s couvrent **la seule extraction**. Une capture réelle ajoute la séri
 
 **Taux retenu pour l'estimation affichée à l'utilisateur (§4.3) : ~2 ms par nœud.**
 
-### 10.6 ⚠️ Arbitrage produit EN ATTENTE
+### 10.6 Spike 3 — la chaîne complète
 
-Le spike 2 rouvre une question que le spike 1 semblait avoir tranchée :
+Mêmes page et conditions, chaîne entière instrumentée : extraction → sérialisation → pont `main`→`ui` → compression → réseau.
 
-- **Couverture totale par défaut** — ~29 s par checkpoint, non bloquant si tranché, aucune curation demandée. Proche du « ne rien rater » d'origine. Le modèle de git : on suit tout, on choisit au moment de commiter.
-- **Frames suivies par défaut** — ~1 s, mais l'utilisateur doit curer parmi 331 frames, et sous-suivra probablement.
+| Étape | Mesure |
+|---|---|
+| Extraction | **43,2 s** (contre 29,2 s au spike 2 — voir la note de variance) |
+| `JSON.stringify` | 1,4 s |
+| **Pont `main.ts` → `ui.tsx`** (10,35 Mo par `postMessage`) | **5,1 s** (~2 Mo/s) |
+| Compression gzip | 0,6 s |
+| Poids | 10 350 Ko → **1 854 Ko**, ratio **×5,6** |
 
-Cet arbitrage n'est **pas** tranché dans ce spec. Les sections §1 à §9 décrivent le modèle « frames suivies » ; si la couverture totale devient le défaut, les frames suivies deviennent un **réducteur de périmètre optionnel** et le reste du modèle (viewport, liste de frames, `scope_in`/`scope_out`) est **inchangé dans les deux cas**.
+**`CompressionStream` est disponible dans le webview Figma** — confirmé, pas supposé.
+
+> **⚠️ Variance des mesures.** L'extraction a donné 29,2 s puis 43,2 s pour la même opération sur la même page : **+48 % d'écart**. Le taux réel est une fourchette de **2 à 3 ms/nœud**, pas une constante. Toute valeur issue d'une mesure unique dans ce document doit être lue comme un ordre de grandeur.
+
+> **⚠️ Sonde réseau invalide.** Les temps d'envoi relevés (336 ms pour 10,35 Mo, 84 ms pour 1,85 Mo) sont irréalistes : la sonde visait une route inexistante, et le 404 revient avant que le corps soit entièrement transmis. **Ces valeurs, et les deux totaux qui en découlent, sont à écarter.** Le coût réseau réel reste non mesuré — mais il cesse d'être décisif, le périmètre retenu ramenant le payload à quelques centaines de Ko.
+
+### 10.7 Arbitrage — TRANCHÉ : frames suivies
+
+**Total mesuré, réseau exclu : ~50 s** pour la page de 331 frames. En appliquant tous les leviers identifiés (`dg_id` sur frames, compression avant le pont), on reste à **~46 s** : l'extraction représente ~85 % du coût et ne se réduit pas sans renoncer à détecter des changements.
+
+**La couverture totale par défaut est donc écartée** — cette fois pour un coût réel et incompressible, non pour un mur auto-infligé.
+
+Le modèle retenu est celui décrit aux §1 à §9 : **frames suivies**. Projection au taux haut observé (2,9 ms/nœud) : 12 frames ≈ 540 nœuds ≈ **~1,6 s**, soit trente fois moins.
+
+### 10.8 Acquis transverses — lot séparé
+
+Deux optimisations issues du spike 3 valent **quel que soit le périmètre de capture**, y compris pour le mode frame actuel. Elles ne relèvent pas de ce spec et doivent faire l'objet d'un lot dédié :
+
+| Optimisation | Gain mesuré |
+|---|---|
+| **Compresser avant le pont `main`→`ui`** (et au stockage) | Pont 5,1 s → ~0,9 s ; stockage 10,35 Mo → 1,85 Mo par version |
+| **`dg_id` sur les frames seulement** (331 écritures au lieu de ~30 000) | ~64 s à la première capture d'une grosse page |
+
+`uploadSnapshot` (`versioning.service.ts:14-17`) envoie aujourd'hui du JSON brut non compressé : c'est le point d'entrée du premier levier côté backend.
 
 ## 11. Risques
 
