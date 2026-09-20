@@ -32,6 +32,8 @@ export interface Asset {
   name: string;
   description: string | null;
   asset_type: 'logo' | 'icon' | 'packaging' | 'illustration' | 'ui' | 'other';
+  // Unité de capture (migration 018) : 'frame' = legacy, lecture seule ; 'page' = page-centric.
+  scope: 'frame' | 'page';
   created_at: string;
   updated_at: string | null;
 }

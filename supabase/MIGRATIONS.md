@@ -22,6 +22,7 @@ encadrées d'un `BEGIN; … COMMIT;`.
 | 015 | `015_nps_responses.sql` | table `nps_responses` (RLS on, service_role only) |
 | 016 | `016_nps_grants_and_fk_index.sql` | REVOKE anon/authenticated sur `nps_responses` + index FK `device_links.profile_id` |
 | 017 | `017_drop_legacy_snapshot_and_author.sql` | DROP `versions.snapshot_json` (inline legacy pré-008) + `versions.author_id` (FK morte 0/83) |
+| 018 | `018_assets_scope.sql` | ADD `assets.scope` (`frame` \| `page`, défaut `frame`) — unité de capture page-centric. **Appliquée le 2026-09-21**, colonne vérifiée en base |
 
 ## Go-forward recommandé
 

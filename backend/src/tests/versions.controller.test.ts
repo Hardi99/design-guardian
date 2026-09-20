@@ -133,6 +133,7 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
             changes: [{ property: 'x', oldValue: 0, newValue: 10 }],
             bbox: { x: 1, y: 2, w: 30, h: 40 },
             significance: 'notable',
+            viewport: 'accueil',
           },
           // Large x move (would score 'notable' by magnitude alone, cf. SIGNIFICANCE_THRESHOLDS)
           // but stamped 'minor' at capture (cascade move carried by a moved parent). Proves the
@@ -152,6 +153,7 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
         totalChanges: 2,
         metadata: { v1CapturedAt: '2026-01-01T00:00:00Z', v2CapturedAt: '2026-01-02T00:00:00Z', epsilon: 0.01, processingTimeMs: 5 },
         frame: { w: 800, h: 600 },
+        viewports: [{ id: 'accueil', name: 'Accueil', frame: { w: 400, h: 800 }, changes: 2 }],
       },
       assets: { project_id: 'p1' }, // matches pluginMiddleware's projectRow.id → not 403
     };
@@ -203,5 +205,18 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
     const body = await res.json() as { node_diffs: Array<{ nodeId: string; after_bbox: unknown }> };
     expect(body.node_diffs.find(n => n.nodeId === 'n1')?.after_bbox).toEqual({ x: 1, y: 2, w: 30, h: 40 });
     expect(body.node_diffs.find(n => n.nodeId === 'n2')?.after_bbox).toEqual({ x: 5, y: 6, w: 10, h: 10 });
+  });
+
+  it('expose viewport par nœud et viewports[] (navigation page-centric)', async () => {
+    const res = await createApp().request('/api/versions/versions/v2', {
+      headers: { 'X-API-Key': 'key-of-p1' },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      node_diffs: Array<{ nodeId: string; viewport: string | null }>;
+      viewports: Array<{ id: string; name: string; changes: number }> | null;
+    };
+    expect(body.node_diffs.find(n => n.nodeId === 'n1')?.viewport).toBe('accueil');
+    expect(body.viewports).toEqual([{ id: 'accueil', name: 'Accueil', frame: { w: 400, h: 800 }, changes: 2 }]);
   });
 });

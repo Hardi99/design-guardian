@@ -156,6 +156,9 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     instance_name: string | null;
     instance_before_bbox: { x: number; y: number; w: number; h: number } | null;
     instance_after_bbox:  { x: number; y: number; w: number; h: number } | null;
+    // Page-centric : viewport (enfant de premier niveau) auquel ce nœud appartient.
+    // C'est l'unité de rendu ET le repère de before_bbox/after_bbox.
+    viewport: string | null;
   }> = [];
 
   // Significativité PAR NŒUD : stockée à la capture (stampSignificance, cf. significance.service)
@@ -198,6 +201,7 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         instance_name: nd.instanceName ?? null,
         instance_before_bbox: null, // avant = null sur le chemin nominal (comme before_bbox)
         instance_after_bbox:  nd.instanceBbox ?? null,
+        viewport: nd.viewport ?? null,
       });
     }
     for (const nd of delta.added) {
@@ -210,6 +214,7 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         instance_name: nd.instanceName ?? null,
         instance_before_bbox: null,
         instance_after_bbox:  nd.instanceBbox ?? null,
+        viewport: nd.viewport ?? null,
       });
     }
     for (const nd of delta.removed) {
@@ -222,6 +227,7 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
         instance_name: nd.instanceName ?? null,
         instance_before_bbox: nd.instanceBbox ?? null,
         instance_after_bbox:  null,
+        viewport: nd.viewport ?? null,
       });
     }
   }
@@ -241,6 +247,8 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     prev_render_url: prevUrl?.url ?? null,        prev_render_kind: prevUrl?.kind ?? null,
     prev_render_source: prevUrl?.source ?? null,
     current_frame, prev_frame,
+    // Page-centric : cadres navigables (frames touchées). null pour les versions frame.
+    viewports: delta?.viewports ?? null,
     node_diffs: nodeDiffs,
   });
 });
