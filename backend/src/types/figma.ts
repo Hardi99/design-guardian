@@ -138,4 +138,8 @@ export interface DeltaJSON {
   // Page-centric : un cadre navigable par viewport modifié. `changes` compte les GROUPES
   // au sens du regroupement d'icônes (clé = instanceRoot ?? nodeId), pas les nœuds bruts.
   viewports?: Array<{ id: string; name: string; frame: { w: number; h: number }; changes: number }>;
+  // Page-centric : frames entrées/sorties du PÉRIMÈTRE de suivi entre deux checkpoints.
+  // JAMAIS confondues avec added/removed — le design n'a pas changé, le périmètre si.
+  scopeIn?:  Array<{ id: string; name: string }>;
+  scopeOut?: Array<{ id: string; name: string }>;
 }
