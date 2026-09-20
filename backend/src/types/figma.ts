@@ -117,6 +117,9 @@ export interface NodeDelta {
   instanceRoot?: string;
   instanceName?: string;
   instanceBbox?: { x: number; y: number; w: number; h: number };
+  // Page-centric : viewport = enfant de premier niveau de la page contenant ce nœud.
+  // C'est le repère géométrique — `bbox` lui est relative (et non à la racine).
+  viewport?: string;
 }
 
 // The complete diff output — stored in analysis_json and sent to OpenAI
@@ -132,4 +135,7 @@ export interface DeltaJSON {
     processingTimeMs: number;
   };
   frame?: { w: number; h: number }; // dims de la root du snapshot courant — cf. geometry.service
+  // Page-centric : un cadre navigable par viewport modifié. `changes` compte les GROUPES
+  // au sens du regroupement d'icônes (clé = instanceRoot ?? nodeId), pas les nœuds bruts.
+  viewports?: Array<{ id: string; name: string; frame: { w: number; h: number }; changes: number }>;
 }

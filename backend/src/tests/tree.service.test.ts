@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTreeMaps, instanceRootMap } from '../services/tree.service.js';
+import { buildTreeMaps, instanceRootMap, viewportRootMap } from '../services/tree.service.js';
 import type { NodeSnapshot } from '../types/figma.js';
 
 const node = (id: string, name: string, children: NodeSnapshot[] = []): NodeSnapshot =>
@@ -53,5 +53,33 @@ describe('instanceRootMap', () => {
     expect(map.get('inner')).toEqual({ id: 'outer', name: 'Card' });
     expect(map.get('v')).toEqual({ id: 'outer', name: 'Card' });
     expect(map.get('outer')).toBeUndefined();
+  });
+});
+
+describe('viewportRootMap', () => {
+  // page → [ Accueil → [Header → [Logo]], Sticker ]
+  const page = node('page', 'Écrans app', [
+    node('accueil', 'Accueil', [node('header', 'Header', [node('logo', 'Logo')])]),
+    node('sticker', 'Sticker libre'),
+  ]);
+
+  it('mappe un descendant profond vers son enfant de premier niveau', () => {
+    const map = viewportRootMap(page);
+    expect(map.get('logo')).toEqual({ id: 'accueil', name: 'Accueil' });
+    expect(map.get('header')).toEqual({ id: 'accueil', name: 'Accueil' });
+  });
+
+  it('un enfant de premier niveau est son PROPRE viewport', () => {
+    const map = viewportRootMap(page);
+    expect(map.get('accueil')).toEqual({ id: 'accueil', name: 'Accueil' });
+    expect(map.get('sticker')).toEqual({ id: 'sticker', name: 'Sticker libre' });
+  });
+
+  it('la racine n\'a pas de viewport (conteneur, pas objet de design)', () => {
+    expect(viewportRootMap(page).get('page')).toBeUndefined();
+  });
+
+  it('page sans enfant → map vide (pas de crash)', () => {
+    expect(viewportRootMap(node('page', 'Vide')).size).toBe(0);
   });
 });

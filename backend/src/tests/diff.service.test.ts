@@ -503,3 +503,37 @@ describe('DiffService – totalChanges', () => {
     expect(result.totalChanges).toBe(3);
   });
 });
+
+describe('racine synthétique page-centric', () => {
+  const pageSnap = (pageName: string, logoX: number): FigmaSnapshot => ({
+    figmaNodeId: 'page', figmaNodeName: pageName, capturedAt: '2026-01-01T00:00:00Z',
+    root: {
+      id: 'page', name: pageName, type: 'PAGE', dg_id: 'dg-page',
+      x: 0, y: 0, width: 0, height: 0, opacity: 1, fills: [], strokes: [],
+      children: [{
+        id: 'accueil', name: 'Accueil', type: 'FRAME', dg_id: 'dg-accueil',
+        x: 0, y: 0, width: 400, height: 800, opacity: 1, fills: [], strokes: [],
+        children: [{
+          id: 'logo', name: 'Logo', type: 'VECTOR', dg_id: 'dg-logo',
+          x: logoX, y: 10, width: 10, height: 10, opacity: 1, fills: [], strokes: [], children: [],
+        }],
+      }],
+    },
+  } as unknown as FigmaSnapshot);
+
+  // La racine synthetique porte une geometrie CONSTANTE et `name` n'est pas compare :
+  // elle ne peut donc produire aucun changement. Ce test transforme cette propriete
+  // (vraie par construction) en contrat — une comparaison de `name` ajoutee plus tard
+  // ferait apparaitre un faux « la page a change » a chaque renommage.
+  it('page renommée sans changement de design → aucun diff sur la racine', () => {
+    const delta = new DiffService().compareSnapshots(pageSnap('Écrans', 10), pageSnap('Écrans v2', 10));
+    expect(delta.totalChanges).toBe(0);
+    expect(delta.modified.find(n => n.nodeId === 'page')).toBeUndefined();
+  });
+
+  it('un vrai changement interne est détecté, et la racine reste absente', () => {
+    const delta = new DiffService().compareSnapshots(pageSnap('Écrans', 10), pageSnap('Écrans', 50));
+    expect(delta.modified.map(n => n.nodeId)).toEqual(['logo']);
+    expect(delta.modified.find(n => n.nodeId === 'page')).toBeUndefined();
+  });
+});
