@@ -3,9 +3,11 @@
 > **Statut** : design **révisé le 2026-09-20 après le spike de mesure** (§10). Le spike a invalidé la capture « page entière » ; le modèle a été ramené aux **frames suivies**. Le modèle géométrique (§3), lui, est inchangé.
 > **Hors périmètre explicite** : le décommissionnement des branches (lot séparé, cf. §9).
 
-## Révision — ce que le spike a changé
+## Révision — ce que les spikes ont changé
 
-La version initiale de ce spec proposait **une capture = tous les calques de la page**. Les mesures (§10) ont donné **93,8 s et 10,1 Mo** sur une page réelle de 14 896 calques. Le gate a tranché : conception revue.
+La version initiale de ce spec proposait **une capture = tous les calques de la page**. Le spike 1 a donné **93,8 s et 10,1 Mo** sur une page réelle de 14 896 calques : gate franchi, conception revue vers les frames suivies.
+
+Le **spike 2** a ensuite décomposé ce total : **29,2 s réellement, dont 64,6 s d'écritures d'identité évitables** (§10.2, §10.4). Le mur était à 69 % de notre fait. L'arbitrage « couverture totale ou frames suivies » est donc **rouvert et en attente** (§10.6) — mais le modèle décrit ci-dessous vaut dans les deux cas, seul le périmètre par défaut change.
 
 | | Avant le spike | Après |
 |---|---|---|
@@ -203,28 +205,84 @@ CHECKPOINT v3 · page "📲 Hi-fi Prototype"
 - **Arbre de calques complet** à l'intérieur d'une frame — écarté après le spike (§10) ; la navigation s'arrête au niveau frame, le détail d'un calque passe par le clic sur son surlignage, comme aujourd'hui.
 - Détection automatique des frames « intéressantes » à suivre : le suivi reste un choix explicite (D8).
 
-## 10. Spike — RÉALISÉ le 2026-09-20
+## 10. Mesures — deux spikes, 2026-09-20
 
-Mesures prises dans Figma sur deux pages réelles du fichier de l'early adopter, code jetable retiré depuis.
+Prises dans Figma sur les pages réelles du fichier de l'early adopter. Code jetable retiré après chaque passe.
+
+### 10.1 Spike 1 — le total
 
 | Métrique | Cover & Brief | **📲 Hi-fi Prototype** |
 |---|---|---|
 | Calques | 169 | **14 896** |
 | Frames de 1er niveau | 6 | **331** |
 | Profondeur max | 8 | 18 |
-| **Temps d'extraction** | 0,54 s | **93,8 s** |
-| **Poids JSON** | 123 Ko | **10,1 Mo** |
+| Temps d'extraction | 0,54 s | **93,8 s** |
+| Poids JSON | 123 Ko | **10,1 Mo** |
 
-**Verdict : 🛑 seuil « > 15 s » franchi — la capture « page entière » est abandonnée.**
+Verdict immédiat : seuil « > 15 s » franchi. **Mais ce chiffre est un total, pas un diagnostic** — erreur d'analyse corrigée par le spike 2.
 
-Deux enseignements au-delà du simple dépassement :
+### 10.2 Spike 2 — le profil
 
-1. **Le coût est super-linéaire.** 88× plus de calques → **174× plus de temps** (6,3 ms/calque contre 3,2). La profondeur et la richesse des nœuds coûtent cher. Même au meilleur taux mesuré, ces 14 896 calques prendraient encore 48 s : ce n'est pas un réglage à ajuster, c'est un mur.
-2. **Le poids est un second mur, indépendant du temps.** 10,1 Mo par checkpoint sature le Storage gratuit en une centaine de versions.
+Relancé sur **la même page**, dont le spike 1 avait déjà stampé l'identité sur les 14 896 nœuds. Seule différence entre les deux passes : les ~30 000 écritures `setPluginData`.
 
-Cette page n'est pas une aberration : tous les écrans d'un prototype hi-fi sur une seule page est le cas d'usage normal de Figma. La mesure porte sur le vrai monde.
+| Poste | Temps | Part |
+|---|---|---|
+| Traversée nue de l'arbre (aucune lecture) | 1,93 s | 6,6 % |
+| Lectures `pluginData` (2/nœud) | 0,69 s | 2,3 % |
+| Géométrie de base + construction objet | 2,06 s | 7,1 % |
+| **Propriétés riches** (fills, strokes, effets, vecteurs, texte, coins) | **25,2 s** | **86,3 %** |
+| **Total extraction** | **29,2 s** | |
 
-**Taux retenu pour l'estimation affichée à l'utilisateur (§4.3) : 3 à 6 ms par calque**, borne haute pour les arbres profonds et riches.
+**93,8 s → 29,2 s : le mur était à 69 % de notre fait.** Les ~64,6 s d'écart correspondent aux écritures d'identité, à ~2,2 ms l'unité.
+
+Corollaires :
+
+- **Taux réel : 1,96 ms/nœud** (et non 6,3 — ce chiffre incluait les écritures).
+- La traversée est **quasi gratuite** : parcourir toute la page sans rien lire coûte 1,9 s. Ce sont les lectures de propriétés riches qui coûtent.
+- Composition de la page : 2 101 vecteurs, 2 413 textes sur 14 896 nœuds.
+
+**Poids, décomposé :**
+
+| Sérialisation | Taille | Écart |
+|---|---|---|
+| Complète | 10 350 Ko | — |
+| Sans `vectorPaths` | 7 191 Ko | **−3 159 Ko (30 %)** |
+| Sans tableaux vides | 10 018 Ko | −332 Ko (3 %) |
+| Minimale (id/nom/type/géométrie) | 1 679 Ko | — |
+
+> Correction d'une estimation erronée : il avait été avancé « un facteur 2 à 3 à récupérer en retirant les valeurs vides ». **C'est 3 %.** Le poids est du contenu réel, dominé par les chemins vectoriels.
+
+### 10.3 Ce qui n'est PAS mesuré
+
+Les 29,2 s couvrent **la seule extraction**. Une capture réelle ajoute la sérialisation, **l'envoi de 10,1 Mo au backend**, le diff serveur et le stockage. `hono/compress` ne traite que les réponses, pas les corps de requête. **Le temps total de capture sur cette page est donc > 29 s, d'un montant inconnu.** À mesurer avant tout engagement sur un chiffre affiché à l'utilisateur.
+
+### 10.4 Leviers identifiés, avec gains chiffrés
+
+| Levier | Gain attendu | Fondement |
+|---|---|---|
+| **`dg_id` sur les frames seulement** (331 écritures au lieu de 30 000) | **−64 s sur la première capture** | Mesuré (10.2). `keyOf` retombe déjà sur `id:`/`path:` nœud par nœud pour ceux sans `dg_id` — le diff le supporte |
+| **Extraction par tranches** (`await` entre frames) + progression | Ne réduit pas le temps, **supprime le gel de Figma** | Change « inacceptable » en « acceptable » |
+| **Compression du snapshot au stockage** | ~×8-10 sur 10,1 Mo → ~1 Mo | `uploadSnapshot` envoie aujourd'hui du JSON brut (`versioning.service.ts:14-17`). JSON structuré et répétitif = ratio élevé. **À vérifier par la mesure** |
+| **Compression côté plugin avant l'envoi** | Réduit d'autant le temps de téléversement | Nécessite `CompressionStream` dans le webview Figma, ou `pako`. **À vérifier** |
+| Réduire le périmètre aux frames suivies | 12 frames ≈ 540 nœuds ≈ **~1,1 s** | Mesuré (1,96 ms/nœud) |
+
+### 10.5 Coûts projetés
+
+| Périmètre | Extraction | Première capture (identité à poser) |
+|---|---|---|
+| 12 frames suivies (~540 nœuds) | ~1,1 s | ~1,1 s |
+| Page entière (14 896 nœuds) | ~29 s | ~94 s aujourd'hui, **~30 s** avec le levier `dg_id` |
+
+**Taux retenu pour l'estimation affichée à l'utilisateur (§4.3) : ~2 ms par nœud.**
+
+### 10.6 ⚠️ Arbitrage produit EN ATTENTE
+
+Le spike 2 rouvre une question que le spike 1 semblait avoir tranchée :
+
+- **Couverture totale par défaut** — ~29 s par checkpoint, non bloquant si tranché, aucune curation demandée. Proche du « ne rien rater » d'origine. Le modèle de git : on suit tout, on choisit au moment de commiter.
+- **Frames suivies par défaut** — ~1 s, mais l'utilisateur doit curer parmi 331 frames, et sous-suivra probablement.
+
+Cet arbitrage n'est **pas** tranché dans ce spec. Les sections §1 à §9 décrivent le modèle « frames suivies » ; si la couverture totale devient le défaut, les frames suivies deviennent un **réducteur de périmètre optionnel** et le reste du modèle (viewport, liste de frames, `scope_in`/`scope_out`) est **inchangé dans les deux cas**.
 
 ## 11. Risques
 
