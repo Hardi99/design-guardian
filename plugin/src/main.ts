@@ -10,6 +10,7 @@ import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
+import { listFrames, setTracked, isTracked, type TrackableNode } from './trackedFrames.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -116,8 +117,32 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'PERSIST_VERSION_CACHE':
       await figma.clientStorage.setAsync('dg_vcache_' + msg.assetId, { versions: msg.versions, branches: msg.branches });
       break;
+
+    case 'REQUEST_FRAMES': sendFrames(); break;
+
+    case 'SET_TRACKED': {
+      const node = figma.currentPage.children.find(c => c.id === msg.nodeId);
+      if (node) setTracked(node as unknown as TrackableNode, msg.tracked);
+      sendFrames(); // liste à jour → l'estimation se recalcule côté UI
+      break;
+    }
   }
 };
+
+// Le préfixe `dg/` est réservé aux pages techniques (branches + _history) : jamais capturable.
+function isCapturablePage(name: string): boolean {
+  return !name.startsWith('dg/');
+}
+
+function sendFrames(): void {
+  const page = figma.currentPage;
+  send({
+    type: 'FRAMES_LIST',
+    frames: listFrames(page.children as unknown as readonly TrackableNode[]),
+    pageName: page.name,
+    capturable: isCapturablePage(page.name),
+  });
+}
 
 // ─── Delta-based restore helpers ─────────────────────────────────────────────
 
@@ -519,18 +544,45 @@ function storeHistoryClonePending(node: SceneNode): void {
 }
 
 async function handleSnapshot(): Promise<void> {
-  const [node] = figma.currentPage.selection;
-  if (!node) { send({ type: 'ERROR', message: 'Sélectionne un élément dans Figma.' }); return; }
-  if (figma.currentPage.selection.length > 1) { send({ type: 'ERROR', message: 'Sélectionne un seul élément.' }); return; }
+  const page = figma.currentPage;
+
+  if (!isCapturablePage(page.name)) {
+    send({ type: 'ERROR', message: `« ${page.name} » est une page technique Design Guardian : elle ne peut pas être capturée.` });
+    return;
+  }
+
+  const tracked = page.children.filter(c => isTracked(c as unknown as TrackableNode));
+  if (tracked.length === 0) {
+    send({ type: 'ERROR', message: 'Aucune frame suivie. Coche les frames à suivre dans la liste, puis relance la capture.' });
+    return;
+  }
 
   await ensurePagesLoaded(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
 
   const figmaSnapshot: FigmaSnapshot = {
-    figmaNodeId: node.id,
-    figmaNodeName: node.name,
+    figmaNodeId: page.id,
+    figmaNodeName: page.name,
     capturedAt: new Date().toISOString(),
-    root: extractSnapshot(node),
+    root: {
+      // CRITIQUE : sans dg_id sur la racine, compareSnapshots calcule useDgId = false et
+      // désactive le matching par dg_id pour TOUTE la page (repli silencieux sur id:/path:).
+      dg_id: ensureNodeIdentity(page as unknown as Parameters<typeof ensureNodeIdentity>[0]),
+      id: page.id,
+      name: page.name,
+      type: 'PAGE',
+      // Géométrie CONSTANTE : c'est ce qui garantit que la racine ne produit aucun diff.
+      // Une PageNode n'a de toute façon aucune géométrie (elle n'étend pas LayoutMixin).
+      x: 0, y: 0, width: 0, height: 0,
+      opacity: 1, fills: [], strokes: [],
+      children: tracked.map(extractSnapshot),
+    },
   };
+
+  // Aperçu et clone d'historique PROVISOIRES : rattachés à la première frame suivie.
+  // Le rendu par frame modifiée et le clone borné relèvent des Phases 3 et 4 ; en
+  // attendant, le viewer doit continuer à afficher quelque chose plutôt que
+  // « Rendu indisponible » sur chaque capture de page.
+  const node = tracked[0];
 
   storeHistoryClonePending(node);
 
@@ -560,7 +612,8 @@ async function handleSnapshot(): Promise<void> {
       console.log('[DG] export failed:', e);
     }
   }
-  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: node.id, render_svg_b64, render_kind });
+  // nodeId = la PAGE : c'est elle l'identifiant du checkpoint désormais, pas la frame rendue.
+  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: page.id, render_svg_b64, render_kind });
 }
 
 // ─── Snapshot extraction ──────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import type { Asset, Version } from './store.js';
+import type { FrameEntry } from './trackedFrames.js';
 
 // ─── Figma native property types ─────────────────────────────────────────────
 
@@ -82,7 +83,10 @@ export type MainToUI =
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null }
   | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
-  | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };
+  | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  // Page-centric : toutes les frames de la page courante, suivies ou non.
+  // `capturable` est false sur une page dg/* → l'UI explique AVANT que l'utilisateur clique.
+  | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -103,4 +107,6 @@ export type UIToMain =
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
   | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
   | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
-  | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] };
+  | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  | { type: 'REQUEST_FRAMES' }
+  | { type: 'SET_TRACKED'; nodeId: string; tracked: boolean };
