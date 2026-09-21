@@ -13,6 +13,7 @@ import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import { derivedMoveIds, rankDelta, stampSignificance } from '../services/significance.service.js';
+import { classifyScopeChanges } from '../services/scope.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
@@ -249,6 +250,11 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     current_frame, prev_frame,
     // Page-centric : cadres navigables (frames touchées). null pour les versions frame.
     viewports: delta?.viewports ?? null,
+    // Entrées/sorties de périmètre : à afficher À PART, jamais mêlées aux vrais ajouts
+    // et suppressions — sinon le changelog présente un changement de suivi comme un
+    // changement de design.
+    scope_in:  delta?.scopeIn  ?? null,
+    scope_out: delta?.scopeOut ?? null,
     node_diffs: nodeDiffs,
   });
 });
@@ -297,7 +303,10 @@ versionsRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
       const headSnap = await downloadSnapshot(storage, prev.storage_path);
       if (!headSnap) return { analysisJson: null, aiSummary: baseSummary };
       const rawDelta = diffService.compareSnapshots(headSnap, snapshot);
-      const delta = enrichDeltaGeometry(stampSignificance(rawDelta, snapshot), snapshot, headSnap ?? null);
+      const delta = enrichDeltaGeometry(
+        classifyScopeChanges(stampSignificance(rawDelta, snapshot), snapshot, headSnap ?? null),
+        snapshot, headSnap ?? null,
+      );
       if (delta.totalChanges > 0) pendingDelta = delta;
       return { analysisJson: delta.totalChanges > 0 ? delta : null, aiSummary: baseSummary };
     },

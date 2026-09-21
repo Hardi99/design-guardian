@@ -31,6 +31,9 @@ export const createAssetSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   asset_type: z.enum(['logo', 'icon', 'packaging', 'illustration', 'ui', 'other']).default('other'),
+  // Unité de capture (migration 018). Déclarée par le client : un id de page Figma n'est
+  // pas distinguable d'un id de nœud, le serveur ne peut donc pas la déduire.
+  scope: z.enum(['frame', 'page']).optional(),
 });
 export type CreateAssetRequest = z.infer<typeof createAssetSchema>;
 export interface AssetResponse      { asset: Asset }
