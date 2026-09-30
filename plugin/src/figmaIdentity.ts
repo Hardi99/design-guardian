@@ -10,7 +10,8 @@ export interface IdentifiableNode {
 /**
  * Garantit que le nœud porte un `dg_id` stable et le renvoie.
  * Lit le pluginData, applique `decideStamp`, persiste si nécessaire.
- * Tolère les viewers read-only (l'écriture échoue → dg_id volatile pour la session).
+ * Viewer read-only : si le stamp ne peut pas être écrit, renvoie "" — un id tiré au
+ * hasard à chaque capture n'apparierait jamais la précédente ; sans id, le diff apparie par id Figma.
  */
 export function ensureNodeIdentity(node: IdentifiableNode): string {
   const decision = decideStamp(node.id, {
@@ -21,9 +22,50 @@ export function ensureNodeIdentity(node: IdentifiableNode): string {
     try {
       node.setPluginData(IDENTITY_KEY, decision.dgId);
       node.setPluginData(OWNER_KEY, decision.ownerNodeId);
-    } catch { /* viewer read-only — dg_id volatile pour cette session */ }
+    } catch { return ''; /* viewer read-only */ }
   }
   return decision.dgId;
+}
+
+/**
+ * Couper-coller / « Move to page » : Figma donne un NOUVEL id au nœud, qui garde son
+ * pluginData — `decideStamp` y verrait une copie et re-minterait (historique perdu).
+ * C'est une copie seulement si le propriétaire existe encore ET porte toujours ce dg_id ;
+ * sinon l'identité est libre et le nœud l'adopte (owner = lui). Un dg_id déjà tenu dans
+ * l'ensemble capturé n'est jamais adopté une 2e fois (copie de l'original, ou collé deux fois).
+ * Async (lookup Figma) : à appeler avant l'extraction synchrone.
+ */
+export async function adoptMovedIdentities(
+  roots: readonly BranchNode[],
+  getNode: (id: string) => Promise<IdentifiableNode | null>,
+): Promise<void> {
+  const nodes: BranchNode[] = [];
+  const stack: BranchNode[] = [...roots];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    nodes.push(n);
+    if (n.children) stack.push(...n.children);
+  }
+
+  const held = new Set<string>(); // dg_id tenus légitimement (owner = soi) dans l'arbre
+  const candidates: BranchNode[] = [];
+  for (const n of nodes) {
+    const dgId = n.getPluginData(IDENTITY_KEY);
+    if (!dgId) continue;
+    if (n.getPluginData(OWNER_KEY) === n.id) held.add(dgId);
+    else candidates.push(n);
+  }
+
+  for (const n of candidates) {
+    const dgId = n.getPluginData(IDENTITY_KEY);
+    if (held.has(dgId)) continue;
+    const holder = await getNode(n.getPluginData(OWNER_KEY)).catch(() => null);
+    if (holder && holder.getPluginData(IDENTITY_KEY) === dgId) continue; // vraie copie
+    try {
+      n.setPluginData(OWNER_KEY, n.id);
+      held.add(dgId);
+    } catch { /* viewer read-only */ }
+  }
 }
 
 /** Lit le `dg_id` persisté (ou "" si absent). Ne mint pas. */

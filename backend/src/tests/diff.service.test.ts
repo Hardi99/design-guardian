@@ -632,3 +632,34 @@ describe('positions relatives au parent', () => {
     expect(change(d, 'kid', 'y')).toBeUndefined();
   });
 });
+
+// ─── Appariement par dg_id NŒUD PAR NŒUD ─────────────────────────────────────
+// Le dg_id apparie dès que les DEUX versions le portent, sans dépendre de la racine :
+// une racine non stampée (viewer read-only, racine synthétique oubliée) ne doit pas
+// faire retomber toute la capture sur l'id Figma / le chemin.
+
+describe('appariement dg_id nœud par nœud', () => {
+  it('racine sans dg_id : les enfants restent appariés par dg_id (ids changés + réordonnés)', () => {
+    const v1 = makeSnapshot({
+      id: 'r1', type: 'FRAME',
+      children: [makeRoot({ id: 'a1', dg_id: 'A', name: 'A' }), makeRoot({ id: 'b1', dg_id: 'B', name: 'B' })],
+    });
+    const v2 = makeSnapshot({
+      id: 'r1', type: 'FRAME',
+      children: [makeRoot({ id: 'b2', dg_id: 'B', name: 'B' }), makeRoot({ id: 'a2', dg_id: 'A', name: 'A', x: 5 })],
+    });
+    const delta = new DiffService().compareSnapshots(v1, v2);
+    expect(delta.added).toHaveLength(0);
+    expect(delta.removed).toHaveLength(0);
+    expect(delta.modified.map(m => m.nodeId)).toEqual(['a2']);
+  });
+
+  it('nœud sans dg_id au milieu de nœuds stampés → apparié par id Figma', () => {
+    const v1 = makeSnapshot({ id: 'r1', dg_id: 'R', type: 'FRAME', children: [makeRoot({ id: 'c1', name: 'Box', x: 0 })] });
+    const v2 = makeSnapshot({ id: 'r1', dg_id: 'R', type: 'FRAME', children: [makeRoot({ id: 'c1', name: 'Box', x: 10 })] });
+    const delta = new DiffService().compareSnapshots(v1, v2);
+    expect(delta.added).toHaveLength(0);
+    expect(delta.removed).toHaveLength(0);
+    expect(delta.modified.map(m => m.nodeId)).toEqual(['c1']);
+  });
+});

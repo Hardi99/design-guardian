@@ -8,7 +8,7 @@ import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
-import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, setTracked, isTracked, type TrackableNode } from './trackedFrames.js';
 
@@ -558,6 +558,9 @@ async function handleSnapshot(): Promise<void> {
   }
 
   await ensurePagesLoaded(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
+  // Avant l'extraction (synchrone) : un nœud coupé-collé garde son dg_id au lieu d'être pris pour une copie.
+  await adoptMovedIdentities(tracked as unknown as BranchNode[],
+    async (id) => (await figma.getNodeByIdAsync(id)) as unknown as IdentifiableNode | null);
 
   const figmaSnapshot: FigmaSnapshot = {
     figmaNodeId: page.id,

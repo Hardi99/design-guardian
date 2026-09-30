@@ -17,16 +17,19 @@ export class DiffService {
   compareSnapshots(v1: FigmaSnapshot, v2: FigmaSnapshot): DeltaJSON {
     const startTime = performance.now();
 
-    // Matcher en couches : dg_id (stable — survit clone/rename/réordre/cross-branch)
-    // → id Figma (same-branch) → chemin d'arbre (legacy sans dg_id, cross-branch cloné).
-    const useDgId = !!v1.root.dg_id && !!v2.root.dg_id;
+    // Matcher en couches, NŒUD PAR NŒUD : dg_id quand les deux versions le portent (stable —
+    // survit clone/rename/réordre/cross-branch) → id Figma (same-branch) → chemin d'arbre
+    // (legacy sans dg_id, cross-branch cloné). Ne dépend pas de la racine : un nœud non
+    // stampé (viewer read-only) retombe seul sur l'id, sans entraîner le reste.
+    const dg1 = this.dgIds(v1.root);
+    const dg2 = this.dgIds(v2.root);
     const sameBranch = v1.root.id === v2.root.id;
-    const keyOf = (node: NodeSnapshot, path: string): string => {
-      if (useDgId && node.dg_id) return `dg:${node.dg_id}`;
+    const keyer = (other: Set<string>) => (node: NodeSnapshot, path: string): string => {
+      if (node.dg_id && other.has(node.dg_id)) return `dg:${node.dg_id}`;
       return sameBranch ? `id:${node.id}` : `path:${path}`;
     };
-    const v1Map = this.flatten(v1.root, keyOf);
-    const v2Map = this.flatten(v2.root, keyOf);
+    const v1Map = this.flatten(v1.root, keyer(dg2));
+    const v2Map = this.flatten(v2.root, keyer(dg1));
 
     const modified: NodeDelta[] = [];
     const added: NodeDelta[] = [];
@@ -91,6 +94,16 @@ export class DiffService {
     };
     traverse(root, `${root.type}:${root.name}`, null);
     return map;
+  }
+
+  private dgIds(root: NodeSnapshot): Set<string> {
+    const ids = new Set<string>();
+    const visit = (n: NodeSnapshot): void => {
+      if (n.dg_id) ids.add(n.dg_id);
+      n.children?.forEach(visit);
+    };
+    visit(root);
+    return ids;
   }
 
   // Position de `node` dans le repère de `frame`. `rotation` suit la convention de capture
