@@ -537,3 +537,98 @@ describe('racine synthétique page-centric', () => {
     expect(delta.modified.find(n => n.nodeId === 'page')).toBeUndefined();
   });
 });
+
+// ─── Positions relatives au parent ───────────────────────────────────────────
+// Les snapshots portent des coordonnées ABSOLUES (absoluteTransform). Le diff doit
+// comparer la position de chaque nœud DANS SON PARENT (comme le panneau Figma) :
+// déplacer un cadre ne déplace pas « à la main » tout ce qu'il contient.
+
+describe('positions relatives au parent', () => {
+  const node = (
+    id: string, type: string, x: number, y: number,
+    children?: NodeSnapshot[], extra: Partial<NodeSnapshot> = {},
+  ): NodeSnapshot => ({
+    id, name: id, type, x, y, width: 50, height: 50, opacity: 1, fills: [], strokes: [],
+    ...(children ? { children } : {}), ...extra,
+  });
+  const snap = (root: NodeSnapshot): FigmaSnapshot =>
+    ({ figmaNodeId: root.id, figmaNodeName: root.name, capturedAt: '2026-09-30T00:00:00Z', root });
+  const svc = new DiffService();
+  const ids = (d: ReturnType<DiffService['compareSnapshots']>) => d.modified.map(n => n.nodeId).sort();
+  const change = (d: ReturnType<DiffService['compareSnapshots']>, id: string, p: string) =>
+    d.modified.find(n => n.nodeId === id)?.changes.find(c => c.property === p);
+
+  it('cadre déplacé → seul le cadre est signalé, pas ses descendants', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [
+      node('card', 'FRAME', 100, 40, [node('label', 'TEXT', 110, 50), node('icon', 'VECTOR', 130, 50)]),
+    ]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [
+      node('card', 'FRAME', 200, 40, [node('label', 'TEXT', 210, 50), node('icon', 'VECTOR', 230, 50)]),
+    ]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(ids(d)).toEqual(['card']);
+    expect(change(d, 'card', 'x')?.delta).toBe('+100.00px');
+  });
+
+  it('cadre déplacé ET enfant ajusté → l\'enfant est signalé pour SON seul déplacement', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [node('card', 'FRAME', 100, 40, [node('label', 'TEXT', 110, 50)])]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [node('card', 'FRAME', 200, 40, [node('label', 'TEXT', 220, 50)])]));
+    const d = svc.compareSnapshots(v1, v2);
+    const x = change(d, 'label', 'x');
+    expect(x?.delta).toBe('+10.00px');
+    expect(x?.oldValue).toBe(10); // position dans le parent, comme le panneau Figma
+    expect(x?.newValue).toBe(20);
+    expect(change(d, 'label', 'y')).toBeUndefined();
+  });
+
+  it('frame capturée déplacée sur le canevas → la racine est signalée une fois, rien d\'autre', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [node('btn', 'RECTANGLE', 20, 20, [node('txt', 'TEXT', 30, 25)])]));
+    const v2 = snap(node('root', 'FRAME', 500, 300, [node('btn', 'RECTANGLE', 520, 320, [node('txt', 'TEXT', 530, 325)])]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(ids(d)).toEqual(['root']);
+  });
+
+  // Un groupe n'est pas un repère dans Figma : ses bornes suivent ses enfants. Mesurer les
+  // enfants par rapport au groupe ferait « bouger » les frères quand un enfant élargit le groupe.
+  it('groupe : un enfant qui élargit le groupe ne déplace pas ses frères', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [
+      node('grp', 'GROUP', 10, 10, [node('a', 'RECTANGLE', 10, 10), node('b', 'RECTANGLE', 50, 10)]),
+    ]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [
+      node('grp', 'GROUP', 0, 10, [node('a', 'RECTANGLE', 0, 10), node('b', 'RECTANGLE', 50, 10)]),
+    ]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(d.modified.find(n => n.nodeId === 'b')).toBeUndefined();
+    expect(change(d, 'a', 'x')?.delta).toBe('-10.00px');
+  });
+
+  it('groupe déplacé en bloc → ses enfants restent signalés (comme dans Figma, repère = le cadre)', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [node('grp', 'GROUP', 10, 10, [node('a', 'RECTANGLE', 10, 10)])]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [node('grp', 'GROUP', 40, 10, [node('a', 'RECTANGLE', 40, 10)])]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(change(d, 'a', 'x')?.delta).toBe('+30.00px');
+  });
+
+  // Parent tourné : la position de l'enfant se lit dans le repère du parent. `rotation`
+  // suit la convention de capture (extractRotation) : -90 ↔ matrice [[0,1],[-1,0]],
+  // donc un enfant en (10,0) local est à (0,-10) du parent en absolu.
+  it('parent tourné puis déplacé → l\'enfant n\'est pas signalé', () => {
+    const v1 = snap(node('root', 'FRAME', 0, 0, [
+      node('rot', 'FRAME', 100, 100, [node('kid', 'RECTANGLE', 100, 90, undefined, { rotation: -90 })], { rotation: -90 }),
+    ]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [
+      node('rot', 'FRAME', 150, 100, [node('kid', 'RECTANGLE', 150, 90, undefined, { rotation: -90 })], { rotation: -90 }),
+    ]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(ids(d)).toEqual(['rot']);
+  });
+
+  it('parent tourné → un déplacement local de l\'enfant est mesuré dans le repère du parent', () => {
+    // local (10,0) → (15,0) : +5 sur x local ; en absolu c'est -5 sur y.
+    const v1 = snap(node('root', 'FRAME', 0, 0, [node('rot', 'FRAME', 100, 100, [node('kid', 'RECTANGLE', 100, 90)], { rotation: -90 })]));
+    const v2 = snap(node('root', 'FRAME', 0, 0, [node('rot', 'FRAME', 100, 100, [node('kid', 'RECTANGLE', 100, 85)], { rotation: -90 })]));
+    const d = svc.compareSnapshots(v1, v2);
+    expect(change(d, 'kid', 'x')?.delta).toBe('+5.00px');
+    expect(change(d, 'kid', 'y')).toBeUndefined();
+  });
+});

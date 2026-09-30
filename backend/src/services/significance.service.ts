@@ -104,7 +104,9 @@ export function nodeIdsToRender(delta: DeltaJSON, cap: number, derivedIds?: Set<
 
 // Un déplacement est DÉRIVÉ s'il est identique à celui du parent : le nœud est « porté »
 // par son parent (qui a bougé), pas déplacé à la main. Retourne les ids aux moves dérivés.
-// Coords absolues → bouger un frame décale tous ses descendants du même delta = conséquence.
+// Utile pour les deltas enregistrés AVANT le diff en positions relatives au parent (coords
+// absolues : bouger un frame décalait tous ses descendants du même delta). Les nouveaux
+// deltas ne portent plus ces moves portés : la fonction n'y trouve rien.
 export function derivedMoveIds(delta: DeltaJSON, parent: Map<string, string | null>): Set<string> {
   const moveOf = new Map<string, { dx: number; dy: number }>();
   for (const n of delta.modified) {

@@ -27,7 +27,7 @@ Propriétés capturées :
 
 Résultat : `FigmaSnapshot` (JSON pur, aucun binaire).
 
-> **Pourquoi les coordonnées absolues ?** Le diff compare des nœuds par `id` entre deux snapshots. Des coordonnées relatives dépendraient du parent — si le parent bouge, chaque enfant apparaîtrait comme modifié. L'absolu garantit que seul le nœud réellement déplacé est marqué.
+> **Capture en absolu, comparaison en relatif.** Le snapshot garde les coordonnées absolues (`absoluteTransform`) : elles servent au rendu et aux bbox. Mais le diff ramène chaque nœud dans le repère de son parent avant de comparer, comme le panneau Figma : en absolu, déplacer un cadre décalerait tous ses descendants et les signalerait tous. Deux règles de Figma sont reproduites : un groupe (ou une opération booléenne) n'est pas un repère, ses enfants se mesurent dans le cadre qui le contient ; un parent tourné est « dé-tourné » (convention de `rotation` : `extractRotation`).
 
 ---
 
@@ -40,7 +40,7 @@ Résultat : `FigmaSnapshot` (JSON pur, aucun binaire).
 3. **Added** : ids présents en v2 mais absents de v1
 4. **Modified** : `compareNodes()` pour chaque id commun
 
-Propriétés comparées avec tolérance `ε = 0.01px` : `x, y, width, height`.
+Propriétés comparées avec tolérance `ε = 0.01px` : `x, y` (dans le parent), `width, height`.
 Sans tolérance : `opacity` (seuil 0.001), `cornerRadius`, `strokeWeight`, couleur fill/stroke, `vectorPaths`.
 
 Sortie : `DeltaJSON` → stocké dans `analysis_json`, transmis à OpenAI.

@@ -7,6 +7,10 @@ import type {
   DeltaJSON,
 } from '../types/figma.js';
 
+// Types sans repère propre dans Figma : leurs bornes suivent leurs enfants, qui se mesurent
+// donc dans le cadre qui les contient (sinon un enfant qui élargit le groupe « déplace » ses frères).
+const COORD_TRANSPARENT = new Set(['GROUP', 'BOOLEAN_OPERATION']);
+
 export class DiffService {
   private readonly EPSILON = 0.01; // px tolerance for geometric comparisons
 
@@ -75,20 +79,36 @@ export class DiffService {
   }
 
   // Aplatit l'arbre en map clé→nœud. La clé est fournie par `keyOf` (matcher en couches).
+  // x/y y sont ramenés dans le repère du parent (comme le panneau Figma) : les snapshots
+  // portent des coordonnées absolues, et comparer l'absolu signalerait tout le contenu
+  // d'un cadre déplacé. La racine garde ses coordonnées (pas de parent capturé).
   private flatten(root: NodeSnapshot, keyOf: (node: NodeSnapshot, path: string) => string): Map<string, NodeSnapshot> {
     const map = new Map<string, NodeSnapshot>();
-    const traverse = (node: NodeSnapshot, path: string): void => {
-      map.set(keyOf(node, path), node);
-      node.children?.forEach((child, i) => traverse(child, `${path}/${i}:${child.type}:${child.name}`));
+    const traverse = (node: NodeSnapshot, path: string, frame: NodeSnapshot | null): void => {
+      map.set(keyOf(node, path), frame ? { ...node, ...this.localPosition(node, frame) } : node);
+      const childFrame = frame && COORD_TRANSPARENT.has(node.type) ? frame : node;
+      node.children?.forEach((child, i) => traverse(child, `${path}/${i}:${child.type}:${child.name}`, childFrame));
     };
-    traverse(root, `${root.type}:${root.name}`);
+    traverse(root, `${root.type}:${root.name}`, null);
     return map;
+  }
+
+  // Position de `node` dans le repère de `frame`. `rotation` suit la convention de capture
+  // (extractRotation du plugin) : la matrice absolue du repère vaut [[cos r, -sin r], [sin r, cos r]].
+  private localPosition(node: NodeSnapshot, frame: NodeSnapshot): { x: number; y: number } {
+    const dx = node.x - frame.x;
+    const dy = node.y - frame.y;
+    const r = ((frame.rotation ?? 0) * Math.PI) / 180;
+    if (r === 0) return { x: dx, y: dy };
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    return { x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
   }
 
   private compareNodes(v1: NodeSnapshot, v2: NodeSnapshot): PropertyChange[] {
     const changes: PropertyChange[] = [];
 
-    // Position
+    // Position (dans le parent — cf. flatten)
     this.compareNumeric(changes, 'x', v1.x, v2.x, 'px');
     this.compareNumeric(changes, 'y', v1.y, v2.y, 'px');
 
