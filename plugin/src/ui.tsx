@@ -20,7 +20,8 @@ import './ui.css';
 
 initSentry();
 
-const API_BASE = 'https://design-guardian.up.railway.app';
+// Surchargeable au build (VITE_API_BASE) pour tester contre un backend local.
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://design-guardian.up.railway.app';
 let currentLinkToken: string | null = null;
 
 const PLAN_RANK: Record<Plan, number> = { free: 0, pro: 1, team: 2 };

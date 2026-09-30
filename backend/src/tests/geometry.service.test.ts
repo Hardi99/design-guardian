@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nodeBboxRelative, nodeBboxIn, enrichDeltaGeometry } from '../services/geometry.service.js';
+import { nodeBboxRelative, nodeBboxIn, enrichDeltaGeometry, renderFrame } from '../services/geometry.service.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 
 const snap = (): FigmaSnapshot => ({
@@ -115,5 +115,36 @@ describe('nodeBboxIn', () => {
   it('null si le nœud ou l\'origine est introuvable', () => {
     expect(nodeBboxIn(s(), 'zzz', 'accueil')).toBeNull();
     expect(nodeBboxIn(s(), 'logo', 'zzz')).toBeNull();
+  });
+});
+
+// Dimensions de l'image de rendu. En page-centric la racine est une PAGE sans géométrie
+// (0×0 volontaire) : le rendu est celui de la PREMIÈRE frame suivie. Un cadre 0×0 donne
+// une échelle nulle au viewer → image invisible (« visuel perdu »).
+describe('renderFrame', () => {
+  const pageSnap = (): FigmaSnapshot => ({
+    root: { id: 'page', name: 'P', type: 'PAGE', x: 0, y: 0, width: 0, height: 0, opacity: 1, fills: [], strokes: [],
+      children: [
+        { id: 'home', name: 'Home', type: 'FRAME', x: 0, y: 0, width: 428, height: 926, aabb: { x: 0, y: 0, w: 430, h: 930 }, opacity: 1, fills: [], strokes: [], children: [] },
+        { id: 'about', name: 'About', type: 'FRAME', x: 500, y: 0, width: 100, height: 100, opacity: 1, fills: [], strokes: [], children: [] },
+      ] },
+  } as unknown as FigmaSnapshot);
+
+  it('page → dimensions (AABB) de la première frame suivie', () => {
+    expect(renderFrame(pageSnap())).toEqual({ w: 430, h: 930 });
+  });
+
+  it('frame → dimensions de la racine', () => {
+    expect(renderFrame(snap())).toEqual({ w: 200, h: 100 });
+  });
+
+  it('page sans frame suivie → null (jamais 0×0)', () => {
+    const s = pageSnap(); s.root.children = [];
+    expect(renderFrame(s)).toBeNull();
+  });
+
+  it('enrichDeltaGeometry sur une page → frame = celle du rendu, pas 0×0', () => {
+    const delta = { modified: [], added: [], removed: [], totalChanges: 0, metadata: {} } as unknown as DeltaJSON;
+    expect(enrichDeltaGeometry(delta, pageSnap(), null).frame).toEqual({ w: 430, h: 930 });
   });
 });

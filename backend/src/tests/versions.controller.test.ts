@@ -220,3 +220,32 @@ describe('GET /api/versions/versions/:id — stored geometry (no snapshot downlo
     expect(body.viewports).toEqual([{ id: 'accueil', name: 'Accueil', frame: { w: 400, h: 800 }, changes: 2 }]);
   });
 });
+
+/**
+ * Versions page-centric déjà enregistrées avec `frame: {w:0,h:0}` (racine PAGE) : le viewer
+ * calculait une échelle nulle → rendu invisible. Un cadre vide est traité comme absent et
+ * recalculé depuis le snapshot (première frame suivie) — répare les versions existantes.
+ */
+describe('GET /api/versions/versions/:id — cadre 0×0 enregistré (page)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockState.versionRow = {
+      id: 'v2', version_number: 2, branch_name: 'main', status: 'draft',
+      parent_id: null, storage_path: null,
+      analysis_json: { modified: [], added: [], removed: [], totalChanges: 0, metadata: {}, frame: { w: 0, h: 0 } },
+      assets: { project_id: 'p1' },
+    };
+    versioningMocks.resolveSnapshot.mockResolvedValue({
+      figmaNodeId: 'page', figmaNodeName: 'P', capturedAt: '2026-09-30T00:00:00Z',
+      root: { id: 'page', name: 'P', type: 'PAGE', x: 0, y: 0, width: 0, height: 0, opacity: 1, fills: [], strokes: [],
+        children: [{ id: 'home', name: 'Home', type: 'FRAME', x: 0, y: 0, width: 428, height: 926, opacity: 1, fills: [], strokes: [], children: [] }] },
+    } as never);
+  });
+
+  it('current_frame = dimensions de la première frame suivie', async () => {
+    const res = await createApp().request('/api/versions/versions/v2?thumbs=1', { headers: { 'X-API-Key': 'key-of-p1' } });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { current_frame: { w: number; h: number } | null };
+    expect(body.current_frame).toEqual({ w: 428, h: 926 });
+  });
+});

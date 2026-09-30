@@ -7,7 +7,7 @@ import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from 
 import { statusSchema, restoreSchema } from '../types/api.js';
 import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
 import { DiffService } from '../services/diff.service.js';
-import { enrichDeltaGeometry, nodeBboxRelative } from '../services/geometry.service.js';
+import { enrichDeltaGeometry, nodeBboxRelative, renderFrame } from '../services/geometry.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -110,7 +110,9 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // par T3/T4 dans analysis_json depuis la capture. Calculée avant les downloads pour
   // décider si un snapshot est réellement nécessaire (versions legacy uniquement).
   const delta = versionData.analysis_json as DeltaJSON | null;
-  const storedFrame = delta?.frame ?? null;
+  // Un cadre vide (0×0 : versions page enregistrées avant renderFrame) = absent → recalculé.
+  const usableFrame = (f?: { w: number; h: number } | null) => (f && f.w > 0 && f.h > 0 ? f : null);
+  const storedFrame = usableFrame(delta?.frame);
   // Version legacy (pré-géométrie stockée) ssi au moins un nœud du delta n'a pas de bbox.
   const needSnapForBbox = wantThumbs && !!delta &&
     [...delta.modified, ...delta.added, ...delta.removed].some(n => n.bbox === undefined);
@@ -133,7 +135,8 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   const currentSnap = (needSnapForBbox || (wantThumbs && !storedFrame))
     ? await resolveSnapshot(getSupabaseStorage(), versionData)
     : null;
-  const prevSnap = (wantThumbs && needSnapForBbox && prevVersion)
+  const storedPrevFrame = usableFrame((prevVersion?.analysis_json as DeltaJSON | null)?.frame);
+  const prevSnap = (wantThumbs && prevVersion && (needSnapForBbox || !storedPrevFrame))
     ? await resolveSnapshot(getSupabaseStorage(), prevVersion)
     : null;
 
@@ -234,12 +237,10 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   }
 
   // Frame courante : géométrie stockée en priorité, repli snapshot (legacy) sinon.
-  const current_frame = storedFrame ?? (currentSnap ? { w: currentSnap.root.width, h: currentSnap.root.height } : null);
-  // Frame précédente : repli prevSnap si téléchargé (legacy), sinon la frame que le
-  // parent avait lui-même stockée à sa propre capture (= sa propre frame « courante »).
-  const prev_frame = prevSnap
-    ? { w: prevSnap.root.width, h: prevSnap.root.height }
-    : ((prevVersion?.analysis_json as DeltaJSON | null)?.frame ?? null);
+  const current_frame = storedFrame ?? (currentSnap ? renderFrame(currentSnap) : null);
+  // Frame précédente : celle que le parent a stockée à sa propre capture, sinon repli
+  // snapshot (legacy, ou v1 : pas de delta donc pas de frame stockée).
+  const prev_frame = storedPrevFrame ?? (prevSnap ? renderFrame(prevSnap) : null);
 
   return c.json({
     version: versionData, prev_version: prevVersion,
