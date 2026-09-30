@@ -13,14 +13,14 @@
 - **Éditeur** : VS Code, TypeScript Strict Mode activé (`tsconfig.json` strict: true)
 - **Langages** : TypeScript 5.x (strictement typé, zéro `any`)
 - **Gestion de sources** : Git + GitHub (branche principal : `master`)
-- **Gestionnaire de paquets** : bun (backend, utilisé par la CI — `bun.lock`) + npm (plugin) — lock files commités
+- **Gestionnaire de paquets** : npm partout (backend, plugin, webapp) — `package-lock.json` commités ; la CI installe avec `npm ci`, comme Railway : les versions testées sont celles déployées
 - **Runner de tests** : Vitest (configuration `.vitest.config.ts`, environnement `node`)
 - **Compilateur** : `tsc --noEmit` (vérification de type, pas d'émission de fichier)
-- **Serveur d'app** : HonoJS sur `@hono/node-server` (Node.js 20+, port local 3001)
+- **Serveur d'app** : HonoJS sur `@hono/node-server` (Node.js 24, `backend/.nvmrc`, port local 3001)
 
 **Commandes standards** :
 ```bash
-cd backend && bun install && bun run typecheck && bun run test:coverage
+cd backend && npm ci && npm run typecheck && npm run test:coverage
 cd plugin && npm ci && npm run typecheck && npm test
 ```
 
@@ -47,17 +47,18 @@ cd plugin && npm ci && npm run typecheck && npm test
 ```
 git push master
     ↓
-GitHub Actions (.github/workflows/ci.yml:1-73)
-    ├─ Job backend (.github/workflows/ci.yml:11-44)
-    │   ├─ bun install
-    │   ├─ bun run typecheck (.github/workflows/ci.yml:28-29)
-    │   ├─ bun run test:coverage (.github/workflows/ci.yml:34-35)
+GitHub Actions (.github/workflows/ci.yml:1-81)
+    ├─ Job backend (.github/workflows/ci.yml:13-52)
+    │   ├─ npm ci
+    │   ├─ npm audit --omit=dev --audit-level=high (.github/workflows/ci.yml:33-34)
+    │   ├─ npm run typecheck (.github/workflows/ci.yml:36-37)
+    │   ├─ npm run test:coverage (.github/workflows/ci.yml:42-43)
     │   │  + Quality Gate : couverture ≥ 80% (appliquée nativement par Vitest)
-    │   └─ bun run build
+    │   └─ npm run build
     │
-    └─ Job plugin (.github/workflows/ci.yml:47-73)
+    └─ Job plugin (.github/workflows/ci.yml:55-81)
         ├─ npm ci
-        ├─ npm run typecheck (.github/workflows/ci.yml:66-67)
+        ├─ npm run typecheck (.github/workflows/ci.yml:74-75)
         ├─ npm test (.github/workflows/ci.yml:69-70)
         └─ npm run build
     ↓ (si CI vert)
@@ -116,27 +117,29 @@ La CI échoue automatiquement si la couverture est inférieure à 80 % sur state
 
 Chaque push vers `master` ou PR déclenche immédiatement :
 
-1. **Install** (`.github/workflows/ci.yml:25-26, 63-64`)
-   - Backend : `bun install`
-   - Plugin : `npm ci` (install exakt)
+1. **Install** (`.github/workflows/ci.yml:29-30, 71-72`)
+   - Backend et plugin : `npm ci` (installation exacte du `package-lock.json`, Node 24 lu dans `backend/.nvmrc`)
 
-2. **Type check** (`.github/workflows/ci.yml:28-29, 66-67`)
-   - Backend : `bun run typecheck` (tsc --noEmit)
+2. **Audit de sécurité** (`.github/workflows/ci.yml:32-34`)
+   - Backend : `npm audit --omit=dev --audit-level=high` — bloque une vulnérabilité haute ou critique dans les dépendances de production
+
+3. **Type check** (`.github/workflows/ci.yml:36-37, 74-75`)
+   - Backend : `npm run typecheck` (tsc --noEmit)
    - Plugin : `npm run typecheck`
 
-3. **Unit tests** (`.github/workflows/ci.yml:34-35, 69-70`)
-   - Backend : `bun run test:coverage` (Vitest + coverage report)
+4. **Unit tests** (`.github/workflows/ci.yml:42-43, 77-78`)
+   - Backend : `npm run test:coverage` (Vitest + coverage report)
    - Plugin : `npm test` (Vitest)
 
-4. **Coverage gate** (`.github/workflows/ci.yml:31-33`)
+5. **Coverage gate** (`.github/workflows/ci.yml:39-41`)
    - Backend seulement : Vitest échoue sous 80 % (statements/lines/functions)
    - Logs dans l'artefact coverage HTML
 
-5. **Build** (`.github/workflows/ci.yml:43-44, 72-73`)
-   - Backend : `bun run build`
+6. **Build** (`.github/workflows/ci.yml:51-52, 80-81`)
+   - Backend : `npm run build`
    - Plugin : `npm run build`
 
-**Secrets injectés en CI** (`.github/workflows/ci.yml:36-41`) :
+**Secrets injectés en CI** (`.github/workflows/ci.yml:44-49`) :
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`, `OPENAI_API_KEY`
 - Placeholders si secrets absents (tests résilients)
 
