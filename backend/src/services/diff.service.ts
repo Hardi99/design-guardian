@@ -2,6 +2,8 @@ import type {
   FigmaSnapshot,
   NodeSnapshot,
   FigmaColor,
+  FigmaFill,
+  FigmaStroke,
   NodeDelta,
   PropertyChange,
   DeltaJSON,
@@ -212,38 +214,9 @@ export class DiffService {
       this.compareNumeric(changes, 'strokeWeight', v1.strokeWeight, v2.strokeWeight, 'px');
     }
 
-    // Fills — compare all fills, not just the first
-    if (v1.fills.length !== v2.fills.length) {
-      changes.push({ property: 'fills', oldValue: `${v1.fills.length} fill(s)`, newValue: `${v2.fills.length} fill(s)`, delta: `${v1.fills.length} → ${v2.fills.length}` });
-    }
-    const fillCount = Math.min(v1.fills.length, v2.fills.length);
-    for (let i = 0; i < fillCount; i++) {
-      const f1 = v1.fills[i];
-      const f2 = v2.fills[i];
-      if (!f1 || !f2) continue;
-      const label = v1.fills.length > 1 ? `fill[${i}]` : 'fill';
-      if (f1.type !== f2.type) {
-        changes.push({ property: label, oldValue: f1.type, newValue: f2.type, delta: `${f1.type} → ${f2.type}` });
-        continue;
-      }
-      if (f1.type === 'SOLID' && f2.type === 'SOLID' && f1.color && f2.color && !this.colorsEqual(f1.color, f2.color)) {
-        const oldHex = this.colorToHex(f1.color);
-        const newHex = this.colorToHex(f2.color);
-        changes.push({ property: label, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
-      }
-      if ((f1.visible ?? true) !== (f2.visible ?? true)) {
-        changes.push({ property: `${label}.visible`, oldValue: f1.visible, newValue: f2.visible, delta: f2.visible ? 'masqué → visible' : 'visible → masqué' });
-      }
-    }
-
-    // Strokes (compare first solid stroke)
-    const v1Stroke = v1.strokes.find(s => s.type === 'SOLID' && s.color);
-    const v2Stroke = v2.strokes.find(s => s.type === 'SOLID' && s.color);
-    if (v1Stroke?.color && v2Stroke?.color && !this.colorsEqual(v1Stroke.color, v2Stroke.color)) {
-      const oldHex = this.colorToHex(v1Stroke.color);
-      const newHex = this.colorToHex(v2Stroke.color);
-      changes.push({ property: 'stroke', oldValue: oldHex, newValue: newHex, delta: `${oldHex} -> ${newHex}` });
-    }
+    // Peintures : remplissages ET contours, par le même comparateur (tous, pas seulement le premier).
+    this.comparePaints(changes, 'fill', v1.fills, v2.fills);
+    this.comparePaints(changes, 'stroke', v1.strokes, v2.strokes);
 
     // Vector paths (for VECTOR nodes)
     if (v1.vectorPaths && v2.vectorPaths) {
@@ -326,6 +299,60 @@ export class DiffService {
     }
 
     return changes;
+  }
+
+  /**
+   * Compare deux listes de peintures (remplissages ou contours). Propriétés émises : `<p>s`
+   * (nombre), `<p>` / `<p>[i]` (type ou couleur unie), `.gradient` (étapes, angle), `.image`,
+   * `.scaleMode`, `.visible`. Un champ absent d'un côté (capture ancienne) n'est pas comparé.
+   */
+  private comparePaints(
+    changes: PropertyChange[],
+    p: 'fill' | 'stroke',
+    a: readonly (FigmaFill | FigmaStroke)[],
+    b: readonly (FigmaFill | FigmaStroke)[],
+  ): void {
+    if (a.length !== b.length) {
+      changes.push({ property: `${p}s`, oldValue: `${a.length} ${p}(s)`, newValue: `${b.length} ${p}(s)`, delta: `${a.length} → ${b.length}` });
+    }
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      const p1 = a[i] as FigmaFill;
+      const p2 = b[i] as FigmaFill;
+      const label = a.length > 1 ? `${p}[${i}]` : p;
+      if (p1.type !== p2.type) {
+        changes.push({ property: label, oldValue: p1.type, newValue: p2.type, delta: `${p1.type} → ${p2.type}` });
+        continue;
+      }
+      if (p1.type === 'SOLID' && p1.color && p2.color && !this.colorsEqual(p1.color, p2.color)) {
+        const oldHex = this.colorToHex(p1.color);
+        const newHex = this.colorToHex(p2.color);
+        changes.push({ property: label, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
+      }
+      if (p1.gradientStops && p2.gradientStops && this.gradientChanged(p1, p2)) {
+        const hexes = (f: FigmaFill) => (f.gradientStops ?? []).map(st => this.colorToHex(st.color)).join(', ');
+        changes.push({ property: `${label}.gradient`, oldValue: hexes(p1), newValue: hexes(p2), delta: `${hexes(p1)} → ${hexes(p2)}` });
+      }
+      if (p1.imageHash !== undefined && p2.imageHash !== undefined && p1.imageHash !== p2.imageHash) {
+        changes.push({ property: `${label}.image`, oldValue: p1.imageHash, newValue: p2.imageHash, delta: 'image remplacée' });
+      }
+      if (p1.scaleMode !== undefined && p2.scaleMode !== undefined && p1.scaleMode !== p2.scaleMode) {
+        changes.push({ property: `${label}.scaleMode`, oldValue: p1.scaleMode, newValue: p2.scaleMode, delta: `${p1.scaleMode} → ${p2.scaleMode}` });
+      }
+      if (p1.visible !== undefined && p2.visible !== undefined && p1.visible !== p2.visible) {
+        changes.push({ property: `${label}.visible`, oldValue: p1.visible, newValue: p2.visible, delta: p2.visible ? 'masqué → visible' : 'visible → masqué' });
+      }
+    }
+  }
+
+  // Étapes (position ± ε, couleur) ou angle (± 1°) différents.
+  private gradientChanged(a: FigmaFill, b: FigmaFill): boolean {
+    const s1 = a.gradientStops ?? [], s2 = b.gradientStops ?? [];
+    if (s1.length !== s2.length) return true;
+    if (a.gradientAngle !== undefined && b.gradientAngle !== undefined && Math.abs(a.gradientAngle - b.gradientAngle) > 1) return true;
+    return s1.some((st, i) => {
+      const other = s2[i];
+      return !other || Math.abs(st.position - other.position) > this.EPSILON || !this.colorsEqual(st.color, other.color);
+    });
   }
 
   private compareNumeric(

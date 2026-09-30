@@ -781,3 +781,50 @@ describe('éléments flottants', () => {
     expect(svc.compareSnapshots(v2, v2).totalChanges).toBe(0);
   });
 });
+
+// ─── Trous de détection — peintures (remplissages ET contours) ───────────────
+
+describe('trous de détection — peintures', () => {
+  const svc = new DiffService();
+  const red = { r: 1, g: 0, b: 0, a: 1 }, green = { r: 0, g: 1, b: 0, a: 1 }, blue = { r: 0, g: 0, b: 1, a: 1 };
+  const grad = (c: typeof red, pos = 0.3) => ({ type: 'GRADIENT_LINEAR' as const, gradientStops: [{ position: 0, color: c }, { position: pos, color: blue }], gradientAngle: 0 });
+  const props = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) =>
+    svc.compareSnapshots(makeSnapshot(a), makeSnapshot(b)).modified[0]?.changes.map(c => c.property) ?? [];
+
+  it('étape de dégradé qui change de couleur → fill.gradient', () => {
+    expect(props({ fills: [grad(red)] }, { fills: [grad(green)] })).toEqual(['fill.gradient']);
+  });
+
+  it('bruit flottant sur une position d\'étape → aucun changement', () => {
+    expect(props({ fills: [grad(red, 0.3)] }, { fills: [grad(red, 0.300000001)] })).toEqual([]);
+  });
+
+  it('image remplacée → fill.image « image remplacée »', () => {
+    const d = svc.compareSnapshots(
+      makeSnapshot({ fills: [{ type: 'IMAGE', imageHash: 'a', scaleMode: 'FILL' } as never] }),
+      makeSnapshot({ fills: [{ type: 'IMAGE', imageHash: 'b', scaleMode: 'FILL' } as never] }));
+    const c = d.modified[0]?.changes.find(x => x.property === 'fill.image');
+    expect(c?.delta).toBe('image remplacée');
+  });
+
+  it('contour ajouté → strokes (0 → 1)', () => {
+    expect(props({ strokes: [] }, { strokes: [{ type: 'SOLID', color: red }] })).toEqual(['strokes']);
+  });
+
+  it('second contour qui change de couleur → stroke[1]', () => {
+    expect(props(
+      { strokes: [{ type: 'SOLID', color: red }, { type: 'SOLID', color: red }] },
+      { strokes: [{ type: 'SOLID', color: red }, { type: 'SOLID', color: green }] },
+    )).toEqual(['stroke[1]']);
+  });
+
+  it('contour masqué → stroke.visible', () => {
+    expect(props({ strokes: [{ type: 'SOLID', color: red, visible: true }] }, { strokes: [{ type: 'SOLID', color: red, visible: false }] }))
+      .toEqual(['stroke.visible']);
+  });
+
+  it('capture ancienne (contour sans visible d\'un côté) → aucun stroke.visible', () => {
+    expect(props({ strokes: [{ type: 'SOLID', color: red }] }, { strokes: [{ type: 'SOLID', color: red, visible: true }] }))
+      .toEqual([]);
+  });
+});
