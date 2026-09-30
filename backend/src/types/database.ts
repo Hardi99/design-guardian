@@ -1,4 +1,4 @@
-import type { DeltaJSON } from './figma.js';
+import type { DeltaJSON, FrameSummary } from './figma.js';
 
 export interface Profile {
   id: string;
@@ -59,4 +59,6 @@ export interface Version {
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
+  // Page-centric : extrait `analysis_json->frames` renvoyé par /tree (absent ailleurs).
+  frames?: FrameSummary[] | null;
 }

@@ -39,7 +39,8 @@ versionsRouter.get('/tree', pluginMiddleware, async (c) => {
 
   const { data, error } = await supabase
     .from('versions')
-    .select('id, version_number, branch_name, status, ai_summary, author_name, author_figma_id, author_avatar_url, created_at, parent_id, asset_id, figma_node_id, approved_at, approved_by')
+    // frames : extrait JSON du résumé par frame (page-centric), pas le delta entier.
+    .select('id, version_number, branch_name, status, ai_summary, author_name, author_figma_id, author_avatar_url, created_at, parent_id, asset_id, figma_node_id, approved_at, approved_by, frames:analysis_json->frames')
     .eq('asset_id', asset_id)
     .order('created_at', { ascending: true });
 
