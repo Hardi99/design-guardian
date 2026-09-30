@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createAssetSchema, createCheckpointSchema } from '../types/api.js';
+import { createAssetSchema, createCheckpointSchema, uploadRenderSchema } from '../types/api.js';
 
 /**
  * Un champ absent du schéma Zod est supprimé SILENCIEUSEMENT du corps validé — c'est la
@@ -49,5 +49,12 @@ describe('createCheckpointSchema — floating', () => {
         root: { ...node, type: 'PAGE', children: [{ ...node, floating: true }] } },
     });
     expect((parsed.snapshot_json.root as { children: Array<{ floating?: boolean }> }).children[0].floating).toBe(true);
+  });
+});
+
+describe('uploadRenderSchema — frame_key', () => {
+  it('conserve frame_key et refuse une clé exotique (chemin de stockage)', () => {
+    expect(uploadRenderSchema.parse({ render_svg_b64: 'x', render_kind: 'png', frame_key: 'DG-A' }).frame_key).toBe('DG-A');
+    expect(() => uploadRenderSchema.parse({ render_svg_b64: 'x', frame_key: '../../etc' })).toThrow();
   });
 });

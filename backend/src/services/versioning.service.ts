@@ -30,19 +30,21 @@ export async function resolveSnapshot(
 }
 
 // Le rendu (image) vit à côté de son snapshot : `…/vN.json` → `…/vN_render.{svg|png}`.
-export function renderPathFor(storagePath: string, kind: 'svg' | 'png'): string {
-  return storagePath.replace('.json', `_render.${kind}`);
+// Page-centric : un rendu PAR FRAME, rangé sous la clé de la frame (`…/vN_render_<clé>.png`).
+export function renderPathFor(storagePath: string, kind: 'svg' | 'png', frameKey?: string): string {
+  const suffix = frameKey ? `_render_${frameKey.replace(/[^A-Za-z0-9_-]/g, '_')}` : '_render';
+  return storagePath.replace('.json', `${suffix}.${kind}`);
 }
 
 // Upload du rendu au path dérivé. Utilisé par l'endpoint d'upload différé (le rendu ne
 // voyage plus dans le POST /checkpoints du chemin critique) et, en repli, par les anciens
 // clients qui l'envoient encore dans le POST. `upsert` : un re-render écrase l'ancien.
 export async function uploadRender(
-  storage: StorageApi, storagePath: string, renderB64: string, kind: 'svg' | 'png',
+  storage: StorageApi, storagePath: string, renderB64: string, kind: 'svg' | 'png', frameKey?: string,
 ): Promise<{ error: { message: string } | null }> {
   const ctype = kind === 'png' ? 'image/png' : 'image/svg+xml';
   return storage.from(SNAPSHOTS_BUCKET)
-    .upload(renderPathFor(storagePath, kind), Buffer.from(renderB64, 'base64'), { contentType: ctype, upsert: true });
+    .upload(renderPathFor(storagePath, kind, frameKey), Buffer.from(renderB64, 'base64'), { contentType: ctype, upsert: true });
 }
 
 export interface PrevVersion { id: string; version_number: number; storage_path: string | null }

@@ -103,6 +103,19 @@ export interface PropertyChange {
   delta?: string;
 }
 
+export type FrameStatus = 'initial' | 'modified' | 'unchanged';
+
+// Page-centric : résumé d'UNE frame suivie à une version. `key` = identité stable (dg_id,
+// repli id Figma) — c'est elle qui relie les versions d'une même frame.
+export interface FrameSummary {
+  key: string;
+  id: string;
+  name: string;
+  frame: { w: number; h: number };
+  status: FrameStatus;
+  changes: number; // groupes (cf. #71) ; 0 si unchanged ou initial
+}
+
 // Changes for a single node
 export interface NodeDelta {
   nodeId: string;
@@ -144,7 +157,10 @@ export interface DeltaJSON {
   frame?: { w: number; h: number }; // dims de la root du snapshot courant — cf. geometry.service
   // Page-centric : un cadre navigable par viewport modifié. `changes` compte les GROUPES
   // au sens du regroupement d'icônes (clé = instanceRoot ?? nodeId), pas les nœuds bruts.
-  viewports?: Array<{ id: string; name: string; frame: { w: number; h: number }; changes: number }>;
+  viewports?: Array<{ id: string; key: string; name: string; frame: { w: number; h: number }; changes: number }>;
+  // Page-centric : résumé de CHAQUE frame suivie à cette version (y compris la v1) — c'est
+  // lui qui permet l'historique d'une frame (cf. frames.service).
+  frames?: FrameSummary[];
   // Page-centric : frames entrées/sorties du PÉRIMÈTRE de suivi entre deux checkpoints.
   // JAMAIS confondues avec added/removed — le design n'a pas changé, le périmètre si.
   scopeIn?:  Array<{ id: string; name: string }>;

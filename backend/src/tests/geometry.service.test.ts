@@ -74,7 +74,7 @@ describe('enrichDeltaGeometry', () => {
 
   it('expose viewports[] avec nom, cadre et compte de changements', () => {
     const out = enrichDeltaGeometry(deltaOf(['logo', 'accueil']), snapPage(), null);
-    expect(out.viewports).toEqual([{ id: 'accueil', name: 'Accueil', frame: { w: 40, h: 20 }, changes: 2 }]);
+    expect(out.viewports).toEqual([{ id: 'accueil', key: 'accueil', name: 'Accueil', frame: { w: 40, h: 20 }, changes: 2 }]);
   });
 
   it('compte les GROUPES : deux nœuds d\'une même icône comptent pour 1', () => {

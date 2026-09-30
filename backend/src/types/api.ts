@@ -145,11 +145,15 @@ export type CreateCheckpointRequest = z.infer<typeof createCheckpointSchema>;
 export const uploadRenderSchema = z.object({
   render_svg_b64: z.string().min(1),
   render_kind: z.enum(['svg', 'png']).default('svg'),
+  // Page-centric : clé de la frame rendue (dg_id ou id Figma). Sert de nom de fichier :
+  // caractères restreints.
+  frame_key: z.string().regex(/^[A-Za-z0-9:;_-]{1,64}$/).optional(),
 });
 export interface CheckpointResponse {
   version: Version;
   analysis: DeltaJSON | null;
   ai_summary: string | null;
+  render_frames: Array<{ key: string; id: string }>; // page-centric : frames à rendre (cf. frames.service)
 }
 
 // ── Version tree (plugin) ─────────────────────────────────────────────────────

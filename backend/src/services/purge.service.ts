@@ -4,6 +4,19 @@ import type Stripe from 'stripe';
 const SNAPSHOTS_BUCKET = 'snapshots';
 type StorageApi = SupabaseClient['storage'];
 
+// Storage.list() renvoie 100 entrées par défaut : on pagine (un dossier de branche dépasse vite
+// 100 fichiers en page-centric — 1 json + jusqu'à 20 rendus par version).
+const LIST_PAGE = 1000;
+export async function listAll(storage: StorageApi, prefix: string): Promise<{ name: string }[]> {
+  const out: { name: string }[] = [];
+  for (let offset = 0; ; offset += LIST_PAGE) {
+    const { data } = await storage.from(SNAPSHOTS_BUCKET).list(prefix, { limit: LIST_PAGE, offset });
+    const page = (data ?? []) as { name: string }[];
+    out.push(...page);
+    if (page.length < LIST_PAGE) return out;
+  }
+}
+
 // Énumère les blobs Storage d'un projet : {assetId}/{branch}/<file>, sur 2 niveaux de listing.
 export async function collectProjectStoragePaths(
   db: SupabaseClient, storage: StorageApi, projectId: string,
@@ -11,10 +24,8 @@ export async function collectProjectStoragePaths(
   const { data: assets } = await db.from('assets').select('id').eq('project_id', projectId);
   const paths: string[] = [];
   for (const a of (assets ?? []) as { id: string }[]) {
-    const { data: branches } = await storage.from(SNAPSHOTS_BUCKET).list(a.id);
-    for (const branch of branches ?? []) {
-      const { data: files } = await storage.from(SNAPSHOTS_BUCKET).list(`${a.id}/${branch.name}`);
-      for (const f of files ?? []) paths.push(`${a.id}/${branch.name}/${f.name}`);
+    for (const branch of await listAll(storage, a.id)) {
+      for (const f of await listAll(storage, `${a.id}/${branch.name}`)) paths.push(`${a.id}/${branch.name}/${f.name}`);
     }
   }
   return paths;

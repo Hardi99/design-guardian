@@ -65,15 +65,15 @@ describe('listFrames', () => {
 describe('estimateMs', () => {
   it('somme les nœuds des frames suivies × le taux mesuré', () => {
     const frames = [
-      { id: 'a', name: 'A', type: 'FRAME', tracked: true,  nodes: 100 },
-      { id: 'b', name: 'B', type: 'FRAME', tracked: false, nodes: 0 },
-      { id: 'c', name: 'C', type: 'FRAME', tracked: true,  nodes: 50 },
+      { id: 'a', key: 'a', name: 'A', type: 'FRAME', tracked: true,  nodes: 100 },
+      { id: 'b', key: 'b', name: 'B', type: 'FRAME', tracked: false, nodes: 0 },
+      { id: 'c', key: 'c', name: 'C', type: 'FRAME', tracked: true,  nodes: 50 },
     ];
     expect(estimateMs(frames)).toBe(150 * MS_PER_NODE);
   });
 
   it('aucune frame suivie → 0', () => {
-    expect(estimateMs([{ id: 'a', name: 'A', type: 'FRAME', tracked: false, nodes: 0 }])).toBe(0);
+    expect(estimateMs([{ id: 'a', key: 'a', name: 'A', type: 'FRAME', tracked: false, nodes: 0 }])).toBe(0);
   });
 });
 
@@ -107,5 +107,38 @@ describe('assignFloating', () => {
   it('frames suivies qui se chevauchent → la plus haute (dernière dans l\'ordre des calques)', () => {
     const over = box('over', 0, 0, 300, 300);
     expect(assignFloating([box('g', 10, 10, 20, 20)], [home, over]).get('g')).toBe('over');
+  });
+});
+
+// Clé de navigation d'une frame (Phase 3) : son dg_id (el_uid) s'il existe, sinon son id.
+// Lister ne doit RIEN écrire dans le fichier (pas de stamp à l'énumération).
+describe('listFrames — clé', () => {
+  it('key = el_uid si présent, sinon id ; aucune écriture', () => {
+    let writes = 0;
+    const node = (id: string, data: Record<string, string>): TrackableNode => ({
+      id, name: id, type: 'FRAME', width: 1, height: 1, children: [],
+      getPluginData: (k) => data[k] ?? '',
+      setPluginData: () => { writes++; },
+    });
+    const out = listFrames([node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }), node('1:2', {})]);
+    expect(out.map(f => f.key)).toEqual(['DG-A', '1:2']);
+    expect(writes).toBe(0);
+  });
+});
+
+// Frame dupliquée (Ctrl+D) : le double copie le pluginData, donc l'el_uid de l'original, avec
+// un propriétaire (el_owner) différent. Sa clé ne doit PAS être celle de l'original, sinon la
+// liste lui attribuerait l'historique de l'original.
+describe('listFrames — frame dupliquée', () => {
+  it('el_uid pris seulement si la frame en est propriétaire ; sinon son id', () => {
+    const node = (id: string, data: Record<string, string>): TrackableNode => ({
+      id, name: id, type: 'FRAME', width: 1, height: 1, children: [],
+      getPluginData: (k) => data[k] ?? '', setPluginData: () => {},
+    });
+    const out = listFrames([
+      node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }),
+      node('1:9', { el_uid: 'DG-A', el_owner: '1:1' }), // la copie
+    ]);
+    expect(out.map(f => f.key)).toEqual(['DG-A', '1:9']);
   });
 });

@@ -8,6 +8,9 @@ Versioning [Semver](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+- **Page-centric Phase 3 — navigation par frame** : la page affiche la liste de ses frames ; un clic ouvre l'historique de la frame (versions où elle est apparue ou a changé), puis son diff (rendu, surlignages et changements de cette frame seulement). Identité stable d'une frame par `dg_id` (survit au couper-coller), résumé `frames[]` à chaque version (y compris la v1), rendus par frame (nouvelles + modifiées, 20 max), onglet « Toutes les versions » conservé.
+
 ### Security
 - **4 vulnérabilités hautes corrigées en production** (`hono`, `ws`, `axios`, `form-data`) : présentes dans le `package-lock.json` déployé par Railway, invisibles car la CI installait avec Bun. Mise à jour dans les versions compatibles (aucun changement majeur) — 0 vulnérabilité restante, dev comprises.
 - CI : étape `npm audit --omit=dev --audit-level=high` (bloque une vulnérabilité haute ou critique en production).

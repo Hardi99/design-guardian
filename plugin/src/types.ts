@@ -82,6 +82,7 @@ export type MainToUI =
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
   | { type: 'PRESENCE'; here: string[]; elsewhere: string[]; offer: boolean } // tri d'un projet partagé (cf. fileSplit.ts)
   | { type: 'SPLIT_READY'; fileKey: string; previous: string } // nouvel id écrit dans le fichier
+  | { type: 'FRAME_RENDERED'; versionId: string; key: string; b64: string; kind: 'svg' | 'png' } // un rendu de frame prêt
   | { type: 'INIT_ERROR'; message: string } // démarrage impossible (ex. fichier en lecture seule sans identifiant)
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
@@ -105,6 +106,7 @@ export type UIToMain =
   | { type: 'REQUEST_SNAPSHOT' }
   | { type: 'RETRY_INIT' }
   | { type: 'CHECK_PRESENCE'; identities: AssetIdentity[] }
+  | { type: 'RENDER_FRAMES'; versionId: string; frames: Array<{ key: string; id: string }> } // rendus par frame (après le POST)
   | { type: 'SPLIT_BEGIN' }
   | { type: 'SPLIT_DISMISS'; assetIds: string[] } // « Ignorer » : mémorisé dans le fichier
   | { type: 'SPLIT_ROLLBACK'; fileKey: string } // la séparation a échoué côté serveur : on remet l'ancien id

@@ -7,6 +7,7 @@ import type { AssetResponse, AssetsListResponse, ErrorResponse } from '../types/
 import type { ProjectEnv } from '../types/hono.js';
 import { latestPerAsset, type VersionIdentityRow } from '../services/split.service.js';
 import { downloadSnapshot } from '../services/versioning.service.js';
+import { listAll } from '../services/purge.service.js';
 
 const assetsRouter = new Hono<ProjectEnv>();
 
@@ -18,14 +19,14 @@ const SNAPSHOTS_BUCKET = 'snapshots';
  * Chemins : {assetId}/{branche}/v{n}.json  et  ..._render.json → énumération sur 2 niveaux.
  */
 async function removeAssetStorage(assetId: string): Promise<void> {
-  const bucket = getSupabaseStorage().from(SNAPSHOTS_BUCKET);
-  const { data: branches } = await bucket.list(assetId);
-  if (!branches?.length) return;
+  const storage = getSupabaseStorage();
+  const bucket = storage.from(SNAPSHOTS_BUCKET);
+  const branches = await listAll(storage, assetId);
+  if (!branches.length) return;
 
   const paths: string[] = [];
   for (const branch of branches) {
-    const { data: files } = await bucket.list(`${assetId}/${branch.name}`);
-    for (const f of files ?? []) paths.push(`${assetId}/${branch.name}/${f.name}`);
+    for (const f of await listAll(storage, `${assetId}/${branch.name}`)) paths.push(`${assetId}/${branch.name}/${f.name}`);
   }
 
   if (paths.length) {

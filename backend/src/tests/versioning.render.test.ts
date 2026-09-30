@@ -21,3 +21,17 @@ describe('uploadRender', () => {
     expect(opts).toMatchObject({ contentType: 'image/svg+xml', upsert: true });
   });
 });
+
+describe('rendus par frame (page-centric)', () => {
+  it('chemin de rendu par frame (clé nettoyée) ; sans clé, chemin historique inchangé', () => {
+    expect(renderPathFor('a/main/v3.json', 'png', 'DG-1:2')).toBe('a/main/v3_render_DG-1_2.png');
+    expect(renderPathFor('a/main/v3.json', 'png')).toBe('a/main/v3_render.png');
+  });
+
+  it('uploadRender range le rendu d\'une frame sous sa clé', async () => {
+    const upload = vi.fn(async () => ({ error: null }));
+    const storage = { from: () => ({ upload }) } as never;
+    await uploadRender(storage, 'a/main/v3.json', Buffer.from('x').toString('base64'), 'png', 'DG-A');
+    expect((upload.mock.calls[0] as unknown as [string])[0]).toBe('a/main/v3_render_DG-A.png');
+  });
+});

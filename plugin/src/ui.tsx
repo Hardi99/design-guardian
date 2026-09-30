@@ -7,6 +7,8 @@ import { useAppStore } from './useAppStore.js';
 import { appStore } from './store.js';
 import type { Asset, Version, Plan, Screen } from './store.js';
 import type { AssetIdentity } from './fileSplit.js';
+import { frameHistory, frameStats, hasFrameNav, touchedFrames, restoreAllowedInDiff, cacheableDiff } from './frameNav.js';
+import type { FrameSummary } from './frameNav.js';
 import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
@@ -174,6 +176,18 @@ function App() {
           break;
         }
         case 'INIT_ERROR':     setInitErr(msg.message); break;
+        case 'FRAME_RENDERED': {
+          // Upload global (pas dans l'écran de capture, qu'on peut quitter avant la fin des
+          // exports). Best-effort : un rendu manquant affiche « Rendu indisponible. ».
+          const key = appStore.getState().apiKey;
+          if (key) {
+            void api(key, `/api/checkpoints/${msg.versionId}/render`, {
+              method: 'POST',
+              body: JSON.stringify({ render_svg_b64: msg.b64, render_kind: msg.kind, frame_key: msg.key }),
+            }).catch(() => { /* best-effort */ });
+          }
+          break;
+        }
         case 'PRESENCE':
           setSplitOffer(msg.offer ? { here: msg.here, elsewhere: msg.elsewhere } : null);
           break;
@@ -244,6 +258,7 @@ function App() {
   if (screen === 'loading')    return <LoadingScreen />;
   if (screen === 'assets')     return <AssetsScreen />;
   if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
+  if (screen === 'frameHistory') return <FrameHistoryScreen />;
   if (screen === 'diff')       return <DiffScreen key={diffVersionId} />;
   if (screen === 'checkpoint') return <CheckpointScreen />;
   return <Spinner full />;
@@ -398,8 +413,10 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const setScreen      = useAppStore(s => s.setScreen);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
   const setSiblings    = useAppStore(s => s.setSiblings);
+  const setFrame       = useAppStore(s => s.setFrame);
 
   const [versions,   setVersions]   = useState<Version[]>([]);
+  const [tab,        setTab]        = useState<'frames' | 'versions'>('frames');
   const [branches,   setBranches]   = useState<string[]>(['main']);
   const [loading,    setLoading]    = useState(true);
   const [newBranch,  setNewBranch]  = useState('');
@@ -444,7 +461,15 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   const visible = versions.filter(v => v.branch_name === branch);
 
-  const openDiff = useCallback((v: Version) => { setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
+  const openDiff = useCallback((v: Version) => { setFrame(null); setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
+  // Page-centric : clic sur une frame → son historique (versions où elle est apparue ou a changé).
+  const openFrame = useCallback((f: FrameEntry) => {
+    setFrame({ key: f.key, name: f.name });
+    setSiblings(frameHistory(visible, f.key));
+    setScreen('frameHistory');
+  }, [visible]);
+  const frameNav = hasFrameNav(visible);
+  const showFrames = frameNav && tab === 'frames';
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
@@ -488,16 +513,27 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
         />
       </div>
 
+      {frameNav && (
+        <div role="tablist" class="flex gap-1 px-4 pt-2">
+          {(['frames', 'versions'] as const).map(t => (
+            <button key={t} role="tab" aria-selected={tab === t}
+              class={`px-2.5 py-1 rounded text-xs ${tab === t ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              onClick={() => setTab(t)}>{t === 'frames' ? 'Frames' : 'Toutes les versions'}</button>
+          ))}
+        </div>
+      )}
+
       <div class="flex-1 overflow-y-auto">
-        {loading && <Spinner />}
+        {showFrames && <div class="p-4"><FramesPanel versions={visible} onOpen={openFrame} /></div>}
+        {!showFrames && loading && <Spinner />}
         {err && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
-        {!loading && visible.length === 0 && (
+        {!showFrames && !loading && visible.length === 0 && (
           <div class="flex flex-col items-center justify-center py-12 px-6 text-center gap-2">
             <p class="text-gray-400 text-sm">Aucun checkpoint sur <span class="font-mono text-purple-400">{branch}</span></p>
             <p class="text-gray-600 text-xs">Sélectionne un élément dans Figma et capture.</p>
           </div>
         )}
-        {visible.length > 0 && (
+        {!showFrames && visible.length > 0 && (
           <div class="relative px-4 py-3">
             <div class="absolute left-7 top-0 bottom-0 w-px bg-gray-800" />
             {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} onClick={() => openDiff(v)} />)}
@@ -509,7 +545,7 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
         {plan === 'free' && versions.length >= 10 && (
           <p class="text-xs text-amber-400 text-center">Limite Free atteinte (10 checkpoints). <span class="underline cursor-pointer" onClick={onUpgrade}>Passer à Pro</span></p>
         )}
-        <FramesPanel />
+        {!showFrames && <FramesPanel />}
         <button class="btn-primary w-full" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={plan === 'free' && versions.length >= 10}>
           Capturer un checkpoint
         </button>
@@ -522,7 +558,9 @@ function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 // l'omission redevient silencieuse. L'estimation du coût est affichée en continu — c'est le
 // garde-fou qui l'empêche de reconstruire sans s'en rendre compte le mur mesuré au spike
 // (93,8 s pour les 331 frames d'une page réelle).
-function FramesPanel() {
+// Avec `versions` + `onOpen` (page-centric) : chaque frame affiche son historique (nombre de
+// versions, dernier changement) et s'ouvre au clic — seulement si elle a un historique (D6).
+function FramesPanel({ versions, onOpen }: { versions?: Version[]; onOpen?: (f: FrameEntry) => void } = {}) {
   const [frames, setFrames] = useState<FrameEntry[]>([]);
   const [pageName, setPageName] = useState('');
   const [capturable, setCapturable] = useState(true);
@@ -579,18 +617,59 @@ function FramesPanel() {
         />
       )}
 
-      <div class="max-h-40 overflow-auto flex flex-col">
+      <div class={`${versions ? '' : 'max-h-40 '}overflow-auto flex flex-col`}>
         {shown.map(f => (
           <label key={f.id} class="flex items-center gap-2 px-1 py-0.5 text-xs hover:bg-gray-900 cursor-pointer">
             <input
               type="checkbox" checked={f.tracked}
               onChange={() => send({ type: 'SET_TRACKED', nodeId: f.id, tracked: !f.tracked })}
             />
-            <span class={`flex-1 truncate ${f.tracked ? 'text-gray-200' : 'text-gray-500'}`}>{f.name}</span>
-            {f.tracked && <span class="text-[10px] text-gray-600">{f.nodes}</span>}
+            {(() => {
+              const stats = versions && onOpen ? frameStats(versions, f.key) : null;
+              if (stats && stats.versions > 0) {
+                return (
+                  <button type="button" class="flex-1 min-w-0 flex items-baseline gap-2 text-left hover:text-white"
+                    onClick={(e) => { e.preventDefault(); onOpen!(f); }}>
+                    <span class="flex-1 truncate text-gray-200">{f.name}</span>
+                    <span class="text-[10px] text-gray-500 whitespace-nowrap">
+                      {stats.versions} v.{stats.lastAt ? ` · ${timeAgo(stats.lastAt)}` : ''}
+                    </span>
+                  </button>
+                );
+              }
+              return <span class={`flex-1 truncate ${f.tracked ? 'text-gray-200' : 'text-gray-500'}`}>{f.name}</span>;
+            })()}
+            {f.tracked && !versions && <span class="text-[10px] text-gray-600">{f.nodes}</span>}
           </label>
         ))}
         {shown.length === 0 && <p class="text-[11px] text-gray-600 px-1 py-1">Aucune frame ne correspond.</p>}
+      </div>
+    </div>
+  );
+}
+
+// Page-centric : historique d'UNE frame (versions où elle est apparue ou a changé), posé en
+// `siblings` par l'accueil — la nav ◀▶ du diff parcourt donc cet historique.
+function FrameHistoryScreen() {
+  const frame          = useAppStore(s => s.frame)!;
+  const history        = useAppStore(s => s.siblings);
+  const setScreen      = useAppStore(s => s.setScreen);
+  const setDiffVersion = useAppStore(s => s.setDiffVersion);
+  const setFrame       = useAppStore(s => s.setFrame);
+  return (
+    <div class="flex flex-col h-screen bg-gray-950 text-white">
+      <Topbar label={frame.name} onBack={() => { setFrame(null); setScreen('home'); }} />
+      <div class="flex-1 overflow-y-auto">
+        {history.length === 0
+          ? <p class="text-gray-500 text-xs p-4">Aucune version pour cette frame.</p>
+          : (
+            <div class="relative px-4 py-3">
+              <div class="absolute left-7 top-0 bottom-0 w-px bg-gray-800" />
+              {[...history].reverse().map(v => (
+                <VersionRow key={v.id} v={v} onClick={() => { setDiffVersion(v); setScreen('diff'); }} />
+              ))}
+            </div>
+          )}
       </div>
     </div>
   );
@@ -653,7 +732,7 @@ function CheckpointScreen() {
     try {
       // Le rendu (image) ne voyage PLUS dans ce POST : il est poussé juste après, hors du
       // chemin critique, pour que "Checkpoint sauvegardé" s'affiche sans attendre son upload.
-      const data = await api<{ version: { id: string; version_number: number }; ai_summary: string | null; analysis: { totalChanges?: number } | null }>(
+      const data = await api<{ version: { id: string; version_number: number }; ai_summary: string | null; analysis: { totalChanges?: number } | null; render_frames?: Array<{ key: string; id: string }> }>(
         apiKey, '/api/checkpoints', {
           method: 'POST',
           body: JSON.stringify({
@@ -667,6 +746,8 @@ function CheckpointScreen() {
       );
       // Finalise le clone d'historique (capturé en pending au snapshot) → restore lossless.
       send({ type: 'STORE_HISTORY_CLONE', nodeId: snapshot.figmaNodeId, versionId: data.version.id, versionNumber: data.version.version_number });
+      // Page-centric : rendus des frames nouvelles/modifiées (le serveur dit lesquelles).
+      if (data.render_frames?.length) send({ type: 'RENDER_FRAMES', versionId: data.version.id, frames: data.render_frames });
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
       // Upload différé du rendu (best-effort, non bloquant) : si ça échoue, le viewer
       // retombe sur la reconstruction — aucune conséquence sur la validité du checkpoint.
@@ -791,21 +872,25 @@ const svgCache = new Map<string, string>();
 
 function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versionId: string) {
   const siblings = useAppStore(s => s.siblings);
+  // Page-centric : diff d'UNE frame (rendu, changements, cadres) — la clé entre dans le cache.
+  const frameKey = useAppStore(s => s.frame?.key ?? null);
+  const fq = frameKey ? `frame=${encodeURIComponent(frameKey)}` : '';
+  const ck = (id: string) => `${id}|${frameKey ?? ''}`;
   useEffect(() => {
     send({ type: 'RESIZE', width: 820, height: 640 });
-    const cached = diffCache.get(versionId);
+    const cached = diffCache.get(ck(versionId));
     if (cached) {
       // Déjà prefetché (nav ◀▶ vers un voisin) : rendu immédiat, pas de round-trip réseau.
       dispatch({ type: 'LOAD_SUCCESS', data: cached });
       dispatch({ type: 'HEAVY_LOADED', data: cached });
     } else {
-      api<DiffData>(apiKey, `/api/versions/versions/${versionId}`)
+      api<DiffData>(apiKey, `/api/versions/versions/${versionId}${fq ? `?${fq}` : ''}`)
         .then(data => {
           dispatch({ type: 'LOAD_SUCCESS', data });
           // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
           // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
-          api<DiffData>(apiKey, `/api/versions/versions/${versionId}?thumbs=1`)
-            .then(full => { diffCache.set(versionId, full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
+          api<DiffData>(apiKey, `/api/versions/versions/${versionId}?thumbs=1${fq ? `&${fq}` : ''}`)
+            .then(full => { if (cacheableDiff(full)) diffCache.set(ck(versionId), full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
             .catch(() => dispatch({ type: 'HEAVY_DONE' }));
         })
         .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
@@ -814,13 +899,13 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
     // ◀▶ suivante quasi instantanée. Silencieux : un échec ici ne doit pas gêner l'écran courant.
     const idx = siblings.findIndex(s => s.id === versionId);
     for (const neighbor of [siblings[idx - 1], siblings[idx + 1]]) {
-      if (neighbor && !diffCache.has(neighbor.id)) {
-        api<DiffData>(apiKey, `/api/versions/versions/${neighbor.id}?thumbs=1`)
-          .then(d => diffCache.set(neighbor.id, d))
+      if (neighbor && !diffCache.has(ck(neighbor.id))) {
+        api<DiffData>(apiKey, `/api/versions/versions/${neighbor.id}?thumbs=1${fq ? `&${fq}` : ''}`)
+          .then(d => { if (cacheableDiff(d)) diffCache.set(ck(neighbor.id), d); })
           .catch(() => {});
       }
     }
-  }, [apiKey, versionId]);
+  }, [apiKey, versionId, frameKey]);
 }
 
 function buildRestoreMsg(msg: { applied?: number; skipped?: number; mode?: 'clone' | 'reapply' }): string | undefined {
@@ -908,6 +993,9 @@ function DiffScreen() {
   const setScreen = useAppStore(s => s.setScreen);
   const siblings       = useAppStore(s => s.siblings);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
+  const frame          = useAppStore(s => s.frame);
+  const setFrame       = useAppStore(s => s.setFrame);
+  const setSiblings    = useAppStore(s => s.setSiblings);
 
   // Navigation ◀▶ entre versions de la branche (siblings ordonnés ancien→récent).
   // Le remount par key={version.id} côté App réinitialise le reducer/loader à chaque saut.
@@ -935,10 +1023,13 @@ function DiffScreen() {
   const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id, state.data?.render_url ?? null, state.data?.render_kind ?? null, (state.data?.version.analysis_json ?? null) as RestorationDelta | null);
   const restore      = useRestore(dispatch, apiKey, version.id, author, branch, setScreen);
 
-  const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen('home'); }, []);
+  // Retour à l'historique de la frame si on vient de là, sinon à l'accueil.
+  const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen(appStore.getState().frame ? 'frameHistory' : 'home'); }, []);
 
   const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg, heavyDone } = state;
   const hasPrev = !!data?.prev_version;
+  // Page-centric : frames touchées par cette version (vide hors page ou versions sans résumé).
+  const pageFrames = touchedFrames((data?.version.analysis_json as { frames?: FrameSummary[] } | null)?.frames);
   const nodeDiffs = data?.node_diffs ?? [];
   const highlights = buildHighlights(nodeDiffs, beforeMode, showMinor);
   // Compteur PAR GROUPE : les nœuds internes d'une icône comptent pour 1 (pas 1 par vecteur).
@@ -994,8 +1085,8 @@ function DiffScreen() {
             <p class="text-[10px] text-gray-600 mt-1">Cliquer pour changer de statut.</p>
           </div>
         </div>
-        {/* Restore checkpoint */}
-        {data && (
+        {/* Restore checkpoint — pas sur le diff d'une frame : réappliquerait toute la page (Phase 4) */}
+        {data && restoreAllowedInDiff(frame) && (
           <button onClick={restore} disabled={restoring}
             class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
             aria-label="Créer un checkpoint depuis cette version">
@@ -1003,7 +1094,7 @@ function DiffScreen() {
           </button>
         )}
         {/* Apply to Figma canvas */}
-        {data && (
+        {data && restoreAllowedInDiff(frame) && (
           <button onClick={applyToFigma} disabled={applyingToFigma}
             class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
             aria-label="Restaurer cette version sur le canvas Figma">
@@ -1021,7 +1112,22 @@ function DiffScreen() {
       {loading && <Spinner full />}
       {err     && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
 
-      {data && (
+      {/* Version de page ouverte depuis « Toutes les versions » : pas de rendu global, on
+          choisit une frame touchée (son diff, et son historique pour la nav ◀▶). */}
+      {data && !frame && pageFrames.length > 0 && (
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+          <p class="text-xs text-gray-400">Frames modifiées dans cette version :</p>
+          {pageFrames.map(f => (
+            <button key={f.key} class="text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg text-sm"
+              onClick={() => { setFrame({ key: f.key, name: f.name }); setSiblings(frameHistory(siblings, f.key)); }}>
+              {f.name}
+              <span class="text-xs text-gray-500 ml-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data && (frame || pageFrames.length === 0) && (
         hasPrev ? (
           <div class="flex flex-1 overflow-hidden">
             <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">

@@ -138,6 +138,18 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'SPLIT_ROLLBACK':
       try { figma.root.setPluginData(FILE_ID_KEY, msg.fileKey); } catch { /* read-only */ }
       break;
+    case 'RENDER_FRAMES': {
+      // Rendus par frame, demandés APRÈS le POST (le serveur sait lesquelles ont changé).
+      // Frame introuvable ou export raté : aucun message pour elle (« Rendu indisponible. »).
+      await ensurePagesLoaded();
+      for (const f of msg.frames) {
+        const node = await figma.getNodeByIdAsync(f.id).catch(() => null);
+        if (!node || node.type === 'DOCUMENT' || node.type === 'PAGE') continue;
+        const r = await exportRender(node as SceneNode);
+        if (r) send({ type: 'FRAME_RENDERED', versionId: msg.versionId, key: f.key, b64: r.b64, kind: r.kind });
+      }
+      break;
+    }
     case 'PERSIST_VERSION_CACHE':
       await figma.clientStorage.setAsync('dg_vcache_' + msg.assetId, { versions: msg.versions, branches: msg.branches });
       break;
@@ -624,42 +636,36 @@ async function handleSnapshot(): Promise<void> {
     },
   };
 
-  // Aperçu et clone d'historique PROVISOIRES : rattachés à la première frame suivie.
-  // Le rendu par frame modifiée et le clone borné relèvent des Phases 3 et 4 ; en
-  // attendant, le viewer doit continuer à afficher quelque chose plutôt que
-  // « Rendu indisponible » sur chaque capture de page.
-  const node = tracked[0];
+  // Clone d'historique PROVISOIRE (première frame suivie) : restauration par frame et clones
+  // bornés relèvent de la Phase 4. Les rendus, eux, sont faits APRÈS le POST, frame par frame
+  // (RENDER_FRAMES) : seul le serveur sait lesquelles ont changé.
+  storeHistoryClonePending(tracked[0]);
+  // nodeId = la PAGE : c'est elle l'identifiant du checkpoint, pas une frame.
+  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: page.id });
+}
 
-  storeHistoryClonePending(node);
-
-  // Aperçu : SVG si vectoriel léger (zoom net), sinon PNG borné (raster/lourd, échelle dégressive).
-  let render_svg_b64: string | undefined;
-  let render_kind: 'svg' | 'png' = 'svg';
-  if ('exportAsync' in node) {
-    const exportNode = node as ExportMixin;
-    const toB64 = (bytes: Uint8Array): string => {
-      const CHUNK = 8192; let b = '';
-      for (let i = 0; i < bytes.length; i += CHUNK) b += String.fromCharCode(...Array.from(bytes.slice(i, Math.min(i + CHUNK, bytes.length))));
-      return btoa(b);
-    };
-    try {
-      const svgB64 = toB64(await exportNode.exportAsync({ format: 'SVG' }));
-      if (chooseFormat(svgB64.length) === 'svg') {
-        render_svg_b64 = svgB64; render_kind = 'svg';
-      } else {
-        for (const s of PNG_SCALES) {
-          render_svg_b64 = toB64(await exportNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: s } }));
-          render_kind = 'png';
-          if (render_svg_b64.length <= PNG_MAX_B64 || s === 0.5) break;
-        }
-      }
-      console.log('[DG] render', render_kind, render_svg_b64?.length, 'b64 chars');
-    } catch (e) {
-      console.log('[DG] export failed:', e);
+// Rendu d'un nœud : SVG si vectoriel léger (zoom net), sinon PNG borné (échelle dégressive).
+async function exportRender(node: SceneNode): Promise<{ b64: string; kind: 'svg' | 'png' } | null> {
+  if (!('exportAsync' in node)) return null;
+  const exportNode = node as ExportMixin;
+  const toB64 = (bytes: Uint8Array): string => {
+    const CHUNK = 8192; let b = '';
+    for (let i = 0; i < bytes.length; i += CHUNK) b += String.fromCharCode(...Array.from(bytes.slice(i, Math.min(i + CHUNK, bytes.length))));
+    return btoa(b);
+  };
+  try {
+    const svgB64 = toB64(await exportNode.exportAsync({ format: 'SVG' }));
+    if (chooseFormat(svgB64.length) === 'svg') return { b64: svgB64, kind: 'svg' };
+    let png = '';
+    for (const s of PNG_SCALES) {
+      png = toB64(await exportNode.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: s } }));
+      if (png.length <= PNG_MAX_B64 || s === 0.5) break;
     }
+    return { b64: png, kind: 'png' };
+  } catch (e) {
+    console.log('[DG] export failed:', e);
+    return null;
   }
-  // nodeId = la PAGE : c'est elle l'identifiant du checkpoint désormais, pas la frame rendue.
-  send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: page.id, render_svg_b64, render_kind });
 }
 
 // ─── Snapshot extraction ──────────────────────────────────────────────────────

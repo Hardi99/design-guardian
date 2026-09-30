@@ -189,3 +189,19 @@ describe('isolation', () => {
     expect(getState().apiKey).toBeNull()
   })
 })
+
+// ─── Frame courante (page-centric, Phase 3) ───────────────────────────────────
+
+describe('frame courante', () => {
+  it('null au départ ; setFrame la mémorise', () => {
+    expect(getState().frame).toBeNull()
+    getState().setFrame({ key: 'A', name: 'Accueil' })
+    expect(getState().frame).toEqual({ key: 'A', name: 'Accueil' })
+  })
+
+  it('changer d\'asset oublie la frame (elle appartient à l\'asset précédent)', () => {
+    getState().setFrame({ key: 'A', name: 'Accueil' })
+    getState().setAsset({ id: 'a2', name: 'Autre', asset_type: 'ui' })
+    expect(getState().frame).toBeNull()
+  })
+})
