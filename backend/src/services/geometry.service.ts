@@ -1,6 +1,7 @@
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import { findNodeById } from './svg-generator.service.js';
 import { instanceRootMap, viewportRootMap } from './tree.service.js';
+import { frameKey, summarizeFrames } from './frames.service.js';
 
 export type Bbox = { x: number; y: number; w: number; h: number };
 
@@ -54,11 +55,17 @@ export function enrichDeltaGeometry(delta: DeltaJSON, currentSnap: FigmaSnapshot
   const curVp  = currentSnap.root.type === 'PAGE' ? viewportRootMap(currentSnap.root) : null;
   const prevVp = prevSnap?.root.type === 'PAGE'   ? viewportRootMap(prevSnap.root)    : null;
 
+  // Clé de frame (dg_id, repli id Figma) par id Figma de frame, pour chaque snapshot : le
+  // `viewport` d'un nœud est cette clé, stable d'une version à l'autre (couper-coller).
+  const keysOf = (s: FigmaSnapshot | null) =>
+    new Map((s?.root.type === 'PAGE' ? s.root.children ?? [] : []).map(t => [t.id, frameKey(t)]));
+
   const put = (
     arr: DeltaJSON['modified'],
     snap: FigmaSnapshot | null,
     inst: ReturnType<typeof instanceRootMap> | null,
     vp: ReturnType<typeof viewportRootMap> | null,
+    keys: Map<string, string>,
   ) =>
     arr.map(nd => {
       const root = inst?.get(nd.nodeId);
@@ -70,17 +77,20 @@ export function enrichDeltaGeometry(delta: DeltaJSON, currentSnap: FigmaSnapshot
         instanceRoot: root?.id,
         instanceName: root?.name,
         instanceBbox: root && snap && origin ? (nodeBboxIn(snap, root.id, origin) ?? undefined) : undefined,
-        viewport: viewport?.id,
+        viewport: viewport ? keys.get(viewport.id) : undefined,
       };
     });
 
-  const modified = put(delta.modified, currentSnap, curInst, curVp);
-  const added    = put(delta.added,    currentSnap, curInst, curVp);
-  const removed  = put(delta.removed,  prevSnap,    prevInst, prevVp);
+  const curKeys = keysOf(currentSnap);
+  const modified = put(delta.modified, currentSnap, curInst, curVp, curKeys);
+  const added    = put(delta.added,    currentSnap, curInst, curVp, curKeys);
+  const removed  = put(delta.removed,  prevSnap,    prevInst, prevVp, keysOf(prevSnap));
 
+  const viewports = buildViewports([...modified, ...added, ...removed], currentSnap);
+  const changesByKey = new Map((viewports ?? []).map(v => [v.key, v.changes]));
   return {
-    ...delta, frame, modified, added, removed,
-    viewports: buildViewports([...modified, ...added, ...removed], currentSnap),
+    ...delta, frame, modified, added, removed, viewports,
+    frames: summarizeFrames(changesByKey, currentSnap, prevSnap),
   };
 }
 
@@ -101,11 +111,12 @@ function buildViewports(nodes: DeltaJSON['modified'], snap: FigmaSnapshot): Delt
   }
   const out: NonNullable<DeltaJSON['viewports']> = [];
   for (const top of snap.root.children ?? []) {
-    const set = groups.get(top.id);
+    const key = frameKey(top);
+    const set = groups.get(key);
     if (!set) continue;
     const ab = top.aabb;
     out.push({
-      id: top.id, name: top.name,
+      id: top.id, key, name: top.name,
       frame: { w: ab ? ab.w : top.width, h: ab ? ab.h : top.height },
       changes: set.size,
     });
