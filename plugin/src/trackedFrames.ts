@@ -16,7 +16,7 @@ export interface TrackableNode {
   readonly children?: readonly TrackableNode[];
 }
 
-import { IDENTITY_KEY } from './identity.js';
+import { IDENTITY_KEY, OWNER_KEY } from './identity.js';
 
 export const TRACKED_KEY = 'dg_tracked';
 
@@ -62,8 +62,11 @@ export function countNodes(n: TrackableNode): number {
 export function listFrames(children: readonly TrackableNode[]): FrameEntry[] {
   return children.map(n => {
     const tracked = isTracked(n);
-    // Lecture seule : lister ne stampe rien (le dg_id est posé à la capture).
-    const key = n.getPluginData(IDENTITY_KEY) || n.id;
+    // Lecture seule : lister ne stampe rien (le dg_id est posé à la capture). Le dg_id n'est la
+    // clé que si la frame en est PROPRIÉTAIRE : un double (Ctrl+D) copie l'el_uid de l'original
+    // et hériterait de son historique. (Coupée-collée pas encore recapturée : id Figma en attendant.)
+    const uid = n.getPluginData(IDENTITY_KEY);
+    const key = uid && n.getPluginData(OWNER_KEY) === n.id ? uid : n.id;
     return { id: n.id, key, name: n.name, type: n.type, tracked, nodes: tracked ? countNodes(n) : 0 };
   });
 }

@@ -120,8 +120,25 @@ describe('listFrames — clé', () => {
       getPluginData: (k) => data[k] ?? '',
       setPluginData: () => { writes++; },
     });
-    const out = listFrames([node('1:1', { el_uid: 'DG-A' }), node('1:2', {})]);
+    const out = listFrames([node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }), node('1:2', {})]);
     expect(out.map(f => f.key)).toEqual(['DG-A', '1:2']);
     expect(writes).toBe(0);
+  });
+});
+
+// Frame dupliquée (Ctrl+D) : le double copie le pluginData, donc l'el_uid de l'original, avec
+// un propriétaire (el_owner) différent. Sa clé ne doit PAS être celle de l'original, sinon la
+// liste lui attribuerait l'historique de l'original.
+describe('listFrames — frame dupliquée', () => {
+  it('el_uid pris seulement si la frame en est propriétaire ; sinon son id', () => {
+    const node = (id: string, data: Record<string, string>): TrackableNode => ({
+      id, name: id, type: 'FRAME', width: 1, height: 1, children: [],
+      getPluginData: (k) => data[k] ?? '', setPluginData: () => {},
+    });
+    const out = listFrames([
+      node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }),
+      node('1:9', { el_uid: 'DG-A', el_owner: '1:1' }), // la copie
+    ]);
+    expect(out.map(f => f.key)).toEqual(['DG-A', '1:9']);
   });
 });

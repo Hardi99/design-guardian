@@ -7,7 +7,8 @@ import { useAppStore } from './useAppStore.js';
 import { appStore } from './store.js';
 import type { Asset, Version, Plan, Screen } from './store.js';
 import type { AssetIdentity } from './fileSplit.js';
-import { frameHistory, frameStats, hasFrameNav } from './frameNav.js';
+import { frameHistory, frameStats, hasFrameNav, touchedFrames, restoreAllowedInDiff, cacheableDiff } from './frameNav.js';
+import type { FrameSummary } from './frameNav.js';
 import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
@@ -889,7 +890,7 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
           // Vignettes par-nœud en différé (lourdes) : le changelog s'affiche tout de suite,
           // les images se remplissent ensuite. Échec silencieux (les vignettes sont optionnelles).
           api<DiffData>(apiKey, `/api/versions/versions/${versionId}?thumbs=1${fq ? `&${fq}` : ''}`)
-            .then(full => { diffCache.set(ck(versionId), full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
+            .then(full => { if (cacheableDiff(full)) diffCache.set(ck(versionId), full); dispatch({ type: 'HEAVY_LOADED', data: full }); })
             .catch(() => dispatch({ type: 'HEAVY_DONE' }));
         })
         .catch(e => dispatch({ type: 'LOAD_ERROR', err: (e as Error).message }));
@@ -900,7 +901,7 @@ function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string, versio
     for (const neighbor of [siblings[idx - 1], siblings[idx + 1]]) {
       if (neighbor && !diffCache.has(ck(neighbor.id))) {
         api<DiffData>(apiKey, `/api/versions/versions/${neighbor.id}?thumbs=1${fq ? `&${fq}` : ''}`)
-          .then(d => diffCache.set(ck(neighbor.id), d))
+          .then(d => { if (cacheableDiff(d)) diffCache.set(ck(neighbor.id), d); })
           .catch(() => {});
       }
     }
@@ -992,6 +993,9 @@ function DiffScreen() {
   const setScreen = useAppStore(s => s.setScreen);
   const siblings       = useAppStore(s => s.siblings);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
+  const frame          = useAppStore(s => s.frame);
+  const setFrame       = useAppStore(s => s.setFrame);
+  const setSiblings    = useAppStore(s => s.setSiblings);
 
   // Navigation ◀▶ entre versions de la branche (siblings ordonnés ancien→récent).
   // Le remount par key={version.id} côté App réinitialise le reducer/loader à chaque saut.
@@ -1024,6 +1028,8 @@ function DiffScreen() {
 
   const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg, heavyDone } = state;
   const hasPrev = !!data?.prev_version;
+  // Page-centric : frames touchées par cette version (vide hors page ou versions sans résumé).
+  const pageFrames = touchedFrames((data?.version.analysis_json as { frames?: FrameSummary[] } | null)?.frames);
   const nodeDiffs = data?.node_diffs ?? [];
   const highlights = buildHighlights(nodeDiffs, beforeMode, showMinor);
   // Compteur PAR GROUPE : les nœuds internes d'une icône comptent pour 1 (pas 1 par vecteur).
@@ -1079,8 +1085,8 @@ function DiffScreen() {
             <p class="text-[10px] text-gray-600 mt-1">Cliquer pour changer de statut.</p>
           </div>
         </div>
-        {/* Restore checkpoint */}
-        {data && (
+        {/* Restore checkpoint — pas sur le diff d'une frame : réappliquerait toute la page (Phase 4) */}
+        {data && restoreAllowedInDiff(frame) && (
           <button onClick={restore} disabled={restoring}
             class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
             aria-label="Créer un checkpoint depuis cette version">
@@ -1088,7 +1094,7 @@ function DiffScreen() {
           </button>
         )}
         {/* Apply to Figma canvas */}
-        {data && (
+        {data && restoreAllowedInDiff(frame) && (
           <button onClick={applyToFigma} disabled={applyingToFigma}
             class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
             aria-label="Restaurer cette version sur le canvas Figma">
@@ -1106,7 +1112,22 @@ function DiffScreen() {
       {loading && <Spinner full />}
       {err     && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
 
-      {data && (
+      {/* Version de page ouverte depuis « Toutes les versions » : pas de rendu global, on
+          choisit une frame touchée (son diff, et son historique pour la nav ◀▶). */}
+      {data && !frame && pageFrames.length > 0 && (
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+          <p class="text-xs text-gray-400">Frames modifiées dans cette version :</p>
+          {pageFrames.map(f => (
+            <button key={f.key} class="text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg text-sm"
+              onClick={() => { setFrame({ key: f.key, name: f.name }); setSiblings(frameHistory(siblings, f.key)); }}>
+              {f.name}
+              <span class="text-xs text-gray-500 ml-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data && (frame || pageFrames.length === 0) && (
         hasPrev ? (
           <div class="flex flex-1 overflow-hidden">
             <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">

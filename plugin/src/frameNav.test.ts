@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frameHistory, frameStats, hasFrameNav } from './frameNav.js';
+import { frameHistory, frameStats, hasFrameNav, touchedFrames, restoreAllowedInDiff, cacheableDiff } from './frameNav.js';
 import type { Version } from './store.js';
 
 const v = (id: string, at: string, frames?: Array<[string, 'initial' | 'modified' | 'unchanged']>): Version => ({
@@ -34,5 +34,33 @@ describe('hasFrameNav', () => {
   it('vrai dès qu\'une version porte un résumé de frames ; faux pour un asset en mode frame', () => {
     expect(hasFrameNav([v('v1', '2026-09-01', [['A', 'initial']])])).toBe(true);
     expect(hasFrameNav([v('v1', '2026-09-01')])).toBe(false);
+  });
+});
+
+// Onglet « Toutes les versions » : une version de page n'a plus de rendu global ; le diff
+// propose les frames touchées (nouvelles ou modifiées) pour ouvrir leur diff.
+describe('touchedFrames', () => {
+  it('frames nouvelles ou modifiées, jamais inchangées ; vide sans résumé', () => {
+    const fs = v('v1', '2026-09-01', [['A', 'modified'], ['B', 'unchanged'], ['C', 'initial']]).frames;
+    expect(touchedFrames(fs).map(f => f.key)).toEqual(['A', 'C']);
+    expect(touchedFrames(undefined)).toEqual([]);
+    expect(touchedFrames(null)).toEqual([]);
+  });
+});
+
+// Diff d'UNE frame : « Restore » réappliquerait toute la page (restauration par frame = Phase 4).
+describe('restoreAllowedInDiff', () => {
+  it('interdit quand une frame est sélectionnée, permis sinon', () => {
+    expect(restoreAllowedInDiff({ key: 'A', name: 'Accueil' })).toBe(false);
+    expect(restoreAllowedInDiff(null)).toBe(true);
+  });
+});
+
+// Juste après une capture, les rendus de frame sont encore en cours d'envoi : une réponse sans
+// rendu ne doit pas être mise en cache pour toute la session.
+describe('cacheableDiff', () => {
+  it('ne met en cache qu\'une réponse qui a un rendu', () => {
+    expect(cacheableDiff({ render_url: 'https://x' })).toBe(true);
+    expect(cacheableDiff({ render_url: null })).toBe(false);
   });
 });
