@@ -8,6 +8,7 @@ import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
+import { decideFileId, isValidFileId, FILE_ID_KEY } from './fileId.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
@@ -25,42 +26,19 @@ async function ensurePagesLoaded(): Promise<void> {
   pagesLoaded = true;
 }
 
-// Generate a cryptographically random hex ID.
-function generateFileId(): string {
-  const bytes = new Uint8Array(16);
-  try { crypto.getRandomValues(bytes); } catch {
-    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Key resolution order — ensures all editors of the same file share one project:
-// 1. figma.root.getPluginData — stored in the file itself, shared across all users
-// 2. figma.clientStorage    — legacy per-user fallback, only if it is a random id (promotes to shared on write)
-// 3. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
   // Auto-init : ne lit que figma.root / figma.currentPage.id (racine +
   // page courante, toujours accessibles) — aucun accès cross-page ici, donc pas besoin
   // d'ensurePagesLoaded(). Le chargement des pages est différé aux handlers qui en ont
   // vraiment besoin (historique, branches).
-  // Jamais figma.fileKey : c'est la clé de l'URL du fichier (lisible dans tout lien de
-  // partage), or l'identifiant envoyé à auto-init donne la clé d'API du projet.
-  let fileKey: string = figma.root.getPluginData('dg_file_id');
-
-  if (!fileKey) {
-    const userKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
-    // Seul un id aléatoire est réutilisé : le serveur refuse tout autre format (ex. anciens id de page).
-    if (userKey && /^[0-9a-f]{32}$/.test(userKey)) {
-      fileKey = userKey;
-      // Promote legacy per-user key to file-scoped shared storage.
-      try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
+  // Identifiant de fichier : uniquement dans le fichier (cf. fileId.ts).
+  const { fileId: fileKey, mustWrite } = decideFileId(figma.root.getPluginData(FILE_ID_KEY));
+  if (mustWrite) {
+    try { figma.root.setPluginData(FILE_ID_KEY, fileKey); } catch {
+      // Lecture seule : sans id persistant, chaque ouverture créerait un projet jetable.
+      send({ type: 'INIT_ERROR', message: "Ce fichier n'est pas encore relié à Design Guardian. Ouvrez-le une première fois avec les droits d'édition." });
+      return;
     }
-  }
-
-  if (!fileKey) {
-    fileKey = generateFileId();
-    try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
-    await figma.clientStorage.setAsync('dg_file_id', fileKey);
   }
 
   // Store main page ID once so handleSwitchBranch can find it reliably.
@@ -93,8 +71,8 @@ figma.ui.onmessage = async (raw: unknown) => {
   switch (msg.type) {
     case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
     case 'RETRY_INIT': {
-      const key = figma.root.getPluginData('dg_file_id');
-      if (key) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
+      const key = figma.root.getPluginData(FILE_ID_KEY);
+      if (isValidFileId(key)) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
       break;
     }
     case 'OPEN_EXTERNAL':     figma.openExternal(msg.url); break;

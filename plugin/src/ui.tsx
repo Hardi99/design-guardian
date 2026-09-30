@@ -123,11 +123,15 @@ function App() {
       switch (msg.type) {
         case 'FILE_INFO': {
           try {
-            const data = await fetch(`${API_BASE}/api/projects/auto-init`, {
+            const res = await fetch(`${API_BASE}/api/projects/auto-init`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: msg.fileName }),
-            }).then(r => r.json()) as { api_key: string; project: { id: string; name: string; plan: string }; assets: Asset[] };
+            });
+            // Une réponse d'erreur n'est pas un projet : sans cette garde, la clé d'API restait
+            // vide et toutes les requêtes suivantes échouaient (« Invalid api key »).
+            if (!res.ok) { setInitErr(`Connexion refusée par le serveur (${res.status}).`); break; }
+            const data = await res.json() as { api_key: string; project: { id: string; name: string; plan: string }; assets: Asset[] };
             setApiKey(data.api_key);
             setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
             setAssets(data.assets);
@@ -158,6 +162,7 @@ function App() {
           }
           break;
         }
+        case 'INIT_ERROR':     setInitErr(msg.message); break;
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64, msg.render_kind); setScreen('checkpoint'); break;
         case 'BRANCH_CREATED': break;

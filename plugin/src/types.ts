@@ -79,6 +79,7 @@ export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string; render_svg_b64?: string; render_kind?: 'svg' | 'png' }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
+  | { type: 'INIT_ERROR'; message: string } // démarrage impossible (ex. fichier en lecture seule sans identifiant)
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
   | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
