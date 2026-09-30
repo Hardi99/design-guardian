@@ -5,7 +5,7 @@ import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import { statusSchema, restoreSchema } from '../types/api.js';
-import { createVersionAtomic, resolveSnapshot, downloadSnapshot } from '../services/versioning.service.js';
+import { createVersionAtomic, resolveSnapshot, downloadSnapshot, renderPathFor } from '../services/versioning.service.js';
 import { DiffService } from '../services/diff.service.js';
 import { enrichDeltaGeometry, nodeBboxRelative, renderFrame } from '../services/geometry.service.js';
 import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
@@ -81,13 +81,19 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
   // Résout l'URL signée du blob render (PNG > SVG) ou un data-URL legacy, sans download.
   // `source` indique l'origine du rendu : 'blob' = fichier binaire réel, 'legacy' = ancien JSON,
   // 'reconstruction' = SVG reconstruit depuis les propriétés natives (pas un export Figma).
+  // Page-centric : diff d'UNE frame (clé) — rendu, changements et cadres de cette frame.
+  const frame = c.req.query('frame') || null;
+
   const resolveRenderUrl = async (storagePath: string | null, snapshot: FigmaSnapshot | null): Promise<{ url: string; kind: 'svg' | 'png'; source: 'blob' | 'legacy' | 'reconstruction' } | null> => {
     if (storagePath) {
       const store = getSupabaseStorage().from(SNAPSHOTS_BUCKET);
       for (const kind of ['png', 'svg'] as const) {
-        const { data } = await store.createSignedUrl(storagePath.replace('.json', `_render.${kind}`), 3600);
+        const { data } = await store.createSignedUrl(renderPathFor(storagePath, kind, frame ?? undefined), 3600);
         if (data?.signedUrl) return { url: data.signedUrl, kind, source: 'blob' };
       }
+      // Rendu de frame absent : on le dit (« Rendu indisponible. »), sans repli sur le rendu
+      // d'une autre frame ni sur une reconstruction approximative (spec page-centric D6).
+      if (frame) return null;
       const { data: legacy } = await store.download(storagePath.replace('.json', '_render.json'));
       if (legacy) {
         try {
@@ -236,11 +242,16 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     }
   }
 
+  // Page-centric, diff d'une frame : ses dimensions sont dans le résumé frames[] de la version
+  // et de sa parente (aucun snapshot à télécharger).
+  const frameDims = (d: DeltaJSON | null | undefined) => (frame ? d?.frames?.find(f => f.key === frame)?.frame ?? null : null);
   // Frame courante : géométrie stockée en priorité, repli snapshot (legacy) sinon.
-  const current_frame = storedFrame ?? (currentSnap ? renderFrame(currentSnap) : null);
+  const current_frame = frame ? frameDims(delta) : storedFrame ?? (currentSnap ? renderFrame(currentSnap) : null);
   // Frame précédente : celle que le parent a stockée à sa propre capture, sinon repli
   // snapshot (legacy, ou v1 : pas de delta donc pas de frame stockée).
-  const prev_frame = storedPrevFrame ?? (prevSnap ? renderFrame(prevSnap) : null);
+  const prev_frame = frame
+    ? frameDims(prevVersion?.analysis_json as DeltaJSON | null)
+    : storedPrevFrame ?? (prevSnap ? renderFrame(prevSnap) : null);
 
   return c.json({
     version: versionData, prev_version: prevVersion,
@@ -256,7 +267,7 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     // changement de design.
     scope_in:  delta?.scopeIn  ?? null,
     scope_out: delta?.scopeOut ?? null,
-    node_diffs: nodeDiffs,
+    node_diffs: frame ? nodeDiffs.filter(n => n.viewport === frame) : nodeDiffs,
   });
 });
 

@@ -148,7 +148,7 @@ checkpointsRouter.get('/:id', pluginMiddleware, async (c) => {
 checkpointsRouter.post('/:id/render', pluginMiddleware, zValidator('json', uploadRenderSchema), async (c) => {
   const id = c.req.param('id');
   if (!id) return c.json<ErrorResponse>({ error: 'Checkpoint id is required' }, 400);
-  const { render_svg_b64, render_kind } = c.req.valid('json');
+  const { render_svg_b64, render_kind, frame_key } = c.req.valid('json');
 
   const { data: version, error } = await getSupabaseClient()
     .from('versions')
@@ -160,7 +160,7 @@ checkpointsRouter.post('/:id/render', pluginMiddleware, zValidator('json', uploa
   if (error || !version) return c.json<ErrorResponse>({ error: 'Checkpoint not found' }, 404);
   if (!version.storage_path) return c.json<ErrorResponse>({ error: 'Version has no snapshot to attach a render to' }, 400);
 
-  const { error: upErr } = await uploadRender(getSupabaseStorage(), version.storage_path as string, render_svg_b64, render_kind);
+  const { error: upErr } = await uploadRender(getSupabaseStorage(), version.storage_path as string, render_svg_b64, render_kind, frame_key);
   if (upErr) return c.json<ErrorResponse>({ error: upErr.message }, 502);
   return c.json({ ok: true });
 });
