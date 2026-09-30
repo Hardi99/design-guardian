@@ -3,7 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../config/supabase.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { createProjectSchema, autoInitSchema } from '../types/api.js';
+import { createProjectSchema, autoInitSchema, splitSchema } from '../types/api.js';
+import { pluginMiddleware } from '../middleware/plugin.middleware.js';
+import { planSplit } from '../services/split.service.js';
 import type { ProjectResponse, ProjectsListResponse, AutoInitResponse, ErrorResponse } from '../types/api.js';
 import type { AppEnv } from '../types/hono.js';
 
@@ -53,6 +55,36 @@ projectsRouter.post('/auto-init', zValidator('json', autoInitSchema), async (c) 
     .single();
 
   if (error || !created) return c.json<ErrorResponse>({ error: 'Failed to create project', details: error?.message }, 500);
+  return c.json<AutoInitResponse>({
+    api_key: created.api_key,
+    project: { id: created.id, name: created.name, plan: created.plan },
+    assets: await loadAssets(db, created.id),
+  }, 201);
+});
+
+// ── Séparation d'un fichier (auth plugin : X-API-Key du projet partagé) ────────
+// Crée le projet propre au fichier (nouvel identifiant) et y déplace les assets que le
+// plugin a trouvés dans ce fichier — uniquement s'ils appartiennent au projet courant.
+projectsRouter.post('/split', pluginMiddleware, zValidator('json', splitSchema), async (c) => {
+  const { figma_file_key, figma_file_name, asset_ids } = c.req.valid('json');
+  const projectId = c.get('projectId' as never) as string;
+  const db = getSupabaseClient();
+
+  const { data: taken } = await db.from('projects').select('id').eq('figma_file_key', figma_file_key).maybeSingle();
+  const { data: owned } = await db.from('assets').select('id').eq('project_id', projectId);
+  const plan = planSplit({ requested: asset_ids, owned: (owned ?? []).map(a => a.id as string), keyTaken: !!taken });
+  if (!plan.ok) return c.json<ErrorResponse>({ error: plan.error }, plan.status);
+
+  const { data: created, error } = await db
+    .from('projects').insert({ figma_file_key, name: figma_file_name }).select('id, name, plan, api_key').single();
+  if (error || !created) return c.json<ErrorResponse>({ error: 'Failed to create project', details: error?.message }, 500);
+
+  if (plan.move.length > 0) {
+    const { error: mvErr } = await db
+      .from('assets').update({ project_id: created.id }).in('id', plan.move).eq('project_id', projectId);
+    if (mvErr) return c.json<ErrorResponse>({ error: 'Failed to move assets', details: mvErr.message }, 500);
+  }
+
   return c.json<AutoInitResponse>({
     api_key: created.api_key,
     project: { id: created.id, name: created.name, plan: created.plan },
