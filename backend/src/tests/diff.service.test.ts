@@ -743,3 +743,41 @@ describe('inAutoLayout (parent en auto-layout)', () => {
     expect(svc.compareSnapshots(frame(undefined, 0), frame(undefined, 20)).modified[0]?.inAutoLayout).toBeUndefined();
   });
 });
+
+// ─── Éléments flottants (collés sur la page, au-dessus d'une frame suivie) ───
+// Le plugin les range sous la frame qu'ils recouvrent (floating: true) pour qu'ils restent
+// capturés ; leur VRAI parent reste la page : le diff doit le dire.
+
+describe('éléments flottants', () => {
+  const n = (dg: string, type: string, x: number, y: number, children?: NodeSnapshot[], extra: Partial<NodeSnapshot> = {}): NodeSnapshot => ({
+    id: dg, dg_id: dg, name: dg, type, x, y, width: 40, height: 40, opacity: 1, fills: [], strokes: [],
+    ...(children ? { children } : {}), ...extra,
+  });
+  const page = (children: NodeSnapshot[]): FigmaSnapshot => ({
+    figmaNodeId: 'p', figmaNodeName: 'Page 1', capturedAt: '2026-09-30T00:00:00Z',
+    root: { ...n('Page 1', 'PAGE', 0, 0, children), width: 0, height: 0 },
+  });
+  const svc = new DiffService();
+  const v1 = page([n('Home', 'FRAME', 0, 0, [n('Card', 'FRAME', 0, 770, [n('Group', 'GROUP', 179, 770)])])]);
+
+  it('collé sur la page au même endroit → parent « Card → Page 1 », pas de déplacement, rien de supprimé', () => {
+    const v2 = page([n('Home', 'FRAME', 0, 0, [n('Card', 'FRAME', 0, 770), n('Group', 'GROUP', 179, 770, undefined, { floating: true })])]);
+    const d = svc.compareSnapshots(v1, v2);
+    expect(d.removed).toHaveLength(0);
+    const g = d.modified.find(m => m.nodeName === 'Group');
+    expect(g?.changes.map(c => c.property)).toEqual(['parent']);
+    expect(g?.changes[0].oldValue).toBe('Card');
+    expect(g?.changes[0].newValue).toBe('Page 1');
+  });
+
+  it('collé sur la page ailleurs → parent + déplacement visuel', () => {
+    const v2 = page([n('Home', 'FRAME', 0, 0, [n('Card', 'FRAME', 0, 770), n('Group', 'GROUP', 179, 100, undefined, { floating: true })])]);
+    const g = svc.compareSnapshots(v1, v2).modified.find(m => m.nodeName === 'Group');
+    expect(g?.changes.find(c => c.property === 'y')?.delta).toBe('-670.00px');
+  });
+
+  it('reste flottant d\'une capture à l\'autre sans bouger → aucun changement', () => {
+    const v2 = page([n('Home', 'FRAME', 0, 0, [n('Group', 'GROUP', 179, 770, undefined, { floating: true })])]);
+    expect(svc.compareSnapshots(v2, v2).totalChanges).toBe(0);
+  });
+});

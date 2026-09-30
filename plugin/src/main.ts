@@ -10,7 +10,7 @@ import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
-import { listFrames, setTracked, isTracked, type TrackableNode } from './trackedFrames.js';
+import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -558,8 +558,28 @@ async function handleSnapshot(): Promise<void> {
   }
 
   await ensurePagesLoaded(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
+
+  // Éléments flottants : posés sur la page au-dessus d'une frame suivie (typiquement un
+  // collage sans frame sélectionnée). Rangés sous cette frame pour rester capturés, sinon
+  // ils seraient signalés supprimés alors qu'ils sont toujours visibles (cf. assignFloating).
+  const boxOf = (n: SceneNode): Box | null => {
+    const b = 'absoluteBoundingBox' in n ? n.absoluteBoundingBox : null;
+    return b ? { id: n.id, x: b.x, y: b.y, w: b.width, h: b.height } : null;
+  };
+  const others = page.children.filter(c => !isTracked(c as unknown as TrackableNode));
+  const hostOf = assignFloating(
+    others.map(boxOf).filter((b): b is Box => b !== null),
+    tracked.map(boxOf).filter((b): b is Box => b !== null),
+  );
+  const floating = others.filter(c => hostOf.has(c.id));
+  const withFloating = (frame: SceneNode): NodeSnapshot => {
+    const snap = extractSnapshot(frame);
+    const extra = floating.filter(c => hostOf.get(c.id) === frame.id).map(c => ({ ...extractSnapshot(c), floating: true }));
+    return extra.length > 0 ? { ...snap, children: [...(snap.children ?? []), ...extra] } : snap;
+  };
+
   // Avant l'extraction (synchrone) : un nœud coupé-collé garde son dg_id au lieu d'être pris pour une copie.
-  await adoptMovedIdentities(tracked as unknown as BranchNode[],
+  await adoptMovedIdentities([...tracked, ...floating] as unknown as BranchNode[],
     async (id) => (await figma.getNodeByIdAsync(id)) as unknown as IdentifiableNode | null);
 
   const figmaSnapshot: FigmaSnapshot = {
@@ -567,8 +587,7 @@ async function handleSnapshot(): Promise<void> {
     figmaNodeName: page.name,
     capturedAt: new Date().toISOString(),
     root: {
-      // CRITIQUE : sans dg_id sur la racine, compareSnapshots calcule useDgId = false et
-      // désactive le matching par dg_id pour TOUTE la page (repli silencieux sur id:/path:).
+      // dg_id de la page : apparie la racine elle-même (le diff apparie par dg_id nœud par nœud).
       dg_id: ensureNodeIdentity(page as unknown as Parameters<typeof ensureNodeIdentity>[0]),
       id: page.id,
       name: page.name,
@@ -577,7 +596,7 @@ async function handleSnapshot(): Promise<void> {
       // Une PageNode n'a de toute façon aucune géométrie (elle n'étend pas LayoutMixin).
       x: 0, y: 0, width: 0, height: 0,
       opacity: 1, fills: [], strokes: [],
-      children: tracked.map(extractSnapshot),
+      children: tracked.map(withFloating),
     },
   };
 

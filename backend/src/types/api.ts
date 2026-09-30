@@ -96,6 +96,7 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     layoutSizingVertical: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
     layoutPositioning: z.enum(['AUTO', 'ABSOLUTE']).optional(),
     layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']).optional(),
+    floating: z.boolean().optional(),
     effects: z.array(figmaEffectSchema).optional(),
     characters: z.string().optional(),
     fontSize: z.number().optional(),

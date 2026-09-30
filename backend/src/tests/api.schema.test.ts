@@ -39,3 +39,15 @@ describe('createCheckpointSchema — layoutMode', () => {
     expect(root.children[0].layoutMode).toBe('NONE');
   });
 });
+
+describe('createCheckpointSchema — floating', () => {
+  it('conserve floating (sinon Zod le supprime en silence)', () => {
+    const node = { id: 'n', name: 'n', type: 'GROUP', x: 0, y: 0, width: 1, height: 1, opacity: 1, fills: [], strokes: [] };
+    const parsed = createCheckpointSchema.parse({
+      asset_id: '00000000-0000-4000-8000-000000000000', branch_name: 'main', author: { figma_id: 'u', name: 'U' },
+      snapshot_json: { figmaNodeId: 'n', figmaNodeName: 'n', capturedAt: '2026-09-30T00:00:00Z',
+        root: { ...node, type: 'PAGE', children: [{ ...node, floating: true }] } },
+    });
+    expect((parsed.snapshot_json.root as { children: Array<{ floating?: boolean }> }).children[0].floating).toBe(true);
+  });
+});

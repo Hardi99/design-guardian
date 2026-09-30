@@ -68,6 +68,9 @@ export interface NodeSnapshot {
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID'; // frames : ≠ NONE = auto-layout (ses enfants sont « de flux »)
+  // Posé sur la PAGE (hors frame) mais sur une frame suivie : rangé sous elle pour rester capturé,
+  // son vrai parent reste la page (cf. plugin assignFloating, diff flatten).
+  floating?: boolean;
   effects?: FigmaEffect[];
   // TEXT-specific
   characters?: string;

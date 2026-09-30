@@ -113,6 +113,7 @@ export class DiffService {
   private flatten(root: NodeSnapshot, keyOf: (node: NodeSnapshot, path: string) => string): Map<string, FlatEntry> {
     const map = new Map<string, FlatEntry>();
     type Ref = { node: NodeSnapshot; key: string } | null;
+    let rootRef: Ref = null;
     const traverse = (node: NodeSnapshot, path: string, parent: Ref, frame: Ref): void => {
       const key = keyOf(node, path);
       map.set(key, {
@@ -121,8 +122,14 @@ export class DiffService {
         parent: parent?.node ?? null, parentKey: parent?.key ?? null, frameKey: frame?.key ?? null,
       });
       const self = { node, key };
+      rootRef ??= self;
       const childFrame = frame && COORD_TRANSPARENT.has(node.type) ? frame : self;
-      node.children?.forEach((child, i) => traverse(child, `${path}/${i}:${child.type}:${child.name}`, self, childFrame));
+      // Élément flottant : rangé sous la frame qu'il recouvre, mais son vrai parent est la page.
+      node.children?.forEach((child, i) => {
+        const childPath = `${path}/${i}:${child.type}:${child.name}`;
+        if (child.floating) traverse(child, childPath, rootRef, rootRef);
+        else traverse(child, childPath, self, childFrame);
+      });
     };
     traverse(root, `${root.type}:${root.name}`, null, null);
     return map;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isTracked, setTracked, countNodes, listFrames, estimateMs,
+  isTracked, setTracked, countNodes, listFrames, estimateMs, assignFloating,
   TRACKED_KEY, MS_PER_NODE, type TrackableNode,
 } from './trackedFrames.js';
 
@@ -74,5 +74,38 @@ describe('estimateMs', () => {
 
   it('aucune frame suivie → 0', () => {
     expect(estimateMs([{ id: 'a', name: 'A', type: 'FRAME', tracked: false, nodes: 0 }])).toBe(0);
+  });
+});
+
+// ─── Éléments « flottants » ──────────────────────────────────────────────────
+// Un collage sans frame sélectionnée pose l'élément sur la PAGE, souvent au même endroit :
+// visuellement il est toujours « dans » la frame, mais la capture ne traverse que les
+// frames suivies → il serait signalé supprimé. On le rattache à la frame suivie qu'il
+// recouvre (son centre y tombe), pour qu'il reste capturé.
+
+describe('assignFloating', () => {
+  const box = (id: string, x: number, y: number, w: number, h: number) => ({ id, x, y, w, h });
+  const home = box('home', 0, 0, 428, 926);
+  const about = box('about', 500, 0, 428, 926);
+
+  it('élément dont le centre tombe dans une frame suivie → rattaché à elle', () => {
+    expect(assignFloating([box('g', 179, 0, 70, 70)], [home, about]).get('g')).toBe('home');
+  });
+
+  it('élément hors de toute frame suivie → non rattaché', () => {
+    expect(assignFloating([box('g', 1000, 1000, 70, 70)], [home, about]).has('g')).toBe(false);
+  });
+
+  it('centre dans la frame même s\'il déborde → rattaché', () => {
+    expect(assignFloating([box('g', 380, 100, 70, 70)], [home, about]).get('g')).toBe('home');
+  });
+
+  it('élément au moins aussi grand que la frame (autre écran, fond) → non rattaché', () => {
+    expect(assignFloating([box('bg', -10, -10, 450, 950)], [home]).has('bg')).toBe(false);
+  });
+
+  it('frames suivies qui se chevauchent → la plus haute (dernière dans l\'ordre des calques)', () => {
+    const over = box('over', 0, 0, 300, 300);
+    expect(assignFloating([box('g', 10, 10, 20, 20)], [home, over]).get('g')).toBe('over');
   });
 });

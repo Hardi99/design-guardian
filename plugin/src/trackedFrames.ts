@@ -67,3 +67,26 @@ export function listFrames(children: readonly TrackableNode[]): FrameEntry[] {
 export function estimateMs(frames: readonly FrameEntry[]): number {
   return frames.reduce((sum, f) => sum + (f.tracked ? f.nodes : 0), 0) * MS_PER_NODE;
 }
+
+export interface Box { id: string; x: number; y: number; w: number; h: number }
+
+/**
+ * Éléments « flottants » : posés sur la page (hors frame), typiquement après un collage
+ * sans frame sélectionnée, mais visuellement sur une frame suivie. Chacun est rattaché à
+ * la frame suivie où tombe son centre — la plus haute si plusieurs se chevauchent (ordre
+ * des calques : dernier = au-dessus). Un élément au moins aussi grand que la frame
+ * (autre écran, fond) n'est pas rattaché. Renvoie id de l'élément → id de la frame.
+ */
+export function assignFloating(candidates: readonly Box[], hosts: readonly Box[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const c of candidates) {
+    const cx = c.x + c.w / 2;
+    const cy = c.y + c.h / 2;
+    for (let i = hosts.length - 1; i >= 0; i--) {
+      const h = hosts[i];
+      if (c.w >= h.w && c.h >= h.h) continue;
+      if (cx >= h.x && cx <= h.x + h.w && cy >= h.y && cy <= h.y + h.h) { out.set(c.id, h.id); break; }
+    }
+  }
+  return out;
+}
