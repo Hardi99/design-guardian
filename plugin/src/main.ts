@@ -21,7 +21,7 @@ import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMoved
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
-figma.showUI(__html__, { width: 400, height: 600 });
+figma.showUI(__html__, { width: 400, height: 600, themeColors: true });
 
 // documentAccess: "dynamic-page" → charger toutes les pages est coûteux sur les gros
 // fichiers. On le diffère jusqu'au premier accès cross-page réel (historique, branches)

@@ -1,0 +1,21 @@
+/* Direction visuelle du plugin : SEUL fichier à modifier pour en changer.
+   Les couleurs suivent le thème clair/sombre de Figma (themeColors: true dans main.ts) ;
+   les valeurs de repli servent hors Figma (aperçu navigateur). */
+@theme inline {
+  --color-dg-bg:          var(--figma-color-bg, #2c2c2c);
+  --color-dg-raised:      var(--figma-color-bg-secondary, #383838);
+  --color-dg-hover:       var(--figma-color-bg-hover, #444444);
+  --color-dg-selected:    var(--figma-color-bg-selected, #4a5878);
+  --color-dg-text:        var(--figma-color-text, #ffffff);
+  --color-dg-text-2:      var(--figma-color-text-secondary, #b3b3b3);
+  --color-dg-text-3:      var(--figma-color-text-tertiary, #8a8a8a);
+  --color-dg-border:      var(--figma-color-border, #444444);
+  --color-dg-accent:      var(--figma-color-bg-brand, #0d99ff);
+  --color-dg-accent-text: var(--figma-color-text-brand, #7cc4f8);
+  --color-dg-on-accent:   var(--figma-color-text-onbrand, #ffffff);
+  --color-dg-success:     var(--figma-color-text-success, #79d297);
+  --color-dg-warning:     var(--figma-color-text-warning, #f7d15f);
+  --color-dg-danger:      var(--figma-color-text-danger, #fca397);
+  --radius-dg: 6px;
+  --font-dg: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
