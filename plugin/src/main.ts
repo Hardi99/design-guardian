@@ -35,23 +35,22 @@ function generateFileId(): string {
 }
 
 // Key resolution order — ensures all editors of the same file share one project:
-// 1. figma.fileKey          — available in dev mode + some Figma plans
-// 2. figma.root.getPluginData — stored in the file itself, shared across all users
-// 3. figma.clientStorage    — legacy per-user fallback (promotes to shared on write)
-// 4. Fresh generated ID     — first-ever open, written to both stores
+// 1. figma.root.getPluginData — stored in the file itself, shared across all users
+// 2. figma.clientStorage    — legacy per-user fallback, only if it is a random id (promotes to shared on write)
+// 3. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
-  // Auto-init : ne lit que figma.root / figma.fileKey / figma.currentPage.id (racine +
+  // Auto-init : ne lit que figma.root / figma.currentPage.id (racine +
   // page courante, toujours accessibles) — aucun accès cross-page ici, donc pas besoin
   // d'ensurePagesLoaded(). Le chargement des pages est différé aux handlers qui en ont
   // vraiment besoin (historique, branches).
-  let fileKey: string =
-    (figma.fileKey as string | undefined) ??
-    figma.root.getPluginData('dg_file_id') ??
-    '';
+  // Jamais figma.fileKey : c'est la clé de l'URL du fichier (lisible dans tout lien de
+  // partage), or l'identifiant envoyé à auto-init donne la clé d'API du projet.
+  let fileKey: string = figma.root.getPluginData('dg_file_id');
 
   if (!fileKey) {
     const userKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
-    if (userKey) {
+    // Seul un id aléatoire est réutilisé : le serveur refuse tout autre format (ex. anciens id de page).
+    if (userKey && /^[0-9a-f]{32}$/.test(userKey)) {
       fileKey = userKey;
       // Promote legacy per-user key to file-scoped shared storage.
       try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
@@ -94,7 +93,7 @@ figma.ui.onmessage = async (raw: unknown) => {
   switch (msg.type) {
     case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
     case 'RETRY_INIT': {
-      const key = (figma.fileKey as string | undefined) ?? figma.root.getPluginData('dg_file_id');
+      const key = figma.root.getPluginData('dg_file_id');
       if (key) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
       break;
     }

@@ -64,7 +64,7 @@ describe('POST /api/projects/auto-init — includes assets', () => {
     const res = await app.request('/api/projects/auto-init', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ figma_file_key: 'f1', figma_file_name: 'F' }),
+      body: JSON.stringify({ figma_file_key: 'f'.repeat(32), figma_file_name: 'F' }),
     });
 
     expect(res.status).toBe(200);

@@ -73,7 +73,7 @@ projectsRouter.get('/', authMiddleware, async (c) => {
 
 projectsRouter.get('/:id', authMiddleware, async (c) => {
   const { data, error } = await getSupabaseClient()
-    .from('projects').select('*').eq('id', c.req.param('id')).single();
+    .from('projects').select('*').eq('id', c.req.param('id')).eq('owner_id', c.get('userId')).single();
 
   if (error || !data) return c.json<ErrorResponse>({ error: 'Project not found' }, 404);
   return c.json<ProjectResponse>({ project: data });
