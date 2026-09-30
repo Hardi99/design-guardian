@@ -828,3 +828,65 @@ describe('trous de détection — peintures', () => {
       .toEqual([]);
   });
 });
+
+// ─── Trous de détection — ombres, auto-layout, composants ────────────────────
+
+describe('trous de détection — ombres, auto-layout, composants', () => {
+  const svc = new DiffService();
+  const black = { r: 0, g: 0, b: 0, a: 0.25 };
+  const shadow = (type: 'DROP_SHADOW' | 'INNER_SHADOW', y: number) => ({ type, visible: true, radius: 4, color: black, offset: { x: 0, y } });
+  const al = (o: Partial<NonNullable<NodeSnapshot['autoLayout']>> = {}) => ({
+    itemSpacing: 8, paddingTop: 8, paddingRight: 16, paddingBottom: 8, paddingLeft: 16,
+    primaryAxisAlignItems: 'MIN', counterAxisAlignItems: 'CENTER', layoutWrap: 'NO_WRAP', ...o,
+  });
+  const changes = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) =>
+    svc.compareSnapshots(makeSnapshot(a), makeSnapshot(b)).modified[0]?.changes ?? [];
+  const props = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) => changes(a, b).map(c => c.property);
+
+  it('décalage d\'ombre → effect.offset', () => {
+    expect(props({ effects: [shadow('DROP_SHADOW', 2)] }, { effects: [shadow('DROP_SHADOW', 6)] })).toEqual(['effect.offset']);
+  });
+
+  it('ombre portée → intérieure → effect.type', () => {
+    expect(props({ effects: [shadow('DROP_SHADOW', 2)] }, { effects: [shadow('INNER_SHADOW', 2)] })).toEqual(['effect.type']);
+  });
+
+  it('direction HORIZONTAL → VERTICAL → layoutMode', () => {
+    expect(props({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'VERTICAL', autoLayout: al() })).toEqual(['layoutMode']);
+  });
+
+  it('espacement 8 → 12 → itemSpacing (+4.00px)', () => {
+    const c = changes({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'HORIZONTAL', autoLayout: al({ itemSpacing: 12 }) });
+    expect(c.map(x => x.property)).toEqual(['itemSpacing']);
+    expect(c[0].delta).toBe('+4.00px');
+  });
+
+  it('marge haute 8 → 12 → une seule propriété padding', () => {
+    const c = changes({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'HORIZONTAL', autoLayout: al({ paddingTop: 12 }) });
+    expect(c.map(x => x.property)).toEqual(['padding']);
+    expect(c[0].delta).toBe('8/16/8/16 → 12/16/8/16');
+  });
+
+  it('composant échangé (jeux différents) → component', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Button', set: 'Button' } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Tag', set: 'Tag' } });
+    expect(c.map(x => x.property)).toEqual(['component']);
+    expect(c[0].delta).toBe('Button → Tag');
+  });
+
+  it('variante changée dans le même jeu → uniquement variant.Size', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Small', set: 'Button', variant: { Size: 'Small' } } });
+    expect(c.map(x => x.property)).toEqual(['variant.Size']);
+    expect(c[0].delta).toBe('Large → Small');
+  });
+
+  it('capture ancienne (ni autoLayout ni component d\'un côté) → aucun changement', () => {
+    expect(props(
+      { type: 'INSTANCE', layoutMode: 'HORIZONTAL' },
+      { type: 'INSTANCE', layoutMode: 'HORIZONTAL', autoLayout: al({ itemSpacing: 40 }), component: { key: 'k2', name: 'Tag' } },
+    )).toEqual([]);
+  });
+});

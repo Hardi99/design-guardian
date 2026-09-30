@@ -286,6 +286,15 @@ export class DiffService {
         const e2 = v2Effects[i];
         if (!e1 || !e2) continue;
         const label = v1Effects.length > 1 ? `effect[${i}]` : 'effect';
+        if (e1.type !== e2.type) {
+          changes.push({ property: `${label}.type`, oldValue: e1.type, newValue: e2.type, delta: `${e1.type} → ${e2.type}` });
+          continue;
+        }
+        if (e1.offset && e2.offset && (Math.abs(e1.offset.x - e2.offset.x) > this.EPSILON || Math.abs(e1.offset.y - e2.offset.y) > this.EPSILON)) {
+          const fmt = (o: { x: number; y: number }) => `(${o.x}, ${o.y})`;
+          changes.push({ property: `${label}.offset`, oldValue: fmt(e1.offset), newValue: fmt(e2.offset), delta: `${fmt(e1.offset)} → ${fmt(e2.offset)}` });
+        }
+        if (e1.spread !== undefined && e2.spread !== undefined) this.compareNumeric(changes, `${label}.spread`, e1.spread, e2.spread, 'px');
         if (e1.visible !== e2.visible)
           changes.push({ property: `${label}.visible`, oldValue: e1.visible, newValue: e2.visible, delta: e2.visible ? 'caché → visible' : 'visible → caché' });
         if (Math.abs(e1.radius - e2.radius) > this.EPSILON)
@@ -297,6 +306,9 @@ export class DiffService {
         }
       }
     }
+
+    this.compareAutoLayout(changes, v1, v2);
+    this.compareComponent(changes, v1, v2);
 
     return changes;
   }
@@ -340,6 +352,43 @@ export class DiffService {
       }
       if (p1.visible !== undefined && p2.visible !== undefined && p1.visible !== p2.visible) {
         changes.push({ property: `${label}.visible`, oldValue: p1.visible, newValue: p2.visible, delta: p2.visible ? 'masqué → visible' : 'visible → masqué' });
+      }
+    }
+  }
+
+  // Auto-layout : direction, espacement, marges (une seule propriété), alignements, retour à la
+  // ligne. Comparé seulement si présent des deux côtés (capture ancienne → rien).
+  private compareAutoLayout(changes: PropertyChange[], v1: NodeSnapshot, v2: NodeSnapshot): void {
+    if (v1.layoutMode !== undefined && v2.layoutMode !== undefined && v1.layoutMode !== v2.layoutMode) {
+      changes.push({ property: 'layoutMode', oldValue: v1.layoutMode, newValue: v2.layoutMode, delta: `${v1.layoutMode} → ${v2.layoutMode}` });
+    }
+    const a = v1.autoLayout, b = v2.autoLayout;
+    if (!a || !b) return;
+    this.compareNumeric(changes, 'itemSpacing', a.itemSpacing, b.itemSpacing, 'px');
+    const pad = (x: typeof a) => [x.paddingTop, x.paddingRight, x.paddingBottom, x.paddingLeft];
+    const p1 = pad(a), p2 = pad(b);
+    if (p1.some((v, i) => Math.abs(v - (p2[i] ?? v)) > this.EPSILON)) {
+      changes.push({ property: 'padding', oldValue: p1.join('/'), newValue: p2.join('/'), delta: `${p1.join('/')} → ${p2.join('/')}` });
+    }
+    for (const k of ['primaryAxisAlignItems', 'counterAxisAlignItems', 'layoutWrap'] as const) {
+      if (a[k] !== b[k]) changes.push({ property: k, oldValue: a[k], newValue: b[k], delta: `${a[k]} → ${b[k]}` });
+    }
+  }
+
+  // Instance : variantes changées (une propriété chacune) ; « composant échangé » seulement si
+  // le composant principal change HORS d'un même jeu de variantes (sinon la variante suffit).
+  private compareComponent(changes: PropertyChange[], v1: NodeSnapshot, v2: NodeSnapshot): void {
+    const a = v1.component, b = v2.component;
+    if (!a || !b) return;
+    const sameSet = a.set !== undefined && a.set === b.set;
+    if (a.key !== b.key && !sameSet) {
+      changes.push({ property: 'component', oldValue: a.name, newValue: b.name, delta: `${a.name} → ${b.name}` });
+      return;
+    }
+    const va = a.variant ?? {}, vb = b.variant ?? {};
+    for (const k of new Set([...Object.keys(va), ...Object.keys(vb)])) {
+      if (va[k] !== vb[k]) {
+        changes.push({ property: `variant.${k}`, oldValue: va[k], newValue: vb[k], delta: `${String(va[k] ?? '—')} → ${String(vb[k] ?? '—')}` });
       }
     }
   }
