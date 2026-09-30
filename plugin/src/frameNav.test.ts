@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frameHistory, frameStats, hasFrameNav, touchedFrames, restoreAllowedInDiff, cacheableDiff } from './frameNav.js';
+import { frameHistory, frameStats, hasFrameNav, touchedFrames, restoreAllowedInDiff, cacheableDiff, defaultHomeTab, summaryCardLabel } from './frameNav.js';
 import type { Version } from './store.js';
 
 const v = (id: string, at: string, frames?: Array<[string, 'initial' | 'modified' | 'unchanged']>): Version => ({
@@ -62,5 +62,25 @@ describe('cacheableDiff', () => {
   it('ne met en cache qu\'une réponse qui a un rendu', () => {
     expect(cacheableDiff({ render_url: 'https://x' })).toBe(true);
     expect(cacheableDiff({ render_url: null })).toBe(false);
+  });
+});
+
+describe('defaultHomeTab', () => {
+  it('historique récent (versions avec frames) → onglet Frames', () => {
+    expect(defaultHomeTab([v('v1', '2026-09-01', [['A', 'initial']])])).toBe('frames');
+  });
+  it('historique ancien (aucune version avec frames) → Toutes les versions', () => {
+    expect(defaultHomeTab([v('v1', '2026-09-01')])).toBe('versions');
+  });
+});
+
+describe('summaryCardLabel', () => {
+  it("annonce le résumé IA aux lecteurs d'écran", () => {
+    expect(summaryCardLabel({ ...v('v3', '2026-09-01'), version_number: 3, ai_summary: 'Le bouton passe au vert.' }))
+      .toBe('Dernier checkpoint, version 3 — Le bouton passe au vert.');
+  });
+  it('sans résumé → seulement la version', () => {
+    expect(summaryCardLabel({ ...v('v3', '2026-09-01'), version_number: 3, ai_summary: null }))
+      .toBe('Dernier checkpoint, version 3');
   });
 });

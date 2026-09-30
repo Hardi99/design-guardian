@@ -28,6 +28,17 @@ export function hasFrameNav(versions: readonly Version[]): boolean {
   return versions.some(v => (v.frames?.length ?? 0) > 0);
 }
 
+/** Onglet d'accueil par défaut : les frames si l'historique a des résumés par frame, sinon la
+ *  timeline (historique ancien, versions sans `frames` : la liste des frames y serait vide). */
+export function defaultHomeTab(versions: readonly Version[]): 'frames' | 'versions' {
+  return hasFrameNav(versions) ? 'frames' : 'versions';
+}
+
+/** Libellé accessible de la carte « Dernier checkpoint » : le résumé IA est ce que le produit vend. */
+export function summaryCardLabel(v: Pick<Version, 'version_number' | 'ai_summary'>): string {
+  return `Dernier checkpoint, version ${v.version_number}${v.ai_summary ? ` — ${v.ai_summary}` : ''}`;
+}
+
 /** Frames touchées à une version (nouvelles ou modifiées) : entrées du diff « toutes versions ». */
 export function touchedFrames(frames: readonly FrameSummary[] | null | undefined): FrameSummary[] {
   return (frames ?? []).filter(f => f.status !== 'unchanged');

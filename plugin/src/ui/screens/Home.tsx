@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import type { MainToUI } from '../../types.js';
 import type { Version } from '../../store.js';
 import { useAppStore } from '../../useAppStore.js';
-import { frameHistory } from '../../frameNav.js';
+import { frameHistory, defaultHomeTab } from '../../frameNav.js';
 import type { FrameEntry } from '../../trackedFrames.js';
 import { api, send } from '../api.js';
 import { clearDiffCache } from '../diff/DiffScreen.js';
@@ -24,7 +24,8 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const setFrame       = useAppStore(s => s.setFrame);
 
   const [versions, setVersions] = useState<Version[]>([]);
-  const [tab,      setTab]      = useState<'frames' | 'versions'>('frames');
+  // Onglet choisi par l'utilisateur ; tant qu'il n'a rien choisi, défaut selon l'historique.
+  const [tabChoice, setTab]     = useState<'frames' | 'versions' | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [err,      setErr]      = useState<string | null>(null);
   const [pageName, setPageName] = useState('');
@@ -64,6 +65,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   const visible = versions.filter(v => v.branch_name === branch);
   const latest  = visible.length > 0 ? visible[visible.length - 1] : null;
+  const tab     = tabChoice ?? defaultHomeTab(visible);
 
   const openDiff = useCallback((v: Version) => { setFrame(null); setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
   // Page-centric : clic sur une frame → son historique (versions où elle est apparue ou a changé).
