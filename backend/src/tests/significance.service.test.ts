@@ -211,3 +211,18 @@ describe('nodeIdsToRender', () => {
     expect(nodeIdsToRender(delta({ modified: many }), 3).size).toBe(3);
   });
 });
+
+describe('scoreChange — trous de détection', () => {
+  it('espacement : sous 1 px → minor, au-delà → notable', () => {
+    expect(scoreChange(ch({ property: 'itemSpacing', oldValue: 8, newValue: 8.5 }))).toBe('minor');
+    expect(scoreChange(ch({ property: 'itemSpacing', oldValue: 8, newValue: 12 }))).toBe('notable');
+  });
+  it('étalement d\'ombre (même indexé) : sous 1 px → minor', () => {
+    expect(scoreChange(ch({ property: 'effect[1].spread', oldValue: 0, newValue: 0.5 }))).toBe('minor');
+  });
+  it('variante, composant, dégradé, image → toujours notables', () => {
+    for (const property of ['variant.Size', 'component', 'fill.gradient', 'fill.image', 'padding', 'layoutMode']) {
+      expect(scoreChange(ch({ property, oldValue: 'a', newValue: 'b' }))).toBe('notable');
+    }
+  });
+});
