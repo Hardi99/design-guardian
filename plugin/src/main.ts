@@ -689,6 +689,7 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     layoutSizingHorizontal: extractLayoutSizing(node, 'layoutSizingHorizontal'),
     layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
     layoutPositioning:      extractLayoutPositioning(node),
+    layoutMode:             'layoutMode' in node ? (node as FrameNode).layoutMode : undefined,
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
     characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,

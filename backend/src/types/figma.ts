@@ -67,6 +67,7 @@ export interface NodeSnapshot {
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
+  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID'; // frames : ≠ NONE = auto-layout (ses enfants sont « de flux »)
   effects?: FigmaEffect[];
   // TEXT-specific
   characters?: string;
@@ -109,6 +110,9 @@ export interface NodeDelta {
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
+  // Parent en auto-layout (layoutMode ≠ NONE) : seul critère fiable d'une position recalculée
+  // par Figma — layoutSizing*/layoutPositioning sont renseignés pour TOUS les nœuds. undefined = inconnu.
+  inAutoLayout?: boolean;
   bbox?: { x: number; y: number; w: number; h: number }; // bbox relative à la root — cf. geometry.service
   significance?: 'notable' | 'minor'; // stampé à la capture (cascade auto-layout résolue) — cf. significance.service
   // Regroupement des nœuds internes d'icônes/composants : `instanceRoot` = id de l'INSTANCE

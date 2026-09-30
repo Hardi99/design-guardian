@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createAssetSchema } from '../types/api.js';
+import { createAssetSchema, createCheckpointSchema } from '../types/api.js';
 
 /**
  * Un champ absent du schéma Zod est supprimé SILENCIEUSEMENT du corps validé — c'est la
@@ -19,5 +19,23 @@ describe('createAssetSchema — scope', () => {
 
   it('rejette une valeur de scope inconnue', () => {
     expect(() => createAssetSchema.parse({ name: 'X', asset_type: 'ui', scope: 'calque' })).toThrow();
+  });
+});
+
+describe('createCheckpointSchema — layoutMode', () => {
+  const node = (extra: Record<string, unknown>) => ({
+    id: 'n', name: 'n', type: 'FRAME', x: 0, y: 0, width: 1, height: 1, opacity: 1, fills: [], strokes: [], ...extra,
+  });
+  const body = (root: Record<string, unknown>) => ({
+    asset_id: '00000000-0000-4000-8000-000000000000', branch_name: 'main',
+    author: { figma_id: 'u', name: 'U' },
+    snapshot_json: { figmaNodeId: 'n', figmaNodeName: 'n', capturedAt: '2026-09-30T00:00:00Z', root },
+  });
+
+  it('conserve layoutMode à la racine et dans les enfants (sinon Zod le supprime en silence)', () => {
+    const parsed = createCheckpointSchema.parse(body(node({ layoutMode: 'VERTICAL', children: [node({ layoutMode: 'NONE' })] })));
+    const root = parsed.snapshot_json.root as { layoutMode?: string; children: Array<{ layoutMode?: string }> };
+    expect(root.layoutMode).toBe('VERTICAL');
+    expect(root.children[0].layoutMode).toBe('NONE');
   });
 });

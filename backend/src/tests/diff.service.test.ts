@@ -663,3 +663,83 @@ describe('appariement dg_id nœud par nœud', () => {
     expect(delta.modified.map(m => m.nodeId)).toEqual(['c1']);
   });
 });
+
+// ─── Changement de parent ────────────────────────────────────────────────────
+// Cas réel (test-again-2) : groupe coupé dans « Frame 14061 » (y=770) et collé dans la
+// frame principale (y=0). Sa position DANS son parent est identique avant/après (179, 0) :
+// comparer en relatif masquait un déplacement visuel de 770 px, et le changement de
+// parent lui-même n'était jamais signalé.
+
+describe('changement de parent', () => {
+  const n = (dg: string, id: string, type: string, x: number, y: number, children?: NodeSnapshot[]): NodeSnapshot => ({
+    id, dg_id: dg, name: dg, type, x, y, width: 40, height: 40, opacity: 1, fills: [], strokes: [],
+    ...(children ? { children } : {}),
+  });
+  const snap = (root: NodeSnapshot): FigmaSnapshot =>
+    ({ figmaNodeId: root.id, figmaNodeName: root.name, capturedAt: '2026-09-30T00:00:00Z', root });
+  const svc = new DiffService();
+
+  const before = snap(n('Home', 'h', 'FRAME', 0, 0, [
+    n('Frame 14061', 'f', 'FRAME', 0, 770, [n('Group', 'g1', 'GROUP', 179, 770, [n('Ellipse', 'e1', 'ELLIPSE', 179, 770)])]),
+  ]));
+
+  it('coupé-collé dans un autre parent → changement de parent + déplacement visuel', () => {
+    const after = snap(n('Home', 'h', 'FRAME', 0, 0, [
+      n('Frame 14061', 'f', 'FRAME', 0, 770),
+      n('Group', 'g2', 'GROUP', 179, 0, [n('Ellipse', 'e2', 'ELLIPSE', 179, 0)]),
+    ]));
+    const d = svc.compareSnapshots(before, after);
+    expect(d.added).toHaveLength(0);
+    expect(d.removed).toHaveLength(0);
+    const g = d.modified.find(m => m.nodeName === 'Group');
+    const parent = g?.changes.find(c => c.property === 'parent');
+    expect(parent?.oldValue).toBe('Frame 14061');
+    expect(parent?.newValue).toBe('Home');
+    expect(g?.changes.find(c => c.property === 'y')?.delta).toBe('-770.00px');
+    // L'ellipse a suivi son groupe : ni son parent ni sa place dans le groupe n'ont changé.
+    expect(d.modified.find(m => m.nodeName === 'Ellipse')).toBeUndefined();
+  });
+
+  it('changé de parent sans bouger à l\'écran → seul le changement de parent est signalé', () => {
+    const after = snap(n('Home', 'h', 'FRAME', 0, 0, [
+      n('Frame 14061', 'f', 'FRAME', 0, 770),
+      n('Group', 'g2', 'GROUP', 179, 770, [n('Ellipse', 'e2', 'ELLIPSE', 179, 770)]),
+    ]));
+    const g = svc.compareSnapshots(before, after).modified.find(m => m.nodeName === 'Group');
+    expect(g?.changes.map(c => c.property)).toEqual(['parent']);
+  });
+
+  it('sorti d\'un groupe dans la même frame → parent signalé, position mesurée dans la frame', () => {
+    const v1 = snap(n('Home', 'h', 'FRAME', 0, 0, [n('G', 'g', 'GROUP', 10, 10, [n('R', 'r', 'RECTANGLE', 10, 10)])]));
+    const v2 = snap(n('Home', 'h', 'FRAME', 0, 0, [n('G', 'g', 'GROUP', 10, 10), n('R', 'r', 'RECTANGLE', 10, 10)]));
+    const r = svc.compareSnapshots(v1, v2).modified.find(m => m.nodeName === 'R');
+    expect(r?.changes.map(c => c.property)).toEqual(['parent']);
+  });
+});
+
+// ─── Parent en auto-layout ───────────────────────────────────────────────────
+// Le diff transmet si le PARENT est en auto-layout : c'est le seul signal fiable d'une
+// position recalculée par Figma (layoutSizing* est renseigné pour tous les nœuds).
+
+describe('inAutoLayout (parent en auto-layout)', () => {
+  const kid = (id: string, y: number): NodeSnapshot =>
+    ({ id, dg_id: id, name: id, type: 'RECTANGLE', x: 0, y, width: 10, height: 10, opacity: 1, fills: [], strokes: [] });
+  const frame = (layoutMode: NodeSnapshot['layoutMode'], y: number): FigmaSnapshot => ({
+    figmaNodeId: 'f', figmaNodeName: 'f', capturedAt: '2026-09-30T00:00:00Z',
+    root: { id: 'f', dg_id: 'f', name: 'f', type: 'FRAME', x: 0, y: 0, width: 100, height: 100, opacity: 1, fills: [], strokes: [],
+      ...(layoutMode ? { layoutMode } : {}), children: [kid('k', y)] },
+  });
+  const svc = new DiffService();
+
+  it('parent VERTICAL → inAutoLayout: true', () => {
+    expect(svc.compareSnapshots(frame('VERTICAL', 0), frame('VERTICAL', 20)).modified[0]?.inAutoLayout).toBe(true);
+  });
+
+  it('parent NONE → inAutoLayout: false', () => {
+    expect(svc.compareSnapshots(frame('NONE', 0), frame('NONE', 20)).modified[0]?.inAutoLayout).toBe(false);
+  });
+
+  it('capture ancienne (layoutMode inconnu) → undefined (le déplacement reste notable)', () => {
+    expect(svc.compareSnapshots(frame(undefined, 0), frame(undefined, 20)).modified[0]?.inAutoLayout).toBeUndefined();
+  });
+});

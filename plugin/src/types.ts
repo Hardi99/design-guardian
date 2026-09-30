@@ -45,6 +45,7 @@ export interface NodeSnapshot {
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
+  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID'; // frames : ≠ NONE = auto-layout
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific

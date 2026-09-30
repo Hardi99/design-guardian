@@ -43,7 +43,7 @@ describe('scoreChange', () => {
 });
 
 describe('scoreChange — géométrie dérivée (contexte auto-layout)', () => {
-  const flowChild: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO' };
+  const flowChild: LayoutContext = { inAutoLayout: true, layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO' };
 
   it('x/y d\'un enfant de flux → minor (position recalculée)', () => {
     expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), flowChild)).toBe('minor');
@@ -62,8 +62,16 @@ describe('scoreChange — géométrie dérivée (contexte auto-layout)', () => {
   });
 
   it('enfant ABSOLU → x/y notable (position authored, pas dérivée)', () => {
-    const abs: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutPositioning: 'ABSOLUTE' };
+    const abs: LayoutContext = { inAutoLayout: true, layoutSizingHorizontal: 'FIXED', layoutPositioning: 'ABSOLUTE' };
     expect(scoreChange(ch({ property: 'x', oldValue: 0, newValue: 80 }), abs)).toBe('notable');
+  });
+
+  // Figma renseigne layoutSizing*/layoutPositioning pour TOUS les nœuds (même une frame
+  // posée sur la page renvoie FIXED/AUTO) : seul un parent en auto-layout prouve le flux.
+  it('FIXED/AUTO sans parent auto-layout → x/y notable (déplacement manuel)', () => {
+    const notFlow: LayoutContext = { layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO' };
+    expect(scoreChange(ch({ property: 'y', oldValue: 770, newValue: 0 }), notFlow)).toBe('notable');
+    expect(scoreChange(ch({ property: 'y', oldValue: 770, newValue: 0 }), { ...notFlow, inAutoLayout: false })).toBe('notable');
   });
 
   it('sans contexte → comportement actuel (non-régression)', () => {
@@ -117,7 +125,7 @@ describe('rankDelta — utilise le contexte layout du NodeDelta', () => {
     const n: NodeDelta = {
       nodeId: 'Box', nodeName: 'Box', nodeType: 'FRAME',
       changes: [{ property: 'y', oldValue: 0, newValue: 63 }, { property: 'x', oldValue: 0, newValue: 12 }],
-      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+      inAutoLayout: true, layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
     };
     const r = rankDelta(delta({ modified: [n] }));
     expect(r.minorModified.map(x => x.nodeName)).toEqual(['Box']);
@@ -186,7 +194,7 @@ describe('nodeIdsToRender', () => {
   const derived: NodeDelta = {
     nodeId: 'D', nodeName: 'D', nodeType: 'FRAME',
     changes: [{ property: 'y', oldValue: 0, newValue: 63 }],
-    layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+    inAutoLayout: true, layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
   };
 
   it('ne retient que les notables (+ added/removed), pas les nœuds dérivés', () => {

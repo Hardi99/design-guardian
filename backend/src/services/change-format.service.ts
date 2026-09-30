@@ -35,6 +35,7 @@ export function formatChange(c: PropertyChange): ReadableChange {
     case 'fontWeight': return { kind: 'weight', label: 'Graisse', from: weightName(c.oldValue), to: weightName(c.newValue) };
     case 'fontFamily': return { kind: 'text', label: 'Police', from: str(c.oldValue), to: str(c.newValue) };
     case 'characters': return { kind: 'text', label: 'Texte', from: str(c.oldValue), to: str(c.newValue) };
+    case 'parent':     return { kind: 'text', label: 'Parent', from: str(c.oldValue), to: str(c.newValue) };
     case 'rotation':   return { kind: 'rotation', label: 'Rotation', degrees: numDelta(c) };
     case 'opacity':    return { kind: 'opacity', label: 'Opacité', from: pct(c.oldValue), to: pct(c.newValue) };
     case 'visible':    return { kind: 'visibility', label: 'Visibilité', visible: c.newValue === true };
