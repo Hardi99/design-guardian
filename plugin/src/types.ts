@@ -80,7 +80,7 @@ export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string; render_svg_b64?: string; render_kind?: 'svg' | 'png' }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
   | { type: 'FILE_INFO'; fileKey: string; fileName: string }
-  | { type: 'PRESENCE'; here: string[]; elsewhere: string[] } // tri d'un projet partagé (cf. fileSplit.ts)
+  | { type: 'PRESENCE'; here: string[]; elsewhere: string[]; offer: boolean } // tri d'un projet partagé (cf. fileSplit.ts)
   | { type: 'SPLIT_READY'; fileKey: string; previous: string } // nouvel id écrit dans le fichier
   | { type: 'INIT_ERROR'; message: string } // démarrage impossible (ex. fichier en lecture seule sans identifiant)
   | { type: 'BRANCH_CREATED'; branchName: string }
@@ -106,6 +106,7 @@ export type UIToMain =
   | { type: 'RETRY_INIT' }
   | { type: 'CHECK_PRESENCE'; identities: AssetIdentity[] }
   | { type: 'SPLIT_BEGIN' }
+  | { type: 'SPLIT_DISMISS'; assetIds: string[] } // « Ignorer » : mémorisé dans le fichier
   | { type: 'SPLIT_ROLLBACK'; fileKey: string } // la séparation a échoué côté serveur : on remet l'ancien id
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'RESIZE'; width: number; height: number }

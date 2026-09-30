@@ -32,7 +32,7 @@ interface AppData {
   initErr:      string | null
   diffVersion:  Version | null
   siblings:     Version[]   // versions de la branche courante (ordre ancien→récent) pour la nav ◀▶ du diff
-  splitOffer:   { here: string[]; elsewhere: number } | null // projet partagé avec d'autres fichiers (cf. fileSplit.ts)
+  splitOffer:   { here: string[]; elsewhere: string[] } | null // projet partagé avec d'autres fichiers (cf. fileSplit.ts)
 }
 
 // État complet = données + actions

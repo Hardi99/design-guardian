@@ -31,3 +31,24 @@ export function classifyPresence(
   }
   return { here, elsewhere };
 }
+
+/** Éléments « ailleurs » que l'utilisateur a choisi d'ignorer, mémorisés dans le fichier. */
+export const SPLIT_DISMISSED_KEY = 'dg_split_dismissed';
+
+/** Lecture tolérante du pluginData (JSON de chaînes) : jamais d'exception. */
+export function parseDismissed(raw: string): string[] {
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+
+/**
+ * Bandeau « Séparer » : seulement s'il existe un élément ailleurs pas encore ignoré. Un
+ * élément introuvable peut appartenir au fichier (page supprimée) : une fois ignoré, il
+ * ne relance plus le bandeau ; un NOUVEL élément étranger, si.
+ */
+export function shouldOfferSplit(elsewhere: readonly string[], dismissed: readonly string[]): boolean {
+  const ignored = new Set(dismissed);
+  return elsewhere.some(id => !ignored.has(id));
+}

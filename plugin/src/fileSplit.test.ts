@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyPresence, type AssetIdentity } from './fileSplit.js';
+import { classifyPresence, shouldOfferSplit, parseDismissed, type AssetIdentity } from './fileSplit.js';
 
 // Tri des éléments suivis d'un projet partagé entre plusieurs fichiers : un élément est
 // « ici » si son nœud existe dans le fichier ouvert ET porte le même dg_id. Les id de nœuds
@@ -48,5 +48,39 @@ describe('classifyPresence', () => {
     const found = new Map([['17305:2208', 'DG-G'], ['126:4', 'DG-AUTRE']]);
     const out = classifyPresence([id('g', '17305:2208', 'DG-G'), id('t', '116:21', 'DG-T'), id('x', '126:4', 'DG-X')], found);
     expect(out).toEqual({ here: ['g'], elsewhere: ['t', 'x'] });
+  });
+});
+
+// « Ignorer » : certains éléments sont introuvables pour de bonnes raisons (page supprimée)
+// mais appartiennent bien au fichier. Le choix est mémorisé dans le fichier ; le bandeau ne
+// revient que pour un élément « ailleurs » qui n'a pas encore été ignoré.
+describe('shouldOfferSplit', () => {
+  it('aucun élément ailleurs → pas de bandeau', () => {
+    expect(shouldOfferSplit([], [])).toBe(false);
+  });
+
+  it('éléments ailleurs jamais ignorés → bandeau', () => {
+    expect(shouldOfferSplit(['a', 'b'], [])).toBe(true);
+  });
+
+  it('tous déjà ignorés → pas de bandeau', () => {
+    expect(shouldOfferSplit(['a', 'b'], ['b', 'a', 'z'])).toBe(false);
+  });
+
+  it('un NOUVEL élément ailleurs → le bandeau revient', () => {
+    expect(shouldOfferSplit(['a', 'c'], ['a', 'b'])).toBe(true);
+  });
+});
+
+describe('parseDismissed', () => {
+  it('liste JSON de chaînes', () => {
+    expect(parseDismissed('["a","b"]')).toEqual(['a', 'b']);
+  });
+
+  it('vide ou illisible → liste vide (jamais d\'exception)', () => {
+    expect(parseDismissed('')).toEqual([]);
+    expect(parseDismissed('{oops')).toEqual([]);
+    expect(parseDismissed('{"a":1}')).toEqual([]);
+    expect(parseDismissed('[1,"a"]')).toEqual(['a']);
   });
 });

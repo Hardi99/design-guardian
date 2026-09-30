@@ -175,7 +175,7 @@ function App() {
         }
         case 'INIT_ERROR':     setInitErr(msg.message); break;
         case 'PRESENCE':
-          setSplitOffer(msg.elsewhere.length > 0 ? { here: msg.here, elsewhere: msg.elsewhere.length } : null);
+          setSplitOffer(msg.offer ? { here: msg.here, elsewhere: msg.elsewhere } : null);
           break;
         case 'SPLIT_READY': {
           const { apiKey, splitOffer } = appStore.getState();
@@ -323,14 +323,23 @@ function AssetsScreen() {
         {splitOffer && (
           <div role="status" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex flex-col gap-2">
             <p class="text-xs text-amber-300">
-              Ce projet est partagé avec d'autres fichiers : {splitOffer.elsewhere} élément(s) suivi(s) ne sont pas dans ce fichier.
+              Ce projet est partagé avec d'autres fichiers : {splitOffer.elsewhere.length} élément(s) suivi(s) ne sont pas dans ce fichier.
             </p>
             <p class="text-[11px] text-gray-400">
               Séparer ce fichier lui donne son propre historique, avec ses {splitOffer.here.length} élément(s). Les autres restent avec les autres fichiers.
             </p>
-            <button class="btn-secondary text-xs px-3 py-1.5 self-start" onClick={() => send({ type: 'SPLIT_BEGIN' })}>
-              Séparer ce fichier
-            </button>
+            <p class="text-[11px] text-gray-500">
+              Un élément dont la page a été supprimée est aussi introuvable : s'ils appartiennent bien à ce fichier, ignorez.
+            </p>
+            <div class="flex gap-2">
+              <button class="btn-secondary text-xs px-3 py-1.5" onClick={() => send({ type: 'SPLIT_BEGIN' })}>
+                Séparer ce fichier
+              </button>
+              <button class="text-xs text-gray-400 hover:text-white px-3 py-1.5"
+                onClick={() => { send({ type: 'SPLIT_DISMISS', assetIds: splitOffer.elsewhere }); appStore.getState().setSplitOffer(null); }}>
+                Ignorer
+              </button>
+            </div>
           </div>
         )}
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}

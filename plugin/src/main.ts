@@ -9,7 +9,7 @@ import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
-import { classifyPresence } from './fileSplit.js';
+import { classifyPresence, shouldOfferSplit, parseDismissed, SPLIT_DISMISSED_KEY } from './fileSplit.js';
 import { IDENTITY_KEY } from './identity.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
@@ -111,7 +111,8 @@ figma.ui.onmessage = async (raw: unknown) => {
         }
         const presence = classifyPresence(msg.identities, found, dgIdsInFile);
         console.log('[DG] présence :', msg.identities.length, 'éléments,', found.size, 'nœuds trouvés par id,', dgIdsInFile.size, 'dg_id dans le fichier,', presence.here.length, 'ici,', presence.elsewhere.length, 'ailleurs');
-        send({ type: 'PRESENCE', ...presence });
+        const dismissed = parseDismissed(figma.root.getPluginData(SPLIT_DISMISSED_KEY));
+        send({ type: 'PRESENCE', ...presence, offer: shouldOfferSplit(presence.elsewhere, dismissed) });
       } catch (e) {
         console.error('[DG] vérification de présence impossible', e);
       }
@@ -126,6 +127,12 @@ figma.ui.onmessage = async (raw: unknown) => {
         break;
       }
       send({ type: 'SPLIT_READY', fileKey, previous });
+      break;
+    }
+    case 'SPLIT_DISMISS': {
+      const dismissed = parseDismissed(figma.root.getPluginData(SPLIT_DISMISSED_KEY));
+      const merged = [...new Set([...dismissed, ...msg.assetIds])];
+      try { figma.root.setPluginData(SPLIT_DISMISSED_KEY, JSON.stringify(merged)); } catch { /* read-only : le bandeau reviendra */ }
       break;
     }
     case 'SPLIT_ROLLBACK':
