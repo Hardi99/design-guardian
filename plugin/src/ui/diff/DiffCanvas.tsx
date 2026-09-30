@@ -43,16 +43,16 @@ export function FrameImage({ url, kind, onReady }: { url: string; kind: 'svg' | 
   }, [url, kind]);
   useEffect(() => { if (kind === 'svg' && svg) onReady?.(); }, [svg, kind]);
   if (kind === 'png') return <img src={url} alt="Rendu de la frame" draggable={false} onLoad={() => onReady?.()} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
-  if (svg === null) return <div class="w-full h-full animate-pulse bg-gray-800/40" />;
-  if (!svg) return <p class="text-gray-600 text-xs">Erreur rendu</p>;
+  if (svg === null) return <div class="w-full h-full animate-pulse bg-dg-hover/40" />;
+  if (!svg) return <p class="text-dg-text-3 text-[11px]">Erreur rendu</p>;
   return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 const TONE_CLASS: Record<Highlight['tone'], string> = {
-  modified: 'border-purple-400',
-  added:    'border-green-400',
-  removed:  'border-red-400',
-  derived:  'border-gray-500/50',
+  modified: 'border-dg-accent',
+  added:    'border-dg-success',
+  removed:  'border-dg-danger',
+  derived:  'border-dg-text-3/50',
 };
 
 export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }: {
@@ -118,13 +118,13 @@ export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSe
           <button key={hl.nodeId}
             aria-label={`Voir le changement de ${hl.nodeId}`}
             onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
-            class={`absolute rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-white/70 bg-white/5' : 'hover:bg-white/5'}`}
+            class={`absolute rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-dg-text/70 bg-dg-text/5' : 'hover:bg-dg-text/5'}`}
             style={{ left: `${hl.bbox.x}px`, top: `${hl.bbox.y}px`, width: `${Math.max(6, hl.bbox.w)}px`, height: `${Math.max(6, hl.bbox.h)}px`, borderWidth: `${2 / view.scale}px`, borderStyle: 'solid' }}
           />
         ))}
       </div>
       <button aria-label="Réinitialiser la vue" onClick={() => setView(fitView())}
-        class="absolute bottom-2 right-2 z-10 px-2 py-1 text-[10px] bg-gray-800/80 text-gray-300 rounded hover:bg-gray-700">Réinitialiser</button>
+        class="absolute bottom-2 right-2 z-10 px-2 py-1 text-[10px] bg-dg-hover/80 text-dg-text-2 rounded hover:bg-dg-hover">Réinitialiser</button>
     </div>
   );
 }

@@ -205,47 +205,46 @@ export function DiffScreen() {
   const canvasSource = beforeMode ? data?.prev_render_source : data?.render_source;
 
   return (
-    <div class="flex flex-col h-screen bg-gray-950 text-white">
+    <div class="flex flex-col h-screen bg-dg-bg text-dg-text">
       {/* Header */}
-      <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-800 flex-shrink-0">
-        <button aria-label="Retour à la timeline" class="text-gray-500 hover:text-white text-sm flex-shrink-0" onClick={goBack}>←</button>
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-dg-border flex-shrink-0">
+        <button aria-label="Retour" class="icon-btn" onClick={goBack}>←</button>
         <button aria-label="Version précédente" title="Version précédente (←)" disabled={!prevV}
-          class="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-default text-sm flex-shrink-0"
+          class="icon-btn"
           onClick={() => prevV && setDiffVersion(prevV)}>◀</button>
         <span class="font-medium text-sm flex-1 truncate text-center">
           v{version.version_number}
-          <span class="text-gray-500 font-normal"> · {version.branch_name}</span>
         </span>
         <button aria-label="Version suivante" title="Version suivante (→)" disabled={!nextV}
-          class="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-default text-sm flex-shrink-0"
+          class="icon-btn"
           onClick={() => nextV && setDiffVersion(nextV)}>▶</button>
         {/* Status toggle + tooltip explicatif */}
         <div class="relative group flex-shrink-0">
           <button
             onClick={cycleStatus} disabled={statusBusy}
             aria-label={status === 'approved' ? 'Statut : Gold. Cliquer pour repasser en Draft.' : status === 'review' ? 'Statut : Review. Cliquer pour passer en Gold.' : 'Statut : Draft. Cliquer pour soumettre en Review.'}
-            class={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-              status === 'approved' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
-              status === 'review'   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' :
-                                      'bg-gray-800 text-gray-500 hover:bg-gray-700'
+            class={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+              status === 'approved' ? 'bg-dg-success/20 text-dg-success hover:bg-dg-success/30' :
+              status === 'review'   ? 'bg-dg-warning/20 text-dg-warning hover:bg-dg-warning/30' :
+                                      'bg-dg-hover text-dg-text-3 hover:bg-dg-hover'
             }`}
           >
             {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
           </button>
-          <div role="tooltip" class="hidden group-hover:block absolute top-full left-0 mt-1.5 z-50 w-56 p-2.5 bg-gray-900 border border-gray-700 rounded-lg shadow-xl text-left">
-            <p class="text-[11px] font-semibold text-gray-200 mb-1">Cycle de validation</p>
-            <p class="text-[10px] leading-relaxed text-gray-400">
-              <span class="text-gray-500">Draft</span> (brouillon) →
-              <span class="text-amber-400"> Review</span> (en relecture) →
-              <span class="text-green-400"> ✦ Gold</span> (version approuvée, référence de l'équipe).
+          <div role="tooltip" class="hidden group-hover:block absolute top-full left-0 mt-1.5 z-50 w-56 p-2.5 bg-dg-raised border border-dg-border rounded-lg shadow-xl text-left">
+            <p class="text-[11px] font-semibold text-dg-text mb-1">Cycle de validation</p>
+            <p class="text-[10px] leading-relaxed text-dg-text-2">
+              <span class="text-dg-text-3">Draft</span> (brouillon) →
+              <span class="text-dg-warning"> Review</span> (en relecture) →
+              <span class="text-dg-success"> ✦ Gold</span> (version approuvée, référence de l'équipe).
             </p>
-            <p class="text-[10px] text-gray-600 mt-1">Cliquer pour changer de statut.</p>
+            <p class="text-[10px] text-dg-text-3 mt-1">Cliquer pour changer de statut.</p>
           </div>
         </div>
         {/* Restore checkpoint — pas sur le diff d'une frame : réappliquerait toute la page (Phase 4) */}
         {data && restoreAllowedInDiff(frame) && (
           <button onClick={restore} disabled={restoring}
-            class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700 flex-shrink-0 transition-colors"
+            class="btn-secondary py-1 px-2 flex-shrink-0"
             aria-label="Créer un checkpoint depuis cette version">
             {restoring ? '…' : '↩ Checkpoint'}
           </button>
@@ -253,7 +252,7 @@ export function DiffScreen() {
         {/* Apply to Figma canvas */}
         {data && restoreAllowedInDiff(frame) && (
           <button onClick={applyToFigma} disabled={applyingToFigma}
-            class="px-2 py-1 rounded text-xs bg-purple-700 text-purple-200 hover:bg-purple-600 flex-shrink-0 transition-colors"
+            class="btn-primary py-1 px-2 flex-shrink-0"
             aria-label="Restaurer cette version sur le canvas Figma">
             {applyingToFigma ? '…' : '↩ Restore'}
           </button>
@@ -261,24 +260,24 @@ export function DiffScreen() {
       </div>
 
       {version.ai_summary && (
-        <div class="px-4 py-2 border-b border-gray-800 flex-shrink-0">
-          <p class="text-xs text-gray-300 leading-relaxed">{version.ai_summary}</p>
+        <div class="px-3 py-2 border-b border-dg-border flex-shrink-0 bg-dg-raised">
+          <p class="text-[12px] leading-snug">{version.ai_summary}</p>
         </div>
       )}
-      {restoreMsg && <div role="status" class="px-4 py-2 bg-green-900/40 border-b border-green-800 text-green-400 text-xs flex-shrink-0">{restoreMsg}</div>}
+      {restoreMsg && <div role="status" class="px-3 py-2 bg-dg-success/10 border-b border-dg-success text-dg-success text-[11px] flex-shrink-0">{restoreMsg}</div>}
       {loading && <Spinner full />}
-      {err     && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
+      {err     && <p role="alert" class="text-dg-danger text-[11px] p-4">{err}</p>}
 
       {/* Version de page ouverte depuis « Toutes les versions » : pas de rendu global, on
           choisit une frame touchée (son diff, et son historique pour la nav ◀▶). */}
       {data && !frame && pageFrames.length > 0 && (
         <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-          <p class="text-xs text-gray-400">Frames modifiées dans cette version :</p>
+          <p class="text-[11px] text-dg-text-2">Frames modifiées dans cette version :</p>
           {pageFrames.map(f => (
-            <button key={f.key} class="text-left p-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg text-sm"
+            <button key={f.key} class="text-left p-3 bg-dg-raised hover:bg-dg-hover border border-dg-border rounded-lg text-sm"
               onClick={() => { setFrame({ key: f.key, name: f.name }); setSiblings(frameHistory(siblings, f.key)); }}>
               {f.name}
-              <span class="text-xs text-gray-500 ml-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
+              <span class="text-[11px] text-dg-text-3 ml-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
             </button>
           ))}
         </div>
@@ -287,14 +286,14 @@ export function DiffScreen() {
       {data && (frame || pageFrames.length === 0) && (
         hasPrev ? (
           <div class="flex flex-1 overflow-hidden">
-            <div class="flex-1 flex flex-col border-r border-gray-800 overflow-hidden relative">
+            <div class="flex-1 flex flex-col border-r border-dg-border overflow-hidden relative">
               <DiffChips counts={counts} beforeMode={beforeMode} showDerived={showMinor} approximate={canvasSource === 'reconstruction'}
                 onToggleBefore={() => { setBeforeMode(v => !v); setSelectedId(null); }} onToggleDerived={() => setShowMinor(v => !v)} />
               {canvasUrl && canvasKind && canvasFrame
                 ? <HighlightCanvas url={canvasUrl} kind={canvasKind} frame={canvasFrame}
                     highlights={highlights} selectedId={selectedId} onSelect={setSelectedId} />
                 : <div class="flex-1 flex items-center justify-center">
-                    <p class="text-gray-600 text-xs">{heavyDone ? 'Rendu indisponible.' : 'Chargement du rendu…'}</p>
+                    <p class="text-dg-text-3 text-[11px]">{heavyDone ? 'Rendu indisponible.' : 'Chargement du rendu…'}</p>
                   </div>}
             </div>
             <div class="w-72 flex flex-col overflow-hidden">
@@ -306,7 +305,7 @@ export function DiffScreen() {
           // v1 : pas de diff (aucun parent), mais on montre le rendu de la version
           // initiale — le jury voit la baseline avant le restore, plus de "preview vide".
           <div class="flex flex-1 flex-col overflow-hidden relative">
-            <div class="px-3 py-1.5 text-[11px] text-gray-500 border-b border-gray-800 flex items-center gap-1.5 flex-shrink-0">
+            <div class="px-3 py-1.5 text-[11px] text-dg-text-3 border-b border-dg-border flex items-center gap-1.5 flex-shrink-0">
               <span>📸</span><span>Version initiale — le comparatif démarre à la v2</span>
             </div>
             <HighlightCanvas url={data.render_url} kind={data.render_kind} frame={data.current_frame}
@@ -314,14 +313,14 @@ export function DiffScreen() {
           </div>
         ) : (
           <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
-            <div class="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+            <div class="w-14 h-14 rounded-2xl bg-dg-accent/20 border border-dg-accent/30 flex items-center justify-center">
               <span class="text-2xl">📸</span>
             </div>
             <div class="flex flex-col gap-1">
-              <p class="text-sm font-medium text-gray-200">Checkpoint initial</p>
-              <p class="text-xs text-gray-500">{heavyDone ? 'Le diff visuel apparaîtra à partir de la v2' : 'Chargement du rendu…'}</p>
+              <p class="text-sm font-medium text-dg-text">Checkpoint initial</p>
+              <p class="text-[11px] text-dg-text-3">{heavyDone ? 'Le diff visuel apparaîtra à partir de la v2' : 'Chargement du rendu…'}</p>
             </div>
-            <div class="flex flex-col gap-1.5 text-xs text-gray-600">
+            <div class="flex flex-col gap-1.5 text-[11px] text-dg-text-3">
               <span>{timeAgo(version.created_at)}</span>
               {version.author_name && <span>par {version.author_name}</span>}
             </div>
