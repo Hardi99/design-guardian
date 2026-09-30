@@ -14,7 +14,7 @@ export interface Version {
   frames?: FrameSummary[] | null; // page-centric : résumé par frame (/tree)
 }
 
-export type Screen = 'loading' | 'assets' | 'home' | 'frameHistory' | 'checkpoint' | 'diff'
+export type Screen = 'loading' | 'home' | 'frameHistory' | 'checkpoint' | 'diff'
 export type Plan   = 'free' | 'pro' | 'team'
 
 // ─── Store shape ──────────────────────────────────────────────────────────────

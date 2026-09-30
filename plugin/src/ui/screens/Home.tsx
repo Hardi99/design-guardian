@@ -6,17 +6,17 @@ import { frameHistory, hasFrameNav } from '../../frameNav.js';
 import type { FrameEntry } from '../../trackedFrames.js';
 import { api, send } from '../api.js';
 import { clearDiffCache } from '../diff/DiffScreen.js';
-import { Logo, Spinner } from '../components/common.js';
+import { Spinner } from '../components/common.js';
+import { Header, PlanBadge } from '../components/Header.js';
+import { HomeMenu } from '../components/HomeMenu.js';
 import { FramesPanel } from '../components/FramesPanel.js';
 import { VersionRow } from '../components/VersionRow.js';
 
 export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const apiKey         = useAppStore(s => s.apiKey)!;
-  const author         = useAppStore(s => s.author);
   const asset          = useAppStore(s => s.asset)!;
   const plan           = useAppStore(s => s.plan);
   const branch         = useAppStore(s => s.branch);
-  const setBranch      = useAppStore(s => s.setBranch);
   const setScreen      = useAppStore(s => s.setScreen);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
   const setSiblings    = useAppStore(s => s.setSiblings);
@@ -24,9 +24,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   const [versions,   setVersions]   = useState<Version[]>([]);
   const [tab,        setTab]        = useState<'frames' | 'versions'>('frames');
-  const [branches,   setBranches]   = useState<string[]>(['main']);
   const [loading,    setLoading]    = useState(true);
-  const [newBranch,  setNewBranch]  = useState('');
   const [err,        setErr]        = useState<string | null>(null);
   // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
   // après le fetch frais ne doit pas écraser l'affichage à jour.
@@ -43,7 +41,6 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
       .then(d => {
         freshLoaded.current = true;
         setVersions(d.versions ?? []);
-        setBranches(d.branches ?? ['main']);
         send({ type: 'PERSIST_VERSION_CACHE', assetId: asset.id, versions: d.versions ?? [], branches: d.branches ?? ['main'] });
       })
       .catch(e => setErr((e as Error).message))
@@ -59,7 +56,6 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
       if (msg.assetId !== asset.id) return; // bon asset uniquement (changement d'asset entre-temps)
       if (freshLoaded.current) return;      // le frais gagne s'il est déjà arrivé
       setVersions(msg.versions);
-      setBranches(msg.branches);
       setLoading(false);
     };
     window.addEventListener('message', handler);
@@ -80,45 +76,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   return (
     <div class="flex flex-col h-screen bg-gray-950 text-white">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 gap-2">
-        <button class="flex items-center gap-2 min-w-0" onClick={() => setScreen('assets')} title="Changer d'asset">
-          <Logo small />
-          <div class="min-w-0">
-            <p class="text-sm font-medium truncate">{asset.name}</p>
-            {author && <p class="text-xs text-gray-500 truncate">{author.name}</p>}
-          </div>
-        </button>
-        <button
-          class={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 ${
-            plan === 'team' ? 'bg-purple-500/20 text-purple-400' :
-            plan === 'pro'  ? 'bg-blue-500/20 text-blue-400' :
-                              'bg-gray-800 text-gray-500 cursor-pointer'
-          }`}
-          aria-label={plan === 'free' ? 'Plan Free — 10 checkpoints max. Cliquer pour upgrader.' : plan === 'pro' ? 'Plan Pro — Checkpoints illimités.' : 'Plan Team — Collaboration multi-designers.'}
-          onClick={() => plan === 'free' && onUpgrade()}
-        >{plan.toUpperCase()}</button>
-      </div>
-
-      <div class="flex items-center gap-1.5 px-4 py-2 border-b border-gray-800 overflow-x-auto">
-        {branches.map(b => (
-          <button key={b} aria-pressed={branch === b} class={`px-2.5 py-1 rounded text-xs font-mono whitespace-nowrap transition-colors ${branch === b ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`} onClick={() => { setBranch(b); send({ type: 'SWITCH_BRANCH', branchName: b }); }}>{b}</button>
-        ))}
-        <input
-          aria-label="Créer une branche"
-          class="bg-transparent border border-dashed border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-500 placeholder-gray-700 focus:outline-none focus:border-purple-500 focus-visible:ring-2 focus-visible:ring-purple-500 w-24"
-          placeholder="+ branche" value={newBranch}
-          onInput={e => setNewBranch((e.target as HTMLInputElement).value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && newBranch.trim()) {
-              const b = newBranch.trim();
-              if (!branches.includes(b)) setBranches(prev => [...prev, b]);
-              setBranch(b);
-              send({ type: 'CREATE_BRANCH', branchName: b });
-              setNewBranch('');
-            }
-          }}
-        />
-      </div>
+      <Header title={asset.name} right={<><PlanBadge plan={plan} onUpgrade={onUpgrade} /><HomeMenu /></>} />
 
       {frameNav && (
         <div role="tablist" class="flex gap-1 px-4 pt-2">
@@ -136,7 +94,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
         {err && <p role="alert" class="text-red-400 text-xs p-4">{err}</p>}
         {!showFrames && !loading && visible.length === 0 && (
           <div class="flex flex-col items-center justify-center py-12 px-6 text-center gap-2">
-            <p class="text-gray-400 text-sm">Aucun checkpoint sur <span class="font-mono text-purple-400">{branch}</span></p>
+            <p class="text-gray-400 text-sm">Aucun checkpoint pour l'instant</p>
             <p class="text-gray-600 text-xs">Sélectionne un élément dans Figma et capture.</p>
           </div>
         )}

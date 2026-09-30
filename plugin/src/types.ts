@@ -90,7 +90,7 @@ export interface PluginAuthor {
 export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string; render_svg_b64?: string; render_kind?: 'svg' | 'png' }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
-  | { type: 'FILE_INFO'; fileKey: string; fileName: string }
+  | { type: 'FILE_INFO'; fileKey: string; fileName: string; lastAssetId: string | null }
   | { type: 'PRESENCE'; here: string[]; elsewhere: string[]; offer: boolean } // tri d'un projet partagé (cf. fileSplit.ts)
   | { type: 'SPLIT_READY'; fileKey: string; previous: string } // nouvel id écrit dans le fichier
   | { type: 'FRAME_RENDERED'; versionId: string; key: string; b64: string; kind: 'svg' | 'png' } // un rendu de frame prêt
@@ -129,6 +129,7 @@ export type UIToMain =
   | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
   | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
+  | { type: 'REMEMBER_ASSET'; fileKey: string; assetId: string } // dernier historique ouvert dans ce fichier
   | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
   | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
   | { type: 'REQUEST_FRAMES' }

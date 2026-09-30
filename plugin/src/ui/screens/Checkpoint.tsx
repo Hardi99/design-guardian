@@ -15,7 +15,6 @@ export function CheckpointScreen() {
   const renderKind   = useAppStore(s => s.renderKind);
   const setScreen    = useAppStore(s => s.setScreen);
 
-  const [branchName, setBranchName] = useState(branch);
   const [loading,    setLoading]    = useState(false);
   const [saved,      setSaved]      = useState<{ summary: string | null; changes: number; versionId: string } | null>(null);
   const [err,        setErr]        = useState<string | null>(null);
@@ -34,7 +33,7 @@ export function CheckpointScreen() {
           method: 'POST',
           body: JSON.stringify({
             asset_id:        asset.id,
-            branch_name:     branchName.trim() || 'main',
+            branch_name:     branch,
             figma_node_id:   snapshot.figmaNodeId,
             snapshot_json:   snapshot,
             author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
@@ -56,7 +55,7 @@ export function CheckpointScreen() {
       }
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
-  }, [apiKey, asset.id, branchName, snapshot, author, renderSvgB64, renderKind]);
+  }, [apiKey, asset.id, branch, snapshot, author, renderSvgB64, renderKind]);
 
   // Récupération du AI Patch Note (généré en arrière-plan côté serveur).
   // Primaire : PUSH via Realtime (le backend broadcaste dès le résumé prêt).
@@ -100,7 +99,6 @@ export function CheckpointScreen() {
       <div class="flex-1 flex flex-col justify-center gap-4">
         <p class="text-green-400 font-semibold">✦ Checkpoint sauvegardé</p>
         <div class="p-4 bg-gray-900 rounded-lg border border-gray-800 flex flex-col gap-1.5">
-          <p class="text-xs text-gray-500 font-mono">{branchName}</p>
           {patchNote ? (
             <p class="text-sm text-gray-200 leading-relaxed">{patchNote}</p>
           ) : saved.changes <= 0 ? (
@@ -139,10 +137,6 @@ export function CheckpointScreen() {
         <div class="p-3 bg-gray-900 rounded-lg border border-gray-800">
           <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
           <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
-        </div>
-        <div>
-          <label htmlFor="cp-branch" class="text-xs text-gray-500 uppercase tracking-wide">Branche</label>
-          <input id="cp-branch" class="input mt-1" placeholder="main" value={branchName} onInput={e => setBranchName((e.target as HTMLInputElement).value)} />
         </div>
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
       </div>

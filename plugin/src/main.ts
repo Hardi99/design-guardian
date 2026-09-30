@@ -54,7 +54,8 @@ async function ensurePagesLoaded(): Promise<void> {
     try { figma.root.setPluginData('dg_main_page_id', figma.currentPage.id); } catch { /* read-only */ }
   }
 
-  send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name });
+  const lastAssetId = (await figma.clientStorage.getAsync('dg_last_asset_' + fileKey)) as string | undefined;
+  send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name, lastAssetId: lastAssetId ?? null });
   const linkToken = (await figma.clientStorage.getAsync('dg_link_token')) as string | undefined;
   send({ type: 'LINK_TOKEN', token: linkToken ?? null });
 
@@ -80,9 +81,15 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
     case 'RETRY_INIT': {
       const key = figma.root.getPluginData(FILE_ID_KEY);
-      if (isValidFileId(key)) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
+      if (isValidFileId(key)) {
+        const last = (await figma.clientStorage.getAsync('dg_last_asset_' + key)) as string | undefined;
+        send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name, lastAssetId: last ?? null });
+      }
       break;
     }
+    case 'REMEMBER_ASSET':
+      await figma.clientStorage.setAsync('dg_last_asset_' + msg.fileKey, msg.assetId);
+      break;
     case 'OPEN_EXTERNAL':     figma.openExternal(msg.url); break;
     case 'LINK_PERSIST_TOKEN': await figma.clientStorage.setAsync('dg_link_token', msg.token); break;
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;

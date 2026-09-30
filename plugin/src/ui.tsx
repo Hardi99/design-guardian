@@ -11,7 +11,8 @@ import { initSentry } from './sentry.js';
 import { API_BASE, api, send, session, maxPlan } from './ui/api.js';
 import { Spinner } from './ui/components/common.js';
 import { LoadingScreen } from './ui/screens/Loading.js';
-import { AssetsScreen } from './ui/screens/Assets.js';
+import { openHistory } from './ui/history.js';
+import { pickHistory } from './ui/historyPick.js';
 import { HomeScreen } from './ui/screens/Home.js';
 import { FrameHistoryScreen } from './ui/screens/FrameHistory.js';
 import { CheckpointScreen } from './ui/screens/Checkpoint.js';
@@ -42,6 +43,9 @@ function App() {
       if (!msg) return;
       switch (msg.type) {
         case 'FILE_INFO': {
+          session.fileName = msg.fileName;
+          session.fileKey = msg.fileKey;
+          session.lastAssetId = msg.lastAssetId;
           try {
             const res = await fetch(`${API_BASE}/api/projects/auto-init`, {
               method: 'POST',
@@ -55,14 +59,13 @@ function App() {
             setApiKey(data.api_key);
             setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
             setAssets(data.assets);
-            // Ne recadre sur 'assets' que si l'utilisateur n'a pas déjà navigué pendant la
-            // fenêtre réseau (ex. cliqué un asset depuis l'affichage stale du cache) — sinon
-            // la réponse fraîche le ramènerait de force à la liste.
-            const cur = appStore.getState().screen;
-            if (cur === 'loading' || cur === 'assets') setScreen('assets');
+            // Réponse fraîche : l'historique déjà ouvert (depuis le cache) reste ouvert s'il existe.
+            const open = appStore.getState().asset;
+            if (appStore.getState().screen === 'loading' || !open || !data.assets.some(a => a.id === open.id)) {
+              await openHistory(data.api_key, data.assets, open?.id ?? null);
+            }
             // Rafraîchit le cache stale-while-revalidate (source de vérité = ce fetch frais).
             send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
-            session.fileName = msg.fileName;
             // Projet partagé avec d'autres fichiers (anciennes versions du plugin) ? Le plugin
             // vérifie quels éléments suivis sont dans ce fichier (cf. fileSplit.ts). Best-effort.
             if (data.assets.length > 0) {
@@ -81,12 +84,13 @@ function App() {
           // Garde anti-course inverse : si le fetch frais est déjà arrivé (apiKey posé), ne
           // pas écraser avec le stale (CACHED_STATE peut arriver après sur une file lente).
           if (appStore.getState().apiKey) break;
-          // AssetsScreen fait `apiKey!` — exiger apiKey ET assets avant d'afficher l'écran.
+          // L'accueil fait `apiKey!` — exiger apiKey ET assets avant de l'afficher.
           if (msg.apiKey && msg.assets) {
             setApiKey(msg.apiKey);
             if (msg.plan) setPlan(maxPlan(appStore.getState().plan, msg.plan as Plan));
             setAssets(msg.assets);
-            setScreen('assets');
+            const cachedPick = pickHistory(msg.assets, { currentId: null, lastId: session.lastAssetId });
+            if (cachedPick) { appStore.getState().setAsset(cachedPick); setScreen('home'); }
           }
           break;
         }
@@ -116,6 +120,8 @@ function App() {
             setApiKey(data.api_key);
             setAssets(data.assets);
             setSplitOffer(null);
+            session.fileKey = msg.fileKey;
+            await openHistory(data.api_key, data.assets, appStore.getState().asset?.id ?? null);
             send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
           } catch (e) {
             send({ type: 'SPLIT_ROLLBACK', fileKey: msg.previous });
@@ -125,8 +131,6 @@ function App() {
         }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64, msg.render_kind); setScreen('checkpoint'); break;
-        case 'BRANCH_CREATED': break;
-        case 'BRANCH_SWITCHED': break;
         case 'ERROR': alert(`[DG] ${msg.message}`); break;
         case 'LINK_TOKEN': {
           session.linkToken = msg.token;
@@ -147,7 +151,6 @@ function App() {
   if (showUpgrade) return <UpgradeScreen onBack={() => setShowUpgrade(false)} />;
 
   if (screen === 'loading')    return <LoadingScreen />;
-  if (screen === 'assets')     return <AssetsScreen />;
   if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
   if (screen === 'frameHistory') return <FrameHistoryScreen />;
   if (screen === 'diff')       return <DiffScreen key={diffVersionId} />;
