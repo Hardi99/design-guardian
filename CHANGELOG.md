@@ -6,6 +6,18 @@ Versioning [Semver](https://semver.org/lang/fr/).
 
 ---
 
+## [Unreleased]
+
+### Security
+- **4 vulnérabilités hautes corrigées en production** (`hono`, `ws`, `axios`, `form-data`) : présentes dans le `package-lock.json` déployé par Railway, invisibles car la CI installait avec Bun. Mise à jour dans les versions compatibles (aucun changement majeur) — 0 vulnérabilité restante, dev comprises.
+- CI : étape `npm audit --omit=dev --audit-level=high` (bloque une vulnérabilité haute ou critique en production).
+
+### Changed
+- **Node 24** (LTS active) partout : Railway (`railway.toml`), `backend/.nvmrc` (source unique, lue par la CI), `engines`, devcontainer. Node 20 n'est plus maintenu depuis avril 2026.
+- **npm seul gestionnaire de paquets** : la CI backend installe avec `npm ci` comme Railway ; `bun.lock` supprimé. Les versions testées sont désormais celles déployées.
+
+---
+
 ## [1.5.0] — 2026-06-10
 
 ### Added

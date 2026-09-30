@@ -63,7 +63,7 @@ thresholds: {
 },
 ```
 
-Ce n'est pas un contrôle a posteriori : la commande `bun run test:coverage` (backend) **échoue elle-même** (exit code ≠ 0) si un des trois seuils passe sous 80 %, ce qui bloque le job CI (`.github/workflows/ci.yml:31-35`) et donc le déploiement Railway.
+Ce n'est pas un contrôle a posteriori : la commande `npm run test:coverage` (backend) **échoue elle-même** (exit code ≠ 0) si un des trois seuils passe sous 80 %, ce qui bloque le job CI (`.github/workflows/ci.yml:39-43`) et donc le déploiement Railway.
 
 **Couverture réelle mesurée** (`npm run test:coverage`, 2026-07-12) :
 

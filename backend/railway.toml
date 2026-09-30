@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm run build"
 
 [build.nixpacksPlan.variables]
-NODE_VERSION = "20"
+NODE_VERSION = "24"
 
 [deploy]
 startCommand = "npm run start"

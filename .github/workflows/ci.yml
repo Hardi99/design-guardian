@@ -8,6 +8,8 @@ on:
 
 jobs:
   # ─── Backend ──────────────────────────────────────────────────────────────────
+  # Même Node et même gestionnaire (npm + package-lock.json) que Railway : la CI teste
+  # exactement les versions déployées (backend/.nvmrc = source unique de la version Node).
   backend:
     name: Backend — Build & Tests
     runs-on: ubuntu-latest
@@ -18,21 +20,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v6
         with:
-          bun-version: latest
+          node-version-file: backend/.nvmrc
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        run: bun install
+        run: npm ci
+
+      # Bloque une vulnérabilité connue (high/critical) dans les dépendances de production.
+      - name: Security audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Type check
-        run: bun run typecheck
+        run: npm run typecheck
 
       # Quality Gate : le seuil ≥80% (statements/lines/functions) est appliqué
       # nativement par Vitest (coverage.thresholds dans vitest.config.ts).
       # Cette step échoue automatiquement si la couverture passe sous 80%.
       - name: Unit tests + coverage (Quality Gate ≥ 80%)
-        run: bun run test:coverage
+        run: npm run test:coverage
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'placeholder' }}
@@ -41,7 +49,7 @@ jobs:
           NODE_ENV: test
 
       - name: Build
-        run: bun run build
+        run: npm run build
 
   # ─── Plugin ───────────────────────────────────────────────────────────────────
   plugin:
@@ -56,7 +64,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version-file: backend/.nvmrc
           cache: 'npm'
           cache-dependency-path: plugin/package-lock.json
 

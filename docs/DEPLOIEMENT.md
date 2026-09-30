@@ -26,7 +26,7 @@
 - Compte [Stripe](https://stripe.com) — clés test/live + webhook configuré
 - Compte [Resend](https://resend.com) — clé API emails transactionnels
 - Compte [Twilio](https://twilio.com) — SID + token + numéro SMS
-- Node.js ≥ 20 et Bun ≥ 1.0 installés localement
+- Node.js 24 (version de référence : `backend/.nvmrc`) et npm installés localement
 
 ---
 
@@ -93,10 +93,10 @@
 # 1. New Project → Deploy from GitHub repo
 # 2. Sélectionner le repo → dossier racine : backend/
 # 3. Ajouter toutes les variables d'env (section 3 ci-dessus)
-# 4. Start Command : bun run start
+# 4. Start Command : npm run start
 # 5. Health Check Path : /health
 
-# Railway détecte automatiquement bun et installe les dépendances
+# Railway (Nixpacks, Node 24 via railway.toml) installe les dépendances avec npm ci (package-lock.json)
 ```
 
 ### 4.3 Stripe — configuration webhook
@@ -136,11 +136,12 @@ git push master
 GitHub Actions (.github/workflows/ci.yml)
     │
     ├── Job backend
-    │     ├── bun install
+    │     ├── npm ci
+    │     ├── npm audit --omit=dev --audit-level=high
     │     ├── tsc --noEmit (typecheck)
-    │     ├── bun run test:coverage
+    │     ├── npm run test:coverage
     │     ├── Quality Gate : couverture ≥ 80%
-    │     └── bun run build
+    │     └── npm run build
     │
     └── Job plugin
           ├── npm ci
@@ -175,7 +176,7 @@ Railway auto-deploy
 git checkout -b fix/mon-correctif
 
 # 2. Tester localement
-cd backend && bun run test
+cd backend && npm run test:run
 
 # 3. Merger sur master
 git checkout master
@@ -293,7 +294,7 @@ Après chaque déploiement en production :
 1. Vérifier `/health` immédiatement après le deploy
 2. Surveiller le dashboard Grafana 30 min
 3. Tester manuellement : capture checkpoint → diff → apply to Figma
-4. Vérifier les logs Railway (`bun run start` logs)
+4. Vérifier les logs Railway (`npm run start` logs)
 
 ---
 
