@@ -1,5 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import type { FigmaSnapshot, PluginAuthor } from './types.js'
+import type { FrameSummary } from './frameNav.js'
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
@@ -10,6 +11,7 @@ export interface Version {
   status: 'draft' | 'review' | 'approved';
   ai_summary: string | null; created_at: string;
   author_name: string | null; author_avatar_url: string | null;
+  frames?: FrameSummary[] | null; // page-centric : résumé par frame (/tree)
 }
 
 export type Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff'
