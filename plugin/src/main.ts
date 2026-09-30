@@ -10,6 +10,12 @@ import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
 import { classifyPresence, shouldOfferSplit, parseDismissed, SPLIT_DISMISSED_KEY } from './fileSplit.js';
+import { autoLayoutOf, strokeOf, spreadOf, variantOf, collectComponents, type ComponentInfo, type TreeLike, type AutoLayoutLike, type PaintLike, type EffectLike } from './capture.js';
+
+// Composants principaux des instances de la capture en cours, lus en passe préalable
+// (getMainComponentAsync est asynchrone, extractSnapshot ne l'est pas — et sert de rappel
+// à Array.map, d'où une variable plutôt qu'un paramètre).
+let capturedComponents = new Map<string, ComponentInfo>();
 import { IDENTITY_KEY } from './identity.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
@@ -617,6 +623,11 @@ async function handleSnapshot(): Promise<void> {
   // Avant l'extraction (synchrone) : un nœud coupé-collé garde son dg_id au lieu d'être pris pour une copie.
   await adoptMovedIdentities([...tracked, ...floating] as unknown as BranchNode[],
     async (id) => (await figma.getNodeByIdAsync(id)) as unknown as IdentifiableNode | null);
+  // Composant principal de chaque instance (échange de composant, variante), lu en parallèle.
+  capturedComponents = await collectComponents([...tracked, ...floating] as unknown as TreeLike[], async (inst) => {
+    const main = await (inst as unknown as InstanceNode).getMainComponentAsync();
+    return main ? { key: main.key, name: main.name, parent: main.parent ? { type: main.parent.type, name: main.parent.name } : null } : null;
+  });
 
   const figmaSnapshot: FigmaSnapshot = {
     figmaNodeId: page.id,
@@ -713,6 +724,17 @@ function extractRotation(node: SceneNode): number {
   return deg === 0 ? 0 : deg;
 }
 
+// Instance : composant principal (passe préalable) et variantes (componentProperties).
+function componentOf(node: SceneNode): NodeSnapshot['component'] {
+  if (node.type !== 'INSTANCE') return undefined;
+  const info = capturedComponents.get(node.id);
+  if (!info) return undefined;
+  let props: Record<string, { type: string; value: string | boolean }> | undefined;
+  try { props = node.componentProperties as unknown as typeof props; } catch { props = undefined; }
+  const variant = variantOf(props);
+  return variant ? { ...info, variant } : info;
+}
+
 function extractSnapshot(node: SceneNode): NodeSnapshot {
   return {
     dg_id: ensureNodeIdentity(node),
@@ -739,6 +761,8 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
     layoutPositioning:      extractLayoutPositioning(node),
     layoutMode:             'layoutMode' in node ? (node as FrameNode).layoutMode : undefined,
+    autoLayout:             autoLayoutOf(node as unknown as AutoLayoutLike),
+    component:              componentOf(node),
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
     characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,
@@ -814,11 +838,7 @@ function extractStrokes(node: SceneNode): FigmaStroke[] {
   if (!('strokes' in node)) return [];
   const strokes = (node as GeometryMixin).strokes;
   if (!Array.isArray(strokes)) return [];
-  return strokes.map(s => ({
-    type: s.type,
-    color: s.type === 'SOLID' ? { ...s.color, a: s.opacity ?? 1 } : undefined,
-    opacity: s.opacity,
-  }));
+  return strokes.map(s => strokeOf(s as unknown as PaintLike));
 }
 
 function extractVectorPaths(node: SceneNode): FigmaVectorPath[] | undefined {
@@ -842,6 +862,7 @@ function extractEffects(node: SceneNode): FigmaEffect[] | undefined {
         radius: shadow.radius,
         color: shadow.color,
         offset: shadow.offset,
+        spread: spreadOf(shadow as unknown as EffectLike),
       });
     } else if (e.type === 'LAYER_BLUR' || e.type === 'BACKGROUND_BLUR') {
       result.push({ type: e.type, visible: e.visible, radius: (e as BlurEffect).radius });
