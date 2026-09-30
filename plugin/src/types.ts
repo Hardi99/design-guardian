@@ -21,7 +21,7 @@ export interface FigmaFill {
   scaleMode?: string; // 'FILL' | 'FIT' | 'CROP' | 'TILE'
 }
 
-export interface FigmaStroke { type: string; color?: FigmaColor; opacity?: number }
+export interface FigmaStroke { type: string; color?: FigmaColor; opacity?: number; visible?: boolean }
 export interface FigmaVectorPath { windingRule: 'EVENODD' | 'NONZERO'; data: string }
 
 export interface FigmaEffect {
@@ -30,6 +30,7 @@ export interface FigmaEffect {
   radius: number;
   color?: FigmaColor;
   offset?: { x: number; y: number };
+  spread?: number;
 }
 
 export interface NodeSnapshot {
@@ -48,6 +49,16 @@ export interface NodeSnapshot {
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID'; // frames : ≠ NONE = auto-layout
   floating?: boolean; // posé sur la page, rangé sous la frame suivie qu'il recouvre (cf. assignFloating)
+  // Auto-layout (présent seulement si layoutMode ≠ NONE) : espacement, marges, alignements.
+  autoLayout?: {
+    itemSpacing: number;
+    paddingTop: number; paddingRight: number; paddingBottom: number; paddingLeft: number;
+    primaryAxisAlignItems: string;
+    counterAxisAlignItems: string;
+    layoutWrap: string;
+  };
+  // Instance de composant : composant principal (identité = key), jeu de variantes, variantes.
+  component?: { key: string; name: string; set?: string; variant?: Record<string, string | boolean> };
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific

@@ -86,6 +86,7 @@ const figmaEffectSchema = z.object({
   radius: z.number(),
   color: figmaColorSchema.optional(),
   offset: z.object({ x: z.number(), y: z.number() }).optional(),
+  spread: z.number().optional(),
 });
 const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
   z.object({
@@ -106,6 +107,19 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     layoutPositioning: z.enum(['AUTO', 'ABSOLUTE']).optional(),
     layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']).optional(),
     floating: z.boolean().optional(),
+    autoLayout: z.object({
+      itemSpacing: z.number(),
+      paddingTop: z.number(), paddingRight: z.number(), paddingBottom: z.number(), paddingLeft: z.number(),
+      primaryAxisAlignItems: z.string(),
+      counterAxisAlignItems: z.string(),
+      layoutWrap: z.string(),
+    }).optional(),
+    component: z.object({
+      key: z.string(),
+      name: z.string(),
+      set: z.string().optional(),
+      variant: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
+    }).optional(),
     effects: z.array(figmaEffectSchema).optional(),
     characters: z.string().optional(),
     fontSize: z.number().optional(),

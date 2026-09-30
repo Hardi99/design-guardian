@@ -58,3 +58,29 @@ describe('uploadRenderSchema — frame_key', () => {
     expect(() => uploadRenderSchema.parse({ render_svg_b64: 'x', frame_key: '../../etc' })).toThrow();
   });
 });
+
+describe('createCheckpointSchema — champs des trous de détection', () => {
+  it('conserve autoLayout, component, imageHash/scaleMode, contour visible, ombre spread', () => {
+    const root = {
+      id: 'n', name: 'n', type: 'INSTANCE', x: 0, y: 0, width: 1, height: 1, opacity: 1,
+      fills: [{ type: 'IMAGE', imageHash: 'h1', scaleMode: 'FILL' }],
+      strokes: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 }, visible: false }],
+      effects: [{ type: 'DROP_SHADOW', visible: true, radius: 4, spread: 4, offset: { x: 0, y: 2 } }],
+      layoutMode: 'HORIZONTAL',
+      autoLayout: { itemSpacing: 8, paddingTop: 1, paddingRight: 2, paddingBottom: 3, paddingLeft: 4,
+        primaryAxisAlignItems: 'MIN', counterAxisAlignItems: 'CENTER', layoutWrap: 'NO_WRAP' },
+      component: { key: 'k1', name: 'Button', set: 'Button', variant: { Size: 'Large', Icon: true } },
+    };
+    const parsed = createCheckpointSchema.parse({
+      asset_id: '00000000-0000-4000-8000-000000000000', branch_name: 'main', author: { figma_id: 'u', name: 'U' },
+      snapshot_json: { figmaNodeId: 'n', figmaNodeName: 'n', capturedAt: 't', root },
+    });
+    const r = parsed.snapshot_json.root as typeof root;
+    expect(r.fills[0].imageHash).toBe('h1');
+    expect(r.fills[0].scaleMode).toBe('FILL');
+    expect(r.strokes[0].visible).toBe(false);
+    expect(r.effects[0].spread).toBe(4);
+    expect(r.autoLayout).toEqual(root.autoLayout);
+    expect(r.component).toEqual(root.component);
+  });
+});
