@@ -342,7 +342,12 @@ export class DiffService {
       }
       if (p1.gradientStops && p2.gradientStops && this.gradientChanged(p1, p2)) {
         const hexes = (f: FigmaFill) => (f.gradientStops ?? []).map(st => this.colorToHex(st.color)).join(', ');
-        changes.push({ property: `${label}.gradient`, oldValue: hexes(p1), newValue: hexes(p2), delta: `${hexes(p1)} → ${hexes(p2)}` });
+        const h1 = hexes(p1), h2 = hexes(p2);
+        const angleChanged = p1.gradientAngle !== undefined && p2.gradientAngle !== undefined && Math.abs(p1.gradientAngle - p2.gradientAngle) > 1;
+        const delta = h1 !== h2 ? `${h1} → ${h2}`
+          : angleChanged ? `angle ${Math.round(p1.gradientAngle!)}° → ${Math.round(p2.gradientAngle!)}°`
+          : 'positions des couleurs modifiées';
+        changes.push({ property: `${label}.gradient`, oldValue: h1, newValue: h2, delta });
       }
       if (p1.imageHash !== undefined && p2.imageHash !== undefined && p1.imageHash !== p2.imageHash) {
         changes.push({ property: `${label}.image`, oldValue: p1.imageHash, newValue: p2.imageHash, delta: 'image remplacée' });
@@ -375,22 +380,31 @@ export class DiffService {
     }
   }
 
-  // Instance : variantes changées (une propriété chacune) ; « composant échangé » seulement si
-  // le composant principal change HORS d'un même jeu de variantes (sinon la variante suffit).
+  // Instance : variantes changées (une propriété chacune) ; « composant échangé » si le composant
+  // principal change HORS d'un même jeu de variantes, ou dans le même jeu sans variante changée
+  // (dans le doute, on montre). Jeu identifié par sa clé (setKey) — deux bibliothèques peuvent
+  // avoir des jeux homonymes — ; repli sur le nom pour les captures antérieures à setKey.
   private compareComponent(changes: PropertyChange[], v1: NodeSnapshot, v2: NodeSnapshot): void {
     const a = v1.component, b = v2.component;
     if (!a || !b) return;
-    const sameSet = a.set !== undefined && a.set === b.set;
-    if (a.key !== b.key && !sameSet) {
-      changes.push({ property: 'component', oldValue: a.name, newValue: b.name, delta: `${a.name} → ${b.name}` });
-      return;
-    }
+    const sameSet = a.setKey !== undefined && b.setKey !== undefined
+      ? a.setKey === b.setKey
+      : a.set !== undefined && a.set === b.set;
     const va = a.variant ?? {}, vb = b.variant ?? {};
-    for (const k of new Set([...Object.keys(va), ...Object.keys(vb)])) {
-      if (va[k] !== vb[k]) {
-        changes.push({ property: `variant.${k}`, oldValue: va[k], newValue: vb[k], delta: `${String(va[k] ?? '—')} → ${String(vb[k] ?? '—')}` });
+    const variantChanges: PropertyChange[] = [];
+    if (sameSet) {
+      for (const k of new Set([...Object.keys(va), ...Object.keys(vb)])) {
+        if (va[k] !== vb[k]) {
+          variantChanges.push({ property: `variant.${k}`, oldValue: va[k], newValue: vb[k], delta: `${String(va[k] ?? '—')} → ${String(vb[k] ?? '—')}` });
+        }
       }
     }
+    if (a.key !== b.key && variantChanges.length === 0) {
+      const label = (c: typeof a) => (c.set ? `${c.set} (${c.name})` : c.name);
+      changes.push({ property: 'component', oldValue: label(a), newValue: label(b), delta: `${label(a)} → ${label(b)}` });
+      return;
+    }
+    changes.push(...variantChanges);
   }
 
   // Étapes (position ± ε, couleur) ou angle (± 1°) différents.

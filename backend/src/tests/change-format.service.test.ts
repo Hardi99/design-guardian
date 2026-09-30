@@ -113,3 +113,10 @@ describe('formatChange — trous de détection', () => {
     expect(f('variant.Size', 'Large', 'Small')).toEqual({ kind: 'text', label: 'Variante Size', from: 'Large', to: 'Small' });
   });
 });
+
+describe('formatChange — dégradé aux couleurs inchangées', () => {
+  it('mêmes couleurs avant/après → generic avec le delta (angle ou positions)', () => {
+    expect(formatChange(ch({ property: 'fill.gradient', oldValue: '#FF0000, #0000FF', newValue: '#FF0000, #0000FF', delta: 'angle 0° → 90°' })))
+      .toEqual({ kind: 'generic', label: 'Dégradé', detail: 'angle 0° → 90°' });
+  });
+});

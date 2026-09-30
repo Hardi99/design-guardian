@@ -86,7 +86,7 @@ export interface NodeSnapshot {
   component?: {
     key: string;
     name: string;
-    set?: string;
+    set?: string; setKey?: string;
     variant?: Record<string, string | boolean>;
   };
   effects?: FigmaEffect[];

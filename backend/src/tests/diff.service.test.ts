@@ -867,18 +867,38 @@ describe('trous de détection — ombres, auto-layout, composants', () => {
     expect(c[0].delta).toBe('8/16/8/16 → 12/16/8/16');
   });
 
-  it('composant échangé (jeux différents) → component', () => {
+  // Données réalistes : dans Figma, le nom d'un composant-variante est « Prop=Valeur ».
+  it('composant échangé (jeux différents) → component, libellé « jeu (variante) »', () => {
     const c = changes(
-      { type: 'INSTANCE', component: { key: 'k1', name: 'Button', set: 'Button' } },
-      { type: 'INSTANCE', component: { key: 'k2', name: 'Tag', set: 'Tag' } });
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Tag', setKey: 's2', variant: { Size: 'Large' } } });
     expect(c.map(x => x.property)).toEqual(['component']);
-    expect(c[0].delta).toBe('Button → Tag');
+    expect(c[0].delta).toBe('Button (Size=Large) → Tag (Size=Large)');
+  });
+
+  it('composant sans jeu de variantes → libellé = son nom', () => {
+    const c = changes({ type: 'INSTANCE', component: { key: 'k1', name: 'Logo' } }, { type: 'INSTANCE', component: { key: 'k2', name: 'Icône' } });
+    expect(c[0].delta).toBe('Logo → Icône');
+  });
+
+  it('deux jeux HOMONYMES (bibliothèques différentes), mêmes variantes → component quand même', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Button', setKey: 's2', variant: { Size: 'Large' } } });
+    expect(c.map(x => x.property)).toEqual(['component']);
+  });
+
+  it('même jeu, composant différent, aucune variante changée → component (dans le doute, on montre)', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } });
+    expect(c.map(x => x.property)).toEqual(['component']);
   });
 
   it('variante changée dans le même jeu → uniquement variant.Size', () => {
     const c = changes(
-      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', variant: { Size: 'Large' } } },
-      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Small', set: 'Button', variant: { Size: 'Small' } } });
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Small', set: 'Button', setKey: 's1', variant: { Size: 'Small' } } });
     expect(c.map(x => x.property)).toEqual(['variant.Size']);
     expect(c[0].delta).toBe('Large → Small');
   });
@@ -888,5 +908,20 @@ describe('trous de détection — ombres, auto-layout, composants', () => {
       { type: 'INSTANCE', layoutMode: 'HORIZONTAL' },
       { type: 'INSTANCE', layoutMode: 'HORIZONTAL', autoLayout: al({ itemSpacing: 40 }), component: { key: 'k2', name: 'Tag' } },
     )).toEqual([]);
+  });
+});
+
+describe('trous de détection — dégradé dont seule la géométrie change', () => {
+  const svc = new DiffService();
+  const red = { r: 1, g: 0, b: 0, a: 1 }, blue = { r: 0, g: 0, b: 1, a: 1 };
+  const g = (angle: number, pos = 1) => ({ type: 'GRADIENT_LINEAR' as const, gradientStops: [{ position: 0, color: red }, { position: pos, color: blue }], gradientAngle: angle });
+  const change = (a: number, b: number, pa = 1, pb = 1) =>
+    svc.compareSnapshots(makeSnapshot({ fills: [g(a, pa)] }), makeSnapshot({ fills: [g(b, pb)] })).modified[0]?.changes.find(c => c.property === 'fill.gradient');
+
+  it('angle seul → delta « angle 0° → 90° »', () => {
+    expect(change(0, 90)?.delta).toBe('angle 0° → 90°');
+  });
+  it("position d'étape seule → delta « positions des couleurs modifiées »", () => {
+    expect(change(0, 0, 1, 0.6)?.delta).toBe('positions des couleurs modifiées');
   });
 });

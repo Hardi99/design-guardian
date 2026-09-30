@@ -58,7 +58,7 @@ export interface NodeSnapshot {
     layoutWrap: string;
   };
   // Instance de composant : composant principal (identité = key), jeu de variantes, variantes.
-  component?: { key: string; name: string; set?: string; variant?: Record<string, string | boolean> };
+  component?: { key: string; name: string; set?: string; setKey?: string; variant?: Record<string, string | boolean> };
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific

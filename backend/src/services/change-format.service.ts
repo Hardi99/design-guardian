@@ -71,7 +71,10 @@ function formatDetectionChange(c: PropertyChange): ReadableChange | null {
   const p = c.property;
   const text = (label: string): ReadableChange => ({ kind: 'text', label, from: str(c.oldValue), to: str(c.newValue) });
   const generic = (label: string): ReadableChange => ({ kind: 'generic', label, detail: c.delta ?? `${str(c.oldValue)} → ${str(c.newValue)}` });
-  if (/^(fill|stroke)(\[\d+\])?\.gradient$/.test(p)) return text('Dégradé');
+  if (/^(fill|stroke)(\[\d+\])?\.gradient$/.test(p)) {
+    // Couleurs identiques : seul l'angle ou les positions ont bougé — le delta le dit.
+    return str(c.oldValue) === str(c.newValue) ? generic('Dégradé') : text('Dégradé');
+  }
   if (/^(fill|stroke)(\[\d+\])?\.image$/.test(p)) return generic('Image');
   if (p === 'strokes') return generic('Contour');
   if (/^stroke(\[\d+\])?\.visible$/.test(p)) return { kind: 'visibility', label: 'Contour', visible: c.newValue === true };

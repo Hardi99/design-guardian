@@ -13,8 +13,8 @@ export interface AutoLayoutLike {
 export interface PaintLike { type: string; color?: { r: number; g: number; b: number }; opacity?: number; visible?: boolean }
 export interface EffectLike { type: string; spread?: number }
 export interface TreeLike { id: string; type: string; children?: readonly TreeLike[] }
-export interface MainLike { key: string; name: string; parent?: { type: string; name: string } | null }
-export type ComponentInfo = { key: string; name: string; set?: string };
+export interface MainLike { key: string; name: string; parent?: { type: string; name: string; key?: string } | null }
+export type ComponentInfo = { key: string; name: string; set?: string; setKey?: string };
 
 /** Auto-layout d'un cadre ; undefined s'il n'en a pas (layoutMode absent ou NONE). */
 export function autoLayoutOf(n: AutoLayoutLike): NodeSnapshot['autoLayout'] {
@@ -80,8 +80,12 @@ export async function collectComponents(
   const out = new Map<string, ComponentInfo>();
   results.forEach((m, i) => {
     if (!m) return;
-    const set = m.parent?.type === 'COMPONENT_SET' ? m.parent.name : undefined;
-    out.set(instances[i].id, { key: m.key, name: m.name, ...(set ? { set } : {}) });
+    const inSet = m.parent?.type === 'COMPONENT_SET' ? m.parent : undefined;
+    out.set(instances[i].id, {
+      key: m.key, name: m.name,
+      ...(inSet ? { set: inSet.name } : {}),
+      ...(inSet?.key ? { setKey: inSet.key } : {}),
+    });
   });
   return out;
 }

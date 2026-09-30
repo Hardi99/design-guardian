@@ -117,7 +117,7 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     component: z.object({
       key: z.string(),
       name: z.string(),
-      set: z.string().optional(),
+      set: z.string().optional(), setKey: z.string().optional(),
       variant: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
     }).optional(),
     effects: z.array(figmaEffectSchema).optional(),

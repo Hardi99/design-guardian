@@ -3,6 +3,24 @@ import type { NodeSnapshot } from './types.js';
 // Tolérance géométrique — identique à l'ε du moteur de diff (0,01px).
 const EPS = 0.01;
 
+// Réduit `curr` aux clés DÉFINIES dans `prev` (récursivement) : un champ ajouté à la capture
+// depuis (visible d'un contour, spread d'une ombre) est absent des snapshots anciens et ne doit
+// pas faire passer le nœud pour « modifié ». Les longueurs de tableaux restent comparées.
+function projectOnto(curr: unknown, prev: unknown): unknown {
+  if (Array.isArray(curr) && Array.isArray(prev)) {
+    return curr.map((v, i) => (i < prev.length ? projectOnto(v, prev[i]) : v));
+  }
+  if (curr !== null && typeof curr === 'object' && prev !== null && typeof prev === 'object' && !Array.isArray(prev)) {
+    const c = curr as Record<string, unknown>, p = prev as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(c)) {
+      if (p[k] !== undefined) out[k] = projectOnto(c[k], p[k]);
+    }
+    return out;
+  }
+  return curr;
+}
+
 function valuesEqual(a: unknown, b: unknown): boolean {
   if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= EPS;
   if ((a !== null && typeof a === 'object') || (b !== null && typeof b === 'object')) {
@@ -34,7 +52,7 @@ export function changedProps(
   const p = prev as unknown as Record<string, unknown>;
   const changed = new Set<string>();
   for (const prop of candidates) {
-    if (!valuesEqual(c[prop], p[prop])) changed.add(prop);
+    if (!valuesEqual(projectOnto(c[prop], p[prop]), p[prop])) changed.add(prop);
   }
   return changed;
 }

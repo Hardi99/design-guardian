@@ -626,7 +626,7 @@ async function handleSnapshot(): Promise<void> {
   // Composant principal de chaque instance (échange de composant, variante), lu en parallèle.
   capturedComponents = await collectComponents([...tracked, ...floating] as unknown as TreeLike[], async (inst) => {
     const main = await (inst as unknown as InstanceNode).getMainComponentAsync();
-    return main ? { key: main.key, name: main.name, parent: main.parent ? { type: main.parent.type, name: main.parent.name } : null } : null;
+    return main ? { key: main.key, name: main.name, parent: main.parent ? { type: main.parent.type, name: main.parent.name, key: main.parent.type === 'COMPONENT_SET' ? (main.parent as ComponentSetNode).key : undefined } : null } : null;
   });
 
   const figmaSnapshot: FigmaSnapshot = {

@@ -78,3 +78,11 @@ describe('collectComponents', () => {
     expect(out.has('i3')).toBe(true);
   });
 });
+
+describe('collectComponents — identité du jeu de variantes', () => {
+  it('capture la clé du jeu (setKey) pour distinguer deux jeux homonymes', async () => {
+    const out = await collectComponents([{ id: 'i', type: 'INSTANCE' }], async () =>
+      ({ key: 'k', name: 'Size=Large', parent: { type: 'COMPONENT_SET', name: 'Button', key: 'set-1' } }));
+    expect(out.get('i')).toEqual({ key: 'k', name: 'Size=Large', set: 'Button', setKey: 'set-1' });
+  });
+});
