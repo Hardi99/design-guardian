@@ -14,7 +14,7 @@ export interface Version {
   frames?: FrameSummary[] | null; // page-centric : résumé par frame (/tree)
 }
 
-export type Screen = 'loading' | 'assets' | 'home' | 'checkpoint' | 'diff'
+export type Screen = 'loading' | 'assets' | 'home' | 'frameHistory' | 'checkpoint' | 'diff'
 export type Plan   = 'free' | 'pro' | 'team'
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ interface AppData {
   initErr:      string | null
   diffVersion:  Version | null
   siblings:     Version[]   // versions de la branche courante (ordre ancien→récent) pour la nav ◀▶ du diff
+  frame:        { key: string; name: string } | null // page-centric : frame dont on regarde l'historique
   splitOffer:   { here: string[]; elsewhere: string[] } | null // projet partagé avec d'autres fichiers (cf. fileSplit.ts)
 }
 
@@ -51,6 +52,7 @@ export interface AppState extends AppData {
   setDiffVersion: (v: Version | null)                     => void
   setSiblings:    (v: Version[])                          => void
   setSplitOffer:  (o: AppData['splitOffer'])              => void
+  setFrame:       (f: AppData['frame'])                   => void
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -70,6 +72,7 @@ export const INITIAL_STATE: AppData = {
   initErr:      null,
   diffVersion:  null,
   siblings:     [],
+  frame:        null,
   splitOffer:   null,
 }
 
@@ -85,13 +88,15 @@ export const appStore = createStore<AppState>()((set) => ({
   setAssets:      (assets)                 => set({ assets }),
   // Changer d'asset réinitialise la branche : les branches sont PAR-asset, pas
   // globales. Sans ça, un nouvel asset hérite de la branche de l'ancien (bug fantôme).
-  setAsset:       (asset)                  => set({ asset, branch: 'main' }),
+  // …et la frame : elle appartient à l'asset précédent.
+  setAsset:       (asset)                  => set({ asset, branch: 'main', frame: null }),
   setBranch:      (branch)                 => set({ branch }),
   setSnapshot:    (snapshot, renderSvgB64, renderKind) => set({ snapshot, renderSvgB64, renderKind }),
   setInitErr:     (initErr)                => set({ initErr }),
   setDiffVersion: (diffVersion)            => set({ diffVersion }),
   setSiblings:    (siblings)               => set({ siblings }),
   setSplitOffer:  (splitOffer)             => set({ splitOffer }),
+  setFrame:       (frame)                  => set({ frame }),
 }))
 
 // Remet les données à zéro entre chaque test (beforeEach(() => resetStore()))
