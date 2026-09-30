@@ -5,6 +5,8 @@ import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { createAssetSchema } from '../types/api.js';
 import type { AssetResponse, AssetsListResponse, ErrorResponse } from '../types/api.js';
 import type { ProjectEnv } from '../types/hono.js';
+import { latestPerAsset, type VersionIdentityRow } from '../services/split.service.js';
+import { downloadSnapshot } from '../services/versioning.service.js';
 
 const assetsRouter = new Hono<ProjectEnv>();
 
@@ -41,6 +43,29 @@ assetsRouter.get('/', pluginMiddleware, async (c) => {
 
   if (error) return c.json<ErrorResponse>({ error: 'Failed to fetch assets', details: error.message }, 500);
   return c.json<AssetsListResponse>({ assets: data });
+});
+
+// Nœud Figma + dg_id de la dernière capture de chaque asset : le plugin s'en sert pour
+// vérifier quels éléments suivis existent dans le fichier ouvert (cf. split.service).
+// Déclarée avant '/:id' (sinon capturée par elle).
+assetsRouter.get('/identities', pluginMiddleware, async (c) => {
+  const db = getSupabaseClient();
+  const { data: assets, error } = await db.from('assets').select('id').eq('project_id', c.get('projectId'));
+  if (error) return c.json<ErrorResponse>({ error: 'Failed to fetch assets', details: error.message }, 500);
+  const ids = (assets ?? []).map(a => a.id as string);
+  if (ids.length === 0) return c.json({ identities: [] });
+
+  const { data: rows, error: vErr } = await db
+    .from('versions').select('asset_id, figma_node_id, storage_path, created_at').in('asset_id', ids);
+  if (vErr) return c.json<ErrorResponse>({ error: 'Failed to fetch versions', details: vErr.message }, 500);
+
+  const storage = getSupabaseStorage();
+  const identities = await Promise.all([...latestPerAsset((rows ?? []) as VersionIdentityRow[]).values()].map(async v => ({
+    asset_id: v.asset_id,
+    figma_node_id: v.figma_node_id as string,
+    dg_id: v.storage_path ? ((await downloadSnapshot(storage, v.storage_path))?.root.dg_id ?? null) : null,
+  })));
+  return c.json({ identities });
 });
 
 assetsRouter.get('/:id', pluginMiddleware, async (c) => {

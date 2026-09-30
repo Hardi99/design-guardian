@@ -22,6 +22,12 @@ export const autoInitSchema = z.object({
   figma_file_name: z.string().min(1).max(200),
 });
 export type AutoInitRequest = z.infer<typeof autoInitSchema>;
+
+// Séparation d'un fichier d'un projet partagé (cf. split.service) : même identifiant que
+// l'auto-init, + les assets que le plugin a trouvés dans le fichier ouvert.
+export const splitSchema = autoInitSchema.extend({
+  asset_ids: z.array(z.string().uuid()).max(500),
+});
 export interface AutoInitResponse {
   api_key: string;
   project: { id: string; name: string; plan: string };
