@@ -1,4 +1,4 @@
-import type { DeltaJSON, FigmaSnapshot } from '../types/figma.js';
+import type { DeltaJSON, FigmaSnapshot, NodeSnapshot } from '../types/figma.js';
 import { viewportRootMap } from './tree.service.js';
 
 /**
@@ -10,8 +10,8 @@ import { viewportRootMap } from './tree.service.js';
  * mentirait, et massivement.
  *
  * Les frames suivies sont exactement les enfants de la racine synthétique : comparer les
- * deux listes donne les entrées et sorties de périmètre, et les nœuds qui en dépendent
- * sont retirés de `added`/`removed`.
+ * deux listes (par dg_id, repli id Figma) donne les entrées et sorties de périmètre, et
+ * les nœuds qui en dépendent sont retirés de `added`/`removed`.
  *
  * Non-mutant. Sans effet hors page-centric (racine non-PAGE) ou sans version précédente.
  */
@@ -22,11 +22,15 @@ export function classifyScopeChanges(
 ): DeltaJSON {
   if (!prevSnap || currentSnap.root.type !== 'PAGE' || prevSnap.root.type !== 'PAGE') return delta;
 
-  const cur  = new Map((currentSnap.root.children ?? []).map(c => [c.id, c.name]));
-  const prev = new Map((prevSnap.root.children ?? []).map(c => [c.id, c.name]));
+  // Même frame d'une version à l'autre : même dg_id si les deux en portent un (il survit au
+  // couper-coller, qui change l'id Figma), sinon même id Figma.
+  const same = (a: NodeSnapshot, b: NodeSnapshot): boolean =>
+    a.dg_id && b.dg_id ? a.dg_id === b.dg_id : a.id === b.id;
+  const cur  = currentSnap.root.children ?? [];
+  const prev = prevSnap.root.children ?? [];
 
-  const scopeIn  = [...cur].filter(([id]) => !prev.has(id)).map(([id, name]) => ({ id, name }));
-  const scopeOut = [...prev].filter(([id]) => !cur.has(id)).map(([id, name]) => ({ id, name }));
+  const scopeIn  = cur.filter(c => !prev.some(p => same(c, p))).map(({ id, name }) => ({ id, name }));
+  const scopeOut = prev.filter(p => !cur.some(c => same(c, p))).map(({ id, name }) => ({ id, name }));
   if (scopeIn.length === 0 && scopeOut.length === 0) return delta;
 
   const inIds  = new Set(scopeIn.map(f => f.id));

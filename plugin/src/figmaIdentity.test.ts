@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureNodeIdentity, readDgId, propagateIdentity, findByDgId, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, readDgId, propagateIdentity, findByDgId, adoptMovedIdentities, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
 
 // Faux nœud minimal : implémente uniquement ce que l'adaptateur utilise.
 function fakeNode(id: string, data: Record<string, string> = {}): IdentifiableNode {
@@ -99,5 +99,75 @@ describe('findByDgId', () => {
 
   it('renvoie undefined si introuvable', () => {
     expect(findByDgId([fakeTree('a', { el_uid: 'X' })], 'NOPE')).toBeUndefined();
+  });
+});
+
+// ─── Lecture seule ───────────────────────────────────────────────────────────
+// Un nœud qu'on ne peut pas stamper ne doit PAS recevoir un dg_id tiré au hasard à
+// chaque capture : il ne correspondrait jamais à la capture précédente (tout serait
+// « supprimé + ajouté »). Pas d'identité → le diff apparie par id Figma.
+
+describe('ensureNodeIdentity — lecture seule', () => {
+  const readOnly = (id: string, data: Record<string, string> = {}): IdentifiableNode => ({
+    id,
+    getPluginData: (k) => data[k] ?? '',
+    setPluginData: () => { throw new Error('read-only'); },
+  });
+
+  it('nœud vierge non stampable → "" (pas de dg_id volatile)', () => {
+    expect(ensureNodeIdentity(readOnly('n1'))).toBe('');
+  });
+
+  it('nœud déjà stampé → son dg_id, même en lecture seule', () => {
+    expect(ensureNodeIdentity(readOnly('n1', { el_uid: 'ABC', el_owner: 'n1' }))).toBe('ABC');
+  });
+});
+
+// ─── Couper-coller / « Move to page » ────────────────────────────────────────
+// Figma donne un NOUVEL id au nœud collé, qui garde son pluginData (owner = l'ancien id).
+// Copie ou déplacement ? Copie seulement si le propriétaire existe encore avec ce dg_id.
+
+describe('adoptMovedIdentities', () => {
+  const lookup = (nodes: IdentifiableNode[]) =>
+    async (id: string) => nodes.find(n => n.id === id) ?? null;
+
+  it('couper-coller (ancien nœud disparu) → le nœud collé garde son dg_id', async () => {
+    const pasted = fakeTree('new-2', { el_uid: 'ABC', el_owner: 'old-1' });
+    await adoptMovedIdentities([pasted], lookup([]));
+    expect(ensureNodeIdentity(pasted)).toBe('ABC');
+    expect(pasted.getPluginData('el_owner')).toBe('new-2');
+  });
+
+  it('copie (original toujours là avec ce dg_id) → pas d\'adoption, re-mint', async () => {
+    const original = fakeNode('n1', { el_uid: 'ABC', el_owner: 'n1' });
+    const copy = fakeTree('n2', { el_uid: 'ABC', el_owner: 'n1' });
+    await adoptMovedIdentities([copy], lookup([original]));
+    expect(ensureNodeIdentity(copy)).not.toBe('ABC');
+  });
+
+  it('propriétaire toujours là mais avec un autre dg_id → l\'identité est libre, adoptée', async () => {
+    const formerOwner = fakeNode('n1', { el_uid: 'OTHER', el_owner: 'n1' });
+    const node = fakeTree('n2', { el_uid: 'ABC', el_owner: 'n1' });
+    await adoptMovedIdentities([node], lookup([formerOwner]));
+    expect(ensureNodeIdentity(node)).toBe('ABC');
+  });
+
+  it('collé deux fois dans l\'arbre capturé → un seul hérite, l\'autre est re-minté', async () => {
+    const a = fakeTree('p1', { el_uid: 'ABC', el_owner: 'gone' });
+    const b = fakeTree('p2', { el_uid: 'ABC', el_owner: 'gone' });
+    const root = fakeTree('root', { el_uid: 'R', el_owner: 'root' }, [a, b]);
+    await adoptMovedIdentities([root], lookup([]));
+    const ids = [ensureNodeIdentity(a), ensureNodeIdentity(b)];
+    expect(ids).toContain('ABC');
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('original et copie dans l\'arbre capturé → la copie n\'hérite pas', async () => {
+    const original = fakeTree('n1', { el_uid: 'ABC', el_owner: 'n1' });
+    const copy = fakeTree('n2', { el_uid: 'ABC', el_owner: 'n1' });
+    const root = fakeTree('root', { el_uid: 'R', el_owner: 'root' }, [copy, original]);
+    await adoptMovedIdentities([root], lookup([])); // même si la recherche ne trouvait pas l'original
+    expect(ensureNodeIdentity(original)).toBe('ABC');
+    expect(ensureNodeIdentity(copy)).not.toBe('ABC');
   });
 });

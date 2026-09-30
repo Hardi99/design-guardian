@@ -15,7 +15,10 @@ export interface ProjectsListResponse  { projects: Project[] }
 // ── Auto-init (plugin — no auth, identified by Figma file key) ────────────────
 
 export const autoInitSchema = z.object({
-  figma_file_key: z.string().min(1),
+  // L'identifiant donne la clé d'API du projet : il doit être imprévisible. Seul l'id
+  // aléatoire posé par le plugin dans le fichier (32 hex) est accepté — jamais la clé
+  // d'URL Figma (visible dans tout lien de partage) ni un id de nœud (« 0:1 »).
+  figma_file_key: z.string().regex(/^[0-9a-f]{32}$/, 'figma_file_key must be the plugin file id (32 hex)'),
   figma_file_name: z.string().min(1).max(200),
 });
 export type AutoInitRequest = z.infer<typeof autoInitSchema>;
@@ -95,6 +98,8 @@ const nodeSnapshotSchema: z.ZodType = z.lazy(() =>
     layoutSizingHorizontal: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
     layoutSizingVertical: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
     layoutPositioning: z.enum(['AUTO', 'ABSOLUTE']).optional(),
+    layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']).optional(),
+    floating: z.boolean().optional(),
     effects: z.array(figmaEffectSchema).optional(),
     characters: z.string().optional(),
     fontSize: z.number().optional(),

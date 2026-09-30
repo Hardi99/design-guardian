@@ -7,53 +7,84 @@ import type {
   DeltaJSON,
 } from '../types/figma.js';
 
+// Types sans repère propre dans Figma : leurs bornes suivent leurs enfants, qui se mesurent
+// donc dans le cadre qui les contient (sinon un enfant qui élargit le groupe « déplace » ses frères).
+const COORD_TRANSPARENT = new Set(['GROUP', 'BOOLEAN_OPERATION']);
+
+interface FlatEntry {
+  node: NodeSnapshot;               // tel que capturé (coordonnées absolues)
+  local: { x: number; y: number };  // position dans le cadre de référence
+  parent: NodeSnapshot | null;
+  parentKey: string | null;         // clé d'appariement du parent (changement de parent)
+  frameKey: string | null;          // clé d'appariement du cadre de référence
+}
+
 export class DiffService {
   private readonly EPSILON = 0.01; // px tolerance for geometric comparisons
 
   compareSnapshots(v1: FigmaSnapshot, v2: FigmaSnapshot): DeltaJSON {
     const startTime = performance.now();
 
-    // Matcher en couches : dg_id (stable — survit clone/rename/réordre/cross-branch)
-    // → id Figma (same-branch) → chemin d'arbre (legacy sans dg_id, cross-branch cloné).
-    const useDgId = !!v1.root.dg_id && !!v2.root.dg_id;
+    // Matcher en couches, NŒUD PAR NŒUD : dg_id quand les deux versions le portent (stable —
+    // survit clone/rename/réordre/cross-branch) → id Figma (same-branch) → chemin d'arbre
+    // (legacy sans dg_id, cross-branch cloné). Ne dépend pas de la racine : un nœud non
+    // stampé (viewer read-only) retombe seul sur l'id, sans entraîner le reste.
+    const dg1 = this.dgIds(v1.root);
+    const dg2 = this.dgIds(v2.root);
     const sameBranch = v1.root.id === v2.root.id;
-    const keyOf = (node: NodeSnapshot, path: string): string => {
-      if (useDgId && node.dg_id) return `dg:${node.dg_id}`;
+    const keyer = (other: Set<string>) => (node: NodeSnapshot, path: string): string => {
+      if (node.dg_id && other.has(node.dg_id)) return `dg:${node.dg_id}`;
       return sameBranch ? `id:${node.id}` : `path:${path}`;
     };
-    const v1Map = this.flatten(v1.root, keyOf);
-    const v2Map = this.flatten(v2.root, keyOf);
+    const v1Map = this.flatten(v1.root, keyer(dg2));
+    const v2Map = this.flatten(v2.root, keyer(dg1));
 
     const modified: NodeDelta[] = [];
     const added: NodeDelta[] = [];
     const removed: NodeDelta[] = [];
 
     // Removed: in v1 but not in v2. nodeId = raw Figma id (downstream lookups key on it).
-    for (const [key, node] of v1Map) {
+    for (const [key, { node }] of v1Map) {
       if (!v2Map.has(key)) {
         removed.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
     // Added: in v2 but not in v1.
-    for (const [key, node] of v2Map) {
+    for (const [key, { node }] of v2Map) {
       if (!v1Map.has(key)) {
         added.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
     // Modified: in both, compare properties.
-    for (const [key, v1Node] of v1Map) {
-      const v2Node = v2Map.get(key);
-      if (!v2Node) continue;
+    for (const [key, e1] of v1Map) {
+      const e2 = v2Map.get(key);
+      if (!e2) continue;
 
-      const changes = this.compareNodes(v1Node, v2Node);
+      // Position comparée dans un repère COMMUN aux deux versions : le cadre de référence
+      // s'il n'a pas changé ; sinon le parent s'il n'a pas changé (enfant d'un groupe
+      // déplacé en bloc : il a suivi) ; sinon la position visuelle absolue.
+      const sameFrame = e1.frameKey === e2.frameKey;
+      const sameParent = e1.parentKey === e2.parentKey;
+      const pos = (e: FlatEntry) =>
+        sameFrame ? e.local
+        : sameParent && e.parent ? this.localPosition(e.node, e.parent)
+        : { x: e.node.x, y: e.node.y };
+      const v2Node = e2.node;
+      const changes = this.compareNodes({ ...e1.node, ...pos(e1) }, { ...v2Node, ...pos(e2) });
+      if (!sameParent) {
+        const from = e1.parent?.name ?? '—';
+        const to = e2.parent?.name ?? '—';
+        changes.unshift({ property: 'parent', oldValue: from, newValue: to, delta: `${from} → ${to}` });
+      }
       if (changes.length > 0) {
         modified.push({
           nodeId: v2Node.id, nodeName: v2Node.name, nodeType: v2Node.type, changes,
           layoutSizingHorizontal: v2Node.layoutSizingHorizontal,
           layoutSizingVertical: v2Node.layoutSizingVertical,
           layoutPositioning: v2Node.layoutPositioning,
+          inAutoLayout: e2.parent?.layoutMode === undefined ? undefined : e2.parent.layoutMode !== 'NONE',
         });
       }
     }
@@ -74,21 +105,62 @@ export class DiffService {
     };
   }
 
-  // Aplatit l'arbre en map clé→nœud. La clé est fournie par `keyOf` (matcher en couches).
-  private flatten(root: NodeSnapshot, keyOf: (node: NodeSnapshot, path: string) => string): Map<string, NodeSnapshot> {
-    const map = new Map<string, NodeSnapshot>();
-    const traverse = (node: NodeSnapshot, path: string): void => {
-      map.set(keyOf(node, path), node);
-      node.children?.forEach((child, i) => traverse(child, `${path}/${i}:${child.type}:${child.name}`));
+  // Aplatit l'arbre en map clé→entrée. La clé est fournie par `keyOf` (matcher en couches).
+  // `local` = position dans le cadre de référence (comme le panneau Figma) : les snapshots
+  // portent des coordonnées absolues, et comparer l'absolu signalerait tout le contenu
+  // d'un cadre déplacé. Parent et cadre sont identifiés par leur clé d'appariement, pour
+  // détecter un changement de parent entre versions. La racine garde ses coordonnées.
+  private flatten(root: NodeSnapshot, keyOf: (node: NodeSnapshot, path: string) => string): Map<string, FlatEntry> {
+    const map = new Map<string, FlatEntry>();
+    type Ref = { node: NodeSnapshot; key: string } | null;
+    let rootRef: Ref = null;
+    const traverse = (node: NodeSnapshot, path: string, parent: Ref, frame: Ref): void => {
+      const key = keyOf(node, path);
+      map.set(key, {
+        node,
+        local: frame ? this.localPosition(node, frame.node) : { x: node.x, y: node.y },
+        parent: parent?.node ?? null, parentKey: parent?.key ?? null, frameKey: frame?.key ?? null,
+      });
+      const self = { node, key };
+      rootRef ??= self;
+      const childFrame = frame && COORD_TRANSPARENT.has(node.type) ? frame : self;
+      // Élément flottant : rangé sous la frame qu'il recouvre, mais son vrai parent est la page.
+      node.children?.forEach((child, i) => {
+        const childPath = `${path}/${i}:${child.type}:${child.name}`;
+        if (child.floating) traverse(child, childPath, rootRef, rootRef);
+        else traverse(child, childPath, self, childFrame);
+      });
     };
-    traverse(root, `${root.type}:${root.name}`);
+    traverse(root, `${root.type}:${root.name}`, null, null);
     return map;
+  }
+
+  private dgIds(root: NodeSnapshot): Set<string> {
+    const ids = new Set<string>();
+    const visit = (n: NodeSnapshot): void => {
+      if (n.dg_id) ids.add(n.dg_id);
+      n.children?.forEach(visit);
+    };
+    visit(root);
+    return ids;
+  }
+
+  // Position de `node` dans le repère de `frame`. `rotation` suit la convention de capture
+  // (extractRotation du plugin) : la matrice absolue du repère vaut [[cos r, -sin r], [sin r, cos r]].
+  private localPosition(node: NodeSnapshot, frame: NodeSnapshot): { x: number; y: number } {
+    const dx = node.x - frame.x;
+    const dy = node.y - frame.y;
+    const r = ((frame.rotation ?? 0) * Math.PI) / 180;
+    if (r === 0) return { x: dx, y: dy };
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    return { x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
   }
 
   private compareNodes(v1: NodeSnapshot, v2: NodeSnapshot): PropertyChange[] {
     const changes: PropertyChange[] = [];
 
-    // Position
+    // Position (dans un repère commun — cf. compareSnapshots)
     this.compareNumeric(changes, 'x', v1.x, v2.x, 'px');
     this.compareNumeric(changes, 'y', v1.y, v2.y, 'px');
 

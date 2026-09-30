@@ -25,6 +25,19 @@ export function nodeBboxRelative(snapshot: FigmaSnapshot, nodeId: string): Bbox 
 }
 
 /**
+ * Dimensions de l'image de rendu (repère du viewer). En page-centric la racine est une PAGE
+ * sans géométrie (0×0 volontaire) et le rendu provisoire est celui de la PREMIÈRE frame suivie
+ * (cf. plugin handleSnapshot) : ce sont ses dimensions. null plutôt que 0×0 (échelle nulle).
+ */
+export function renderFrame(snap: FigmaSnapshot): { w: number; h: number } | null {
+  const n = snap.root.type === 'PAGE' ? snap.root.children?.[0] : snap.root;
+  if (!n) return null;
+  const ab = n.aabb;
+  const f = { w: ab ? ab.w : n.width, h: ab ? ab.h : n.height };
+  return f.w > 0 && f.h > 0 ? f : null;
+}
+
+/**
  * Ajoute `frame` (dims root) + `bbox` par-nœud au delta, pour éviter de retélécharger le
  * snapshot au GET. Attache aussi `instanceRoot`/`instanceName`/`instanceBbox` aux nœuds internes
  * d'icônes/composants (INSTANCE) → le plugin replie leurs changements en UN SEUL élément
@@ -32,8 +45,7 @@ export function nodeBboxRelative(snapshot: FigmaSnapshot, nodeId: string): Bbox 
  * snapshot d'origine du nœud : courant pour modified/added, précédent pour removed (cf. `bbox`).
  */
 export function enrichDeltaGeometry(delta: DeltaJSON, currentSnap: FigmaSnapshot, prevSnap: FigmaSnapshot | null): DeltaJSON {
-  const rb = currentSnap.root.aabb;
-  const frame = { w: rb ? rb.w : currentSnap.root.width, h: rb ? rb.h : currentSnap.root.height };
+  const frame = renderFrame(currentSnap) ?? undefined;
   const curInst = instanceRootMap(currentSnap.root);
   const prevInst = prevSnap ? instanceRootMap(prevSnap.root) : null;
 

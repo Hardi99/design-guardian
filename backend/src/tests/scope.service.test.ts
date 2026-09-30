@@ -68,3 +68,31 @@ describe('classifyScopeChanges', () => {
     expect(out.scopeIn).toBeUndefined();
   });
 });
+
+// Une frame suivie coupée-collée reçoit un NOUVEL id Figma mais garde son dg_id (et son
+// marquage de suivi) : ce n'est ni une sortie ni une entrée de périmètre.
+describe('classifyScopeChanges — frame suivie coupée-collée', () => {
+  const withDg = (f: ReturnType<typeof frame>, dg: string) => ({ ...f, dg_id: dg });
+
+  it('même dg_id, nouvel id Figma → ni scopeIn ni scopeOut', () => {
+    const prev = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A')]);
+    const cur  = page([withDg(frame('a-new', 'Accueil', 'a1'), 'DG-A')]);
+    const out = classifyScopeChanges(delta({}), cur, prev);
+    expect(out.scopeIn).toBeUndefined();
+    expect(out.scopeOut).toBeUndefined();
+  });
+
+  it('dg_id absent d\'un côté (viewer read-only) → repli sur l\'id Figma', () => {
+    const prev = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A')]);
+    const cur  = page([frame('a', 'Accueil', 'a1')]);
+    const out = classifyScopeChanges(delta({}), cur, prev);
+    expect(out.scopeIn).toBeUndefined();
+    expect(out.scopeOut).toBeUndefined();
+  });
+
+  it('vraie nouvelle frame suivie (autre dg_id) → toujours scopeIn', () => {
+    const prev = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A')]);
+    const cur  = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A'), withDg(frame('b', 'Panier', 'b1'), 'DG-B')]);
+    expect(classifyScopeChanges(delta({}), cur, prev).scopeIn).toEqual([{ id: 'b', name: 'Panier' }]);
+  });
+});

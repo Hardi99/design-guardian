@@ -4,6 +4,7 @@ import { buildTreeMaps } from './tree.service.js';
 export type Significance = 'notable' | 'minor';
 
 export interface LayoutContext {
+  inAutoLayout?: boolean; // parent en auto-layout (cf. NodeDelta.inAutoLayout)
   layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
   layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
@@ -13,18 +14,19 @@ export interface LayoutContext {
 // reconstruction dupliquée dans significance/change-format).
 export function layoutContextOf(nd: NodeDelta): LayoutContext {
   return {
+    inAutoLayout: nd.inAutoLayout,
     layoutSizingHorizontal: nd.layoutSizingHorizontal,
     layoutSizingVertical: nd.layoutSizingVertical,
     layoutPositioning: nd.layoutPositioning,
   };
 }
 
-// Un nœud est enfant de FLUX auto-layout (position recalculée par le moteur) ssi
-// il a un mode de sizing (Figma ne le renseigne que pour les enfants d'auto-layout)
-// ET n'est pas en position absolue (un enfant absolu garde une position authored).
+// Un nœud est enfant de FLUX auto-layout (position recalculée par le moteur) ssi son PARENT
+// est en auto-layout ET qu'il n'est pas en position absolue (un enfant absolu garde une
+// position authored). layoutSizing*/layoutPositioning ne suffisent pas : Figma les renseigne
+// pour tous les nœuds. Parent inconnu (capture ancienne) → pas de flux → le move reste visible.
 function isFlowChild(ctx: LayoutContext): boolean {
-  const hasSizing = ctx.layoutSizingHorizontal !== undefined || ctx.layoutSizingVertical !== undefined;
-  return hasSizing && ctx.layoutPositioning !== 'ABSOLUTE';
+  return ctx.inAutoLayout === true && ctx.layoutPositioning !== 'ABSOLUTE';
 }
 
 // Propriétés qualitatives : tout changement est notable (couleur, texte, structure…).
@@ -104,7 +106,9 @@ export function nodeIdsToRender(delta: DeltaJSON, cap: number, derivedIds?: Set<
 
 // Un déplacement est DÉRIVÉ s'il est identique à celui du parent : le nœud est « porté »
 // par son parent (qui a bougé), pas déplacé à la main. Retourne les ids aux moves dérivés.
-// Coords absolues → bouger un frame décale tous ses descendants du même delta = conséquence.
+// Utile pour les deltas enregistrés AVANT le diff en positions relatives au parent (coords
+// absolues : bouger un frame décalait tous ses descendants du même delta). Les nouveaux
+// deltas ne portent plus ces moves portés : la fonction n'y trouve rien.
 export function derivedMoveIds(delta: DeltaJSON, parent: Map<string, string | null>): Set<string> {
   const moveOf = new Map<string, { dx: number; dy: number }>();
   for (const n of delta.modified) {

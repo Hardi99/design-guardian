@@ -30,6 +30,10 @@ describe('formatChange', () => {
     expect(formatChange(ch({ property: 'characters', oldValue: 'Hi', newValue: 'Hello' })))
       .toEqual({ kind: 'text', label: 'Texte', from: 'Hi', to: 'Hello' });
   });
+  it('parent → text (déplacé dans un autre calque)', () => {
+    expect(formatChange(ch({ property: 'parent', oldValue: 'Frame 14061', newValue: 'Home' })))
+      .toEqual({ kind: 'text', label: 'Parent', from: 'Frame 14061', to: 'Home' });
+  });
   it('opacity → %', () => {
     expect(formatChange(ch({ property: 'opacity', oldValue: 1, newValue: 0.5 })))
       .toEqual({ kind: 'opacity', label: 'Opacité', from: 100, to: 50 });
@@ -63,7 +67,7 @@ describe('formatNodeChanges', () => {
   it('ignore les changements mineurs (cascade : x/y d\'un enfant de flux)', () => {
     const r = formatNodeChanges(nd({
       changes: [{ property: 'y', oldValue: 0, newValue: -51 }],
-      layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
+      inAutoLayout: true, layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FIXED', layoutPositioning: 'AUTO',
     }));
     expect(r).toEqual([]); // dérivé → mineur → pas listé
   });

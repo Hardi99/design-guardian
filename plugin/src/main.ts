@@ -8,9 +8,9 @@ import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
-import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
-import { listFrames, setTracked, isTracked, type TrackableNode } from './trackedFrames.js';
+import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
 figma.showUI(__html__, { width: 400, height: 600 });
 
@@ -35,23 +35,22 @@ function generateFileId(): string {
 }
 
 // Key resolution order — ensures all editors of the same file share one project:
-// 1. figma.fileKey          — available in dev mode + some Figma plans
-// 2. figma.root.getPluginData — stored in the file itself, shared across all users
-// 3. figma.clientStorage    — legacy per-user fallback (promotes to shared on write)
-// 4. Fresh generated ID     — first-ever open, written to both stores
+// 1. figma.root.getPluginData — stored in the file itself, shared across all users
+// 2. figma.clientStorage    — legacy per-user fallback, only if it is a random id (promotes to shared on write)
+// 3. Fresh generated ID     — first-ever open, written to both stores
 (async () => {
-  // Auto-init : ne lit que figma.root / figma.fileKey / figma.currentPage.id (racine +
+  // Auto-init : ne lit que figma.root / figma.currentPage.id (racine +
   // page courante, toujours accessibles) — aucun accès cross-page ici, donc pas besoin
   // d'ensurePagesLoaded(). Le chargement des pages est différé aux handlers qui en ont
   // vraiment besoin (historique, branches).
-  let fileKey: string =
-    (figma.fileKey as string | undefined) ??
-    figma.root.getPluginData('dg_file_id') ??
-    '';
+  // Jamais figma.fileKey : c'est la clé de l'URL du fichier (lisible dans tout lien de
+  // partage), or l'identifiant envoyé à auto-init donne la clé d'API du projet.
+  let fileKey: string = figma.root.getPluginData('dg_file_id');
 
   if (!fileKey) {
     const userKey = await figma.clientStorage.getAsync('dg_file_id') as string | undefined;
-    if (userKey) {
+    // Seul un id aléatoire est réutilisé : le serveur refuse tout autre format (ex. anciens id de page).
+    if (userKey && /^[0-9a-f]{32}$/.test(userKey)) {
       fileKey = userKey;
       // Promote legacy per-user key to file-scoped shared storage.
       try { figma.root.setPluginData('dg_file_id', fileKey); } catch { /* read-only viewer */ }
@@ -94,7 +93,7 @@ figma.ui.onmessage = async (raw: unknown) => {
   switch (msg.type) {
     case 'REQUEST_SNAPSHOT':  await handleSnapshot(); break;
     case 'RETRY_INIT': {
-      const key = (figma.fileKey as string | undefined) ?? figma.root.getPluginData('dg_file_id');
+      const key = figma.root.getPluginData('dg_file_id');
       if (key) send({ type: 'FILE_INFO', fileKey: key, fileName: figma.root.name });
       break;
     }
@@ -559,13 +558,35 @@ async function handleSnapshot(): Promise<void> {
 
   await ensurePagesLoaded(); // dynamic-page : requis avant le clone d'historique (page dg/_history)
 
+  // Éléments flottants : posés sur la page au-dessus d'une frame suivie (typiquement un
+  // collage sans frame sélectionnée). Rangés sous cette frame pour rester capturés, sinon
+  // ils seraient signalés supprimés alors qu'ils sont toujours visibles (cf. assignFloating).
+  const boxOf = (n: SceneNode): Box | null => {
+    const b = 'absoluteBoundingBox' in n ? n.absoluteBoundingBox : null;
+    return b ? { id: n.id, x: b.x, y: b.y, w: b.width, h: b.height } : null;
+  };
+  const others = page.children.filter(c => !isTracked(c as unknown as TrackableNode));
+  const hostOf = assignFloating(
+    others.map(boxOf).filter((b): b is Box => b !== null),
+    tracked.map(boxOf).filter((b): b is Box => b !== null),
+  );
+  const floating = others.filter(c => hostOf.has(c.id));
+  const withFloating = (frame: SceneNode): NodeSnapshot => {
+    const snap = extractSnapshot(frame);
+    const extra = floating.filter(c => hostOf.get(c.id) === frame.id).map(c => ({ ...extractSnapshot(c), floating: true }));
+    return extra.length > 0 ? { ...snap, children: [...(snap.children ?? []), ...extra] } : snap;
+  };
+
+  // Avant l'extraction (synchrone) : un nœud coupé-collé garde son dg_id au lieu d'être pris pour une copie.
+  await adoptMovedIdentities([...tracked, ...floating] as unknown as BranchNode[],
+    async (id) => (await figma.getNodeByIdAsync(id)) as unknown as IdentifiableNode | null);
+
   const figmaSnapshot: FigmaSnapshot = {
     figmaNodeId: page.id,
     figmaNodeName: page.name,
     capturedAt: new Date().toISOString(),
     root: {
-      // CRITIQUE : sans dg_id sur la racine, compareSnapshots calcule useDgId = false et
-      // désactive le matching par dg_id pour TOUTE la page (repli silencieux sur id:/path:).
+      // dg_id de la page : apparie la racine elle-même (le diff apparie par dg_id nœud par nœud).
       dg_id: ensureNodeIdentity(page as unknown as Parameters<typeof ensureNodeIdentity>[0]),
       id: page.id,
       name: page.name,
@@ -574,7 +595,7 @@ async function handleSnapshot(): Promise<void> {
       // Une PageNode n'a de toute façon aucune géométrie (elle n'étend pas LayoutMixin).
       x: 0, y: 0, width: 0, height: 0,
       opacity: 1, fills: [], strokes: [],
-      children: tracked.map(extractSnapshot),
+      children: tracked.map(withFloating),
     },
   };
 
@@ -686,6 +707,7 @@ function extractSnapshot(node: SceneNode): NodeSnapshot {
     layoutSizingHorizontal: extractLayoutSizing(node, 'layoutSizingHorizontal'),
     layoutSizingVertical:   extractLayoutSizing(node, 'layoutSizingVertical'),
     layoutPositioning:      extractLayoutPositioning(node),
+    layoutMode:             'layoutMode' in node ? (node as FrameNode).layoutMode : undefined,
     vectorPaths:  extractVectorPaths(node),
     effects:      extractEffects(node),
     characters:   node.type === 'TEXT' ? safeStr((node as unknown as TextNode).characters) : undefined,
