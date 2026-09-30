@@ -150,6 +150,7 @@ export interface CheckpointResponse {
   version: Version;
   analysis: DeltaJSON | null;
   ai_summary: string | null;
+  render_frames: Array<{ key: string; id: string }>; // page-centric : frames à rendre (cf. frames.service)
 }
 
 // ── Version tree (plugin) ─────────────────────────────────────────────────────

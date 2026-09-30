@@ -317,6 +317,7 @@ export function getOpenApiSpec() {
                       version: { $ref: '#/components/schemas/Version' },
                       analysis: { type: 'object', nullable: true, description: 'Delta JSON with modified/added/removed nodes' },
                       ai_summary: { type: 'string', nullable: true, description: 'GPT-4o-mini generated patch note' },
+                      render_frames: { type: 'array', description: 'Page-centric : frames à rendre par le plugin (nouvelles + modifiées, 20 max)', items: { type: 'object', properties: { key: { type: 'string' }, id: { type: 'string' } } } },
                     },
                   },
                 },

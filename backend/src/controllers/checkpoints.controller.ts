@@ -12,6 +12,7 @@ import { isNodeMismatch } from '../services/node-match.js';
 import { createVersionAtomic, downloadSnapshot, uploadRender } from '../services/versioning.service.js';
 import { stampSignificance } from '../services/significance.service.js';
 import { classifyScopeChanges } from '../services/scope.service.js';
+import { framesToRender } from '../services/frames.service.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
@@ -70,7 +71,17 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     author: body.author,
     computeMeta: async (prev) => {
       pendingDelta = null; // reset par tentative : sur retry 23505, seul le dernier slot fait foi
-      if (!prev?.storage_path) return { analysisJson: null, aiSummary: null };
+      const snap = body.snapshot_json as FigmaSnapshot;
+      if (!prev?.storage_path) {
+        // v1 d'une page : pas de diff, mais le résumé des frames (toutes « initial ») — sans
+        // lui, l'historique d'une frame ne connaîtrait pas son point de départ.
+        if (snap.root.type !== 'PAGE') return { analysisJson: null, aiSummary: null };
+        const base: DeltaJSON = {
+          modified: [], added: [], removed: [], totalChanges: 0,
+          metadata: { v1CapturedAt: snap.capturedAt, v2CapturedAt: snap.capturedAt, epsilon: 0.01, processingTimeMs: 0 },
+        };
+        return { analysisJson: enrichDeltaGeometry(base, snap, null), aiSummary: null };
+      }
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
       const rawDelta = diffService.compareSnapshots(prevSnapshot, body.snapshot_json as FigmaSnapshot);
@@ -107,7 +118,11 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
     }).catch(() => { /* best-effort */ });
   }
 
-  return c.json<CheckpointResponse>({ version, analysis: analysisJson, ai_summary: version.ai_summary }, 201);
+  return c.json<CheckpointResponse>({
+    version, analysis: analysisJson, ai_summary: version.ai_summary,
+    // Frames dont le plugin doit exporter un rendu (nouvelles + modifiées, plafonnées).
+    render_frames: framesToRender(analysisJson?.frames ?? []),
+  }, 201);
 });
 
 // GET /api/checkpoints/:id — récupère une version (pour le polling du Patch Note).
