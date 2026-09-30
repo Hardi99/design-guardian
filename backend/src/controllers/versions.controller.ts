@@ -147,10 +147,27 @@ versionsRouter.get('/versions/:id', pluginMiddleware, async (c) => {
     ? await resolveSnapshot(getSupabaseStorage(), prevVersion)
     : null;
 
+  // Page-centric : une frame n'est rendue qu'aux versions où elle apparaît ou change. Son image
+  // « avant » est donc celle de la DERNIÈRE version antérieure où elle a été rendue (remontée
+  // bornée de la chaîne parent_id), pas forcément la parente directe.
+  const frameRenderSource = async (): Promise<string | null> => {
+    let id = (versionData.parent_id as string | null) ?? null;
+    for (let i = 0; id && i < 50; i++) {
+      const { data: v } = await supabase
+        .from('versions').select('id, parent_id, storage_path, analysis_json').eq('id', id).single();
+      if (!v) return null;
+      const f = (v.analysis_json as DeltaJSON | null)?.frames?.find(x => x.key === frame);
+      if (!f) return null; // frame pas suivie à cette version : pas d'état « avant »
+      if (f.status !== 'unchanged') return (v.storage_path as string | null) ?? null;
+      id = (v.parent_id as string | null) ?? null;
+    }
+    return null;
+  };
+
   const [curUrl, prevUrl] = wantThumbs
     ? await Promise.all([
         resolveRenderUrl(versionData.storage_path, currentSnap),
-        resolveRenderUrl(prevVersion?.storage_path ?? null, prevSnap),
+        resolveRenderUrl(frame ? await frameRenderSource() : prevVersion?.storage_path ?? null, prevSnap),
       ])
     : [null, null];
 

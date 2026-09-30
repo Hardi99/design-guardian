@@ -84,3 +84,22 @@ describe('purgeAccount', () => {
     ).rejects.toThrow(/deleteUser failed/);
   });
 });
+
+// Storage.list() renvoie 100 entrées par défaut : en page-centric un dossier de branche
+// dépasse vite 100 fichiers (1 json + jusqu'à 20 rendus par version). Sans pagination,
+// la purge (RGPD) laissait des fichiers derrière elle.
+describe('collectProjectStoragePaths — pagination', () => {
+  it('récupère TOUS les fichiers d\'un dossier de plus de 100 entrées', async () => {
+    const files = Array.from({ length: 250 }, (_, i) => ({ name: `f${i}.png` }));
+    const list = vi.fn(async (path: string, opts?: { limit?: number; offset?: number }) => {
+      if (path === 'a1') return { data: [{ name: 'main' }], error: null };
+      const limit = opts?.limit ?? 100;
+      const offset = opts?.offset ?? 0;
+      return { data: files.slice(offset, offset + limit), error: null };
+    });
+    const storage = { from: () => ({ list, remove: vi.fn() }) };
+    const { db } = dbStub({ assets: [{ id: 'a1' }] });
+    const paths = await collectProjectStoragePaths(db as never, storage as never, 'p1');
+    expect(paths).toHaveLength(250);
+  });
+});

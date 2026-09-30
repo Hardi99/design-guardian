@@ -81,3 +81,20 @@ describe('GET /versions/:id?frame=', () => {
     expect(body.node_diffs).toHaveLength(2);
   });
 });
+
+// Une frame n'est rendue qu'aux versions où elle apparaît ou change. Son image « avant » est
+// donc celle de la DERNIÈRE version où elle a été rendue, pas forcément la parente directe.
+describe('GET /versions/:id?frame= — image « avant » quand la frame n\'a pas changé à la parente', () => {
+  it('remonte jusqu\'à la dernière version où la frame a été rendue', async () => {
+    const f = (status: string) => [{ key: 'A', id: '1:1', name: 'Accueil', frame: { w: 400, h: 800 }, status, changes: status === 'modified' ? 1 : 0 }];
+    st.stored = new Set(['a1/main/v3_render_A.png', 'a1/main/v1_render_A.png']);
+    st.rows = {
+      v3: { id: 'v3', parent_id: 'v2', storage_path: 'a1/main/v3.json', status: 'draft', assets: { project_id: 'p1' }, analysis_json: { ...delta(frames({ w: 400, h: 800 }, { w: 1, h: 1 })), frames: f('modified') } },
+      v2: { id: 'v2', parent_id: 'v1', storage_path: 'a1/main/v2.json', analysis_json: { ...delta(frames({ w: 400, h: 800 }, { w: 1, h: 1 })), frames: f('unchanged') } },
+      v1: { id: 'v1', parent_id: null, storage_path: 'a1/main/v1.json', analysis_json: { ...delta(frames({ w: 400, h: 800 }, { w: 1, h: 1 })), frames: f('initial') } },
+    };
+    const res = await createApp().request('/api/versions/versions/v3?thumbs=1&frame=A', { headers: { 'X-API-Key': 'k' } });
+    const body = await res.json() as { prev_render_url: string | null };
+    expect(body.prev_render_url).toBe('https://signed/a1/main/v1_render_A.png');
+  });
+});
