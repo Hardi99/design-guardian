@@ -6,6 +6,7 @@ import type { MainToUI, UIToMain, FigmaSnapshot, PluginAuthor, RestorationDelta 
 import { useAppStore } from './useAppStore.js';
 import { appStore } from './store.js';
 import type { Asset, Version, Plan, Screen } from './store.js';
+import type { AssetIdentity } from './fileSplit.js';
 import { diffReducer, initialDiffState } from './diffReducer.js';
 import type { DiffData, NodeDiffVisual, DiffAction } from './diffReducer.js';
 import { timeAgo } from './utils.js';
@@ -23,6 +24,7 @@ initSentry();
 // Surchargeable au build (VITE_API_BASE) pour tester contre un backend local.
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://design-guardian.up.railway.app';
 let currentLinkToken: string | null = null;
+let currentFileName = ''; // nom du fichier Figma ouvert (nom du projet créé à la séparation)
 
 const PLAN_RANK: Record<Plan, number> = { free: 0, pro: 1, team: 2 };
 function maxPlan(a: Plan, b: Plan): Plan { return PLAN_RANK[a] >= PLAN_RANK[b] ? a : b; }
@@ -113,6 +115,7 @@ function App() {
   const setAssets     = useAppStore(s => s.setAssets);
   const setSnapshot   = useAppStore(s => s.setSnapshot);
   const setInitErr    = useAppStore(s => s.setInitErr);
+  const setSplitOffer = useAppStore(s => s.setSplitOffer);
   const diffVersionId = useAppStore(s => s.diffVersion?.id ?? null);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
@@ -142,6 +145,14 @@ function App() {
             if (cur === 'loading' || cur === 'assets') setScreen('assets');
             // Rafraîchit le cache stale-while-revalidate (source de vérité = ce fetch frais).
             send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
+            currentFileName = msg.fileName;
+            // Projet partagé avec d'autres fichiers (anciennes versions du plugin) ? Le plugin
+            // vérifie quels éléments suivis sont dans ce fichier (cf. fileSplit.ts). Best-effort.
+            if (data.assets.length > 0) {
+              api<{ identities: AssetIdentity[] }>(data.api_key, '/api/assets/identities')
+                .then(r => { if (r.identities.length > 0) send({ type: 'CHECK_PRESENCE', identities: r.identities }); })
+                .catch(() => { /* best-effort : pas de tri possible */ });
+            }
           } catch {
             setInitErr('Impossible de joindre le serveur.');
           }
@@ -163,6 +174,26 @@ function App() {
           break;
         }
         case 'INIT_ERROR':     setInitErr(msg.message); break;
+        case 'PRESENCE':
+          setSplitOffer(msg.elsewhere.length > 0 ? { here: msg.here, elsewhere: msg.elsewhere.length } : null);
+          break;
+        case 'SPLIT_READY': {
+          const { apiKey, splitOffer } = appStore.getState();
+          try {
+            const data = await api<{ api_key: string; project: { plan: string }; assets: Asset[] }>(apiKey!, '/api/projects/split', {
+              method: 'POST',
+              body: JSON.stringify({ figma_file_key: msg.fileKey, figma_file_name: currentFileName, asset_ids: splitOffer?.here ?? [] }),
+            });
+            setApiKey(data.api_key);
+            setAssets(data.assets);
+            setSplitOffer(null);
+            send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
+          } catch (e) {
+            send({ type: 'SPLIT_ROLLBACK', fileKey: msg.previous });
+            alert(`[DG] Séparation impossible : ${(e as Error).message}`);
+          }
+          break;
+        }
         case 'AUTHOR_INFO':    setAuthor(msg.author); break;
         case 'SNAPSHOT_READY': setSnapshot(msg.snapshot, msg.render_svg_b64, msg.render_kind); setScreen('checkpoint'); break;
         case 'BRANCH_CREATED': break;
@@ -250,6 +281,7 @@ function AssetsScreen() {
   const setAssets  = useAppStore(s => s.setAssets);
   const setAsset   = useAppStore(s => s.setAsset);
   const setScreen  = useAppStore(s => s.setScreen);
+  const splitOffer = useAppStore(s => s.splitOffer);
 
   const [newName,   setNewName]   = useState('');
   const [newType,   setNewType]   = useState<typeof ASSET_TYPES[number]>('ui');
@@ -288,6 +320,19 @@ function AssetsScreen() {
     <div class="flex flex-col h-screen bg-gray-950 text-white">
       <Topbar label="Choisir un asset" />
       <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        {splitOffer && (
+          <div role="status" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex flex-col gap-2">
+            <p class="text-xs text-amber-300">
+              Ce projet est partagé avec d'autres fichiers : {splitOffer.elsewhere} élément(s) suivi(s) ne sont pas dans ce fichier.
+            </p>
+            <p class="text-[11px] text-gray-400">
+              Séparer ce fichier lui donne son propre historique, avec ses {splitOffer.here.length} élément(s). Les autres restent avec les autres fichiers.
+            </p>
+            <button class="btn-secondary text-xs px-3 py-1.5 self-start" onClick={() => send({ type: 'SPLIT_BEGIN' })}>
+              Séparer ce fichier
+            </button>
+          </div>
+        )}
         {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
         {assets.map(a => (
           <div key={a.id} class="flex flex-col gap-1">

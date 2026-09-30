@@ -8,7 +8,8 @@ import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
-import { decideFileId, isValidFileId, FILE_ID_KEY } from './fileId.js';
+import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
+import { classifyPresence } from './fileSplit.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
@@ -91,6 +92,30 @@ figma.ui.onmessage = async (raw: unknown) => {
       if (c) send({ type: 'VERSION_CACHE', assetId: msg.assetId, versions: c.versions, branches: c.branches });
       break;
     }
+    case 'CHECK_PRESENCE': {
+      // Quels éléments suivis du projet sont dans CE fichier ? (nœud + dg_id, cf. fileSplit.ts)
+      const found = new Map<string, string>();
+      for (const nodeId of new Set(msg.identities.map(i => i.figma_node_id))) {
+        const n = await figma.getNodeByIdAsync(nodeId).catch(() => null);
+        if (n) found.set(nodeId, readDgId(n as unknown as IdentifiableNode));
+      }
+      send({ type: 'PRESENCE', ...classifyPresence(msg.identities, found) });
+      break;
+    }
+    case 'SPLIT_BEGIN': {
+      // Nouvel id écrit AVANT l'appel serveur : si le fichier est en lecture seule, on s'arrête là.
+      const previous = figma.root.getPluginData(FILE_ID_KEY);
+      const fileKey = generateFileId();
+      try { figma.root.setPluginData(FILE_ID_KEY, fileKey); } catch {
+        send({ type: 'ERROR', message: "Fichier en lecture seule : impossible de le séparer." });
+        break;
+      }
+      send({ type: 'SPLIT_READY', fileKey, previous });
+      break;
+    }
+    case 'SPLIT_ROLLBACK':
+      try { figma.root.setPluginData(FILE_ID_KEY, msg.fileKey); } catch { /* read-only */ }
+      break;
     case 'PERSIST_VERSION_CACHE':
       await figma.clientStorage.setAsync('dg_vcache_' + msg.assetId, { versions: msg.versions, branches: msg.branches });
       break;

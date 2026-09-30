@@ -32,6 +32,7 @@ interface AppData {
   initErr:      string | null
   diffVersion:  Version | null
   siblings:     Version[]   // versions de la branche courante (ordre ancien→récent) pour la nav ◀▶ du diff
+  splitOffer:   { here: string[]; elsewhere: number } | null // projet partagé avec d'autres fichiers (cf. fileSplit.ts)
 }
 
 // État complet = données + actions
@@ -47,6 +48,7 @@ export interface AppState extends AppData {
   setInitErr:     (e: string | null)                      => void
   setDiffVersion: (v: Version | null)                     => void
   setSiblings:    (v: Version[])                          => void
+  setSplitOffer:  (o: AppData['splitOffer'])              => void
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ export const INITIAL_STATE: AppData = {
   initErr:      null,
   diffVersion:  null,
   siblings:     [],
+  splitOffer:   null,
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -86,6 +89,7 @@ export const appStore = createStore<AppState>()((set) => ({
   setInitErr:     (initErr)                => set({ initErr }),
   setDiffVersion: (diffVersion)            => set({ diffVersion }),
   setSiblings:    (siblings)               => set({ siblings }),
+  setSplitOffer:  (splitOffer)             => set({ splitOffer }),
 }))
 
 // Remet les données à zéro entre chaque test (beforeEach(() => resetStore()))
