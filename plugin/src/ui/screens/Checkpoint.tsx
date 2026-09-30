@@ -3,7 +3,8 @@ import { useAppStore } from '../../useAppStore.js';
 import { pollPatchNote } from '../../patchNote.js';
 import { awaitCheckpointSummary } from '../../realtime.js';
 import { api, send } from '../api.js';
-import { Spinner, Topbar } from '../components/common.js';
+import { Spinner } from '../components/common.js';
+import { Header } from '../components/Header.js';
 
 export function CheckpointScreen() {
   const apiKey       = useAppStore(s => s.apiKey)!;
@@ -95,53 +96,53 @@ export function CheckpointScreen() {
   }, [apiKey, saved]);
 
   if (saved) return (
-    <div class="flex flex-col h-screen bg-gray-950 text-white p-6">
-      <div class="flex-1 flex flex-col justify-center gap-4">
-        <p class="text-green-400 font-semibold">✦ Checkpoint sauvegardé</p>
-        <div class="p-4 bg-gray-900 rounded-lg border border-gray-800 flex flex-col gap-1.5">
+    <div class="flex flex-col h-screen bg-dg-bg text-dg-text p-4">
+      <div class="flex-1 flex flex-col justify-center gap-3">
+        <p class="text-dg-success text-[12px] font-semibold">✦ Checkpoint enregistré</p>
+        <div class="p-3 bg-dg-raised rounded-dg border border-dg-border flex flex-col gap-1.5">
           {patchNote ? (
-            <p class="text-sm text-gray-200 leading-relaxed">{patchNote}</p>
+            <p class="text-[12px] leading-snug">{patchNote}</p>
           ) : saved.changes <= 0 ? (
-            <p class="text-sm text-gray-200 leading-relaxed">Aucune modification détectée.</p>
+            <p class="text-[12px] leading-snug">Aucune modification détectée.</p>
           ) : patchState === 'pending' ? (
-            <p class="text-sm text-gray-400 leading-relaxed flex items-center gap-2"><Spinner /> Patch Note en cours…</p>
+            <p class="text-[12px] text-dg-text-2 flex items-center gap-2"><Spinner /> Résumé en cours…</p>
           ) : (
             <div class="flex flex-col gap-2">
-              <p class="text-sm text-gray-400">Patch Note indisponible.</p>
-              <button class="btn-secondary text-xs" onClick={regenerate} disabled={regenerating}>
+              <p class="text-[12px] text-dg-text-2">Résumé indisponible.</p>
+              <button class="btn-secondary" onClick={regenerate} disabled={regenerating}>
                 {regenerating ? 'Régénération…' : 'Régénérer'}
               </button>
             </div>
           )}
-          {saved.changes > 0 && <p class="text-xs text-purple-400">{saved.changes} modification(s)</p>}
+          {saved.changes > 0 && <p class="text-[10px] text-dg-accent-text">{saved.changes} modification(s)</p>}
         </div>
       </div>
-      <button class="btn-secondary w-full" onClick={() => setScreen('home')}>← Retour à la timeline</button>
+      <button class="btn-secondary w-full" onClick={() => setScreen('home')}>← Retour à l'accueil</button>
     </div>
   );
 
   // Feedback franc pendant la capture : un écran plein plutôt qu'un simple libellé de bouton,
   // pour que le clic ait un effet visible immédiat (la latence perçue chutait sans ça).
   if (loading) return (
-    <div class="flex flex-col h-screen bg-gray-950 text-white items-center justify-center gap-4">
+    <div class="flex flex-col h-screen bg-dg-bg text-dg-text items-center justify-center gap-3">
       <Spinner />
-      <p class="text-sm text-gray-300">Capture en cours…</p>
-      <p class="text-xs text-gray-600">{snapshot.figmaNodeName}</p>
+      <p class="text-[12px]">Capture en cours…</p>
+      <p class="text-[11px] text-dg-text-3">{snapshot.figmaNodeName}</p>
     </div>
   );
 
   return (
-    <div class="flex flex-col h-screen bg-gray-950 text-white">
-      <Topbar label="Nouveau checkpoint" onBack={() => setScreen('home')} />
-      <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-        <div class="p-3 bg-gray-900 rounded-lg border border-gray-800">
-          <p class="text-xs text-gray-500 mb-0.5">Élément sélectionné</p>
-          <p class="text-sm font-medium">{snapshot.figmaNodeName}</p>
+    <div class="flex flex-col h-screen bg-dg-bg text-dg-text">
+      <Header title="Nouveau checkpoint" onBack={() => setScreen('home')} />
+      <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+        <div class="p-3 bg-dg-raised rounded-dg border border-dg-border">
+          <p class="text-[10px] text-dg-text-3 mb-0.5">Capturé</p>
+          <p class="text-[12px] font-medium">{snapshot.figmaNodeName}</p>
         </div>
-        {err && <p role="alert" class="text-red-400 text-xs">{err}</p>}
+        {err && <p role="alert" class="text-dg-danger text-[11px]">{err}</p>}
       </div>
-      <div class="p-4 border-t border-gray-800">
-        <button class="btn-primary w-full" onClick={save}>Save Checkpoint</button>
+      <div class="p-3 border-t border-dg-border">
+        <button class="btn-primary w-full" onClick={save}>Enregistrer le checkpoint</button>
       </div>
     </div>
   );

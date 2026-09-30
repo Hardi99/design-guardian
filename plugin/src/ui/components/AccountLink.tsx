@@ -42,16 +42,12 @@ export function AccountLink() {
     return () => clearInterval(id);
   }, [state, apiKey]);
 
-  if (state.phase === 'linked')   return <p class="text-xs text-green-400">✓ Compte lié</p>;
-  if (state.phase === 'awaiting') return <p class="text-xs text-gray-400">En attente d'approbation dans le navigateur…</p>;
-  if (state.phase === 'expired')  return <button class="btn-secondary text-xs px-3 py-1.5" onClick={() => dispatch({ type: 'RESET' })}>Code expiré — réessayer</button>;
-  if (state.phase === 'error')    return <button class="btn-secondary text-xs px-3 py-1.5" onClick={start}>Erreur — réessayer</button>;
+  if (state.phase === 'linked')   return <p class="text-[11px] text-dg-success">✓ Compte lié</p>;
+  if (state.phase === 'awaiting') return <p class="text-[11px] text-dg-text-2">En attente d'approbation dans le navigateur…</p>;
+  if (state.phase === 'expired')  return <button class="btn-secondary" onClick={() => dispatch({ type: 'RESET' })}>Code expiré — réessayer</button>;
+  if (state.phase === 'error')    return <button class="btn-secondary" onClick={start}>Erreur — réessayer</button>;
   return (
-    <button
-      class="btn-secondary text-xs px-3 py-1.5"
-      onClick={start}
-      disabled={state.phase === 'starting' || !author}
-    >
+    <button class="btn-secondary" onClick={start} disabled={state.phase === 'starting' || !author}>
       {state.phase === 'starting' ? 'Connexion…' : 'Lier mon compte'}
     </button>
   );
