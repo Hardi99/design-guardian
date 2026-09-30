@@ -171,29 +171,31 @@ Les lignes existantes restent `'frame'` (lecture seule) ; les nouvelles captures
 
 ## 7. Viewer
 
-**Liste plate des frames suivies**, alimentée par `viewports[]` — pas d'arbre, pas de virtualisation.
+> **Révisé le 2026-09-30 (Phase 3).** La navigation part de **la frame**, pas du checkpoint : c'est l'idée d'origine (« retrouver chaque frame individuellement, à la demande, avec le diff existant »). Même donnée qu'avant, lue dans l'autre sens.
 
 ```
-CHECKPOINT v3 · page "📲 Hi-fi Prototype"
+Page (asset) · onglet « Frames »
 ┌──────────────────────────────────┐
-│ 3 frames modifiées               │
-│  ▸ Onboarding / Étape 2     5    │
-│  ▸ Panier                   2    │
-│  ▸ Réglages                 1    │
-│                                  │
-│  · Accueil                  —    │  intacte, grisée
-│                                  │
-│  ↪ Paiement         entrée suivi │  cf. §4.5
+│ ☑ Accueil            3 v. · 2 h  │  ← cliquable : a un historique
+│ ☑ Panier             1 v. · 1 j  │
+│ ☑ Réglages           —           │  ← suivie, jamais capturée : inactive
+│ ☐ Onboarding                     │  ← non suivie
 └──────────────────────────────────┘
-        ↓ clic sur "Panier"
-   le diff actuel : rendu + surlignages + détail
+        ↓ clic sur « Accueil »
+   historique de la frame (versions où elle est apparue ou a changé)
+        ↓ clic sur une version
+   le diff actuel, filtré sur cette frame : rendu, surlignages, détail
 ```
 
-- **Cliquable ⟺ modifié** (D6). Une frame suivie mais intacte est grisée et inactive. Si le plafond de rendus (§5) est atteint, les frames modifiées en excès restent cliquables et affichent « Rendu indisponible. » : on dégrade franchement plutôt que de griser une frame qui a bel et bien changé.
-- **Au clic** : on ouvre le diff **tel qu'il existe aujourd'hui** — rendu de la frame, surlignages, panneau de détail. Le plugin filtre `node_diffs` sur le viewport choisi et appelle `buildHighlights` **sans modification**.
-- Les entrées/sorties de périmètre (§4.5) sont affichées **à part**, jamais mélangées aux vrais ajouts et suppressions.
+- **Une seule liste pour suivre et naviguer** : la liste des frames de la page (case « suivie », nom, historique). Un onglet « Toutes les versions » garde la timeline à plat (branches comprises).
+- **Identité d'une frame** : sa **clé** = `dg_id`, sinon id Figma. Elle survit au couper-coller (nouvel id Figma) : l'historique reste continu.
+- **Résumé par frame à chaque version** (`frames[]` dans `analysis_json`, y compris la v1 : statut `initial` / `modified` / `unchanged`, nombre de changements, dimensions). `/api/versions/tree` en renvoie l'extrait JSON : l'historique d'une frame se calcule dans le plugin, sans endpoint supplémentaire.
+- **Cliquable ⟺ historique** (D6) : une frame sans version où elle est apparue ou a changé n'est pas cliquable.
+- **Au clic sur une version** : `GET /versions/:id?frame=<clé>` renvoie le rendu **de cette frame**, ses changements et ses dimensions (version et parente). Rendu absent → « Rendu indisponible. », jamais le rendu d'une autre frame ni une reconstruction.
+- **Rendus par frame** : le serveur répond au POST avec les frames à rendre (nouvelles + modifiées, `MAX_FRAME_RENDERS = 20`) ; le plugin les exporte et les envoie une par une (`…/vN_render_<clé>.png`).
+- Les entrées/sorties de périmètre (§4.5) restent affichées **à part**.
 
-**Compat** : les versions sans `viewport` (frame-centric) retombent sur l'affichage actuel, à plat. Elles sont en lecture seule de toute façon.
+**Compat** : les assets en mode frame (et les versions sans `frames`) gardent la timeline à plat. Ils sont en lecture seule de toute façon.
 
 ## 8. Restore et clones d'historique
 
@@ -368,7 +370,7 @@ En miroir des motifs déjà en place (base actuelle : **330 tests** — 200 back
 | **0** | **Spike de mesure** — jetable | Les chiffres et la décision du gate | ✅ **fait** (§10) — a provoqué la révision |
 | **1** | Modèle : `viewportRootMap`, racine constante sans diff, `bbox` relative au viewport, `viewports[]`, migration 018 | Tests backend ; un delta de page produit des viewports corrects | **inchangé par la révision** |
 | **2** | Découverte + suivi (`dg_tracked`, liste, recherche, estimation) + capture des frames suivies + `tracked[]` et `scope_in/out` + rendus | Une capture réelle produit snapshot + rendus des frames suivies | révisé |
-| **3** | Liste des frames dans le viewer (depuis `viewports[]`) | Liste → clic → le diff actuel | **simplifié** (plus d'endpoint, plus d'arbre) |
+| **3** | Liste des frames → historique d'une frame → diff (cf. §7 révisé) ; rendus par frame | Liste → clic → historique → diff de la frame | ✅ **fait** (2026-09-30) — plan `docs/conception/plans/2026-09-30-page-centric-phase3.md` |
 | **4** | Restore par viewport + clones bornés (§8) | Restaurer une frame depuis un checkpoint de page | inchangé |
 
 La phase 1 seule ne donne rien de visible à l'utilisateur ; le **minimum livrable** est 1+2+3. La phase 4 peut suivre.
