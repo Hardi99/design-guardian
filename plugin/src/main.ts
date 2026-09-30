@@ -10,6 +10,7 @@ import { changedProps, pickMatch, planResize } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
 import { classifyPresence } from './fileSplit.js';
+import { IDENTITY_KEY } from './identity.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
@@ -94,12 +95,26 @@ figma.ui.onmessage = async (raw: unknown) => {
     }
     case 'CHECK_PRESENCE': {
       // Quels éléments suivis du projet sont dans CE fichier ? (nœud + dg_id, cf. fileSplit.ts)
-      const found = new Map<string, string>();
-      for (const nodeId of new Set(msg.identities.map(i => i.figma_node_id))) {
-        const n = await figma.getNodeByIdAsync(nodeId).catch(() => null);
-        if (n) found.set(nodeId, readDgId(n as unknown as IdentifiableNode));
+      try {
+        const found = new Map<string, string>();
+        for (const nodeId of new Set(msg.identities.map(i => i.figma_node_id))) {
+          const n = await figma.getNodeByIdAsync(nodeId).catch(() => null);
+          if (n) found.set(nodeId, readDgId(n as unknown as IdentifiableNode));
+        }
+        // Restauration / branche : le nœud a un nouvel id mais garde son dg_id. Si l'id n'a
+        // pas suffi, on relève tous les dg_id du fichier (recherche native, une seule passe).
+        let dgIdsInFile = new Set<string>();
+        if (classifyPresence(msg.identities, found).elsewhere.length > 0) {
+          await ensurePagesLoaded(); // dynamic-page : requis pour chercher dans tout le document
+          const stamped = figma.root.findAllWithCriteria({ pluginData: { keys: [IDENTITY_KEY] } });
+          dgIdsInFile = new Set(stamped.map(n => readDgId(n as unknown as IdentifiableNode)));
+        }
+        const presence = classifyPresence(msg.identities, found, dgIdsInFile);
+        console.log('[DG] présence :', msg.identities.length, 'éléments,', found.size, 'nœuds trouvés par id,', dgIdsInFile.size, 'dg_id dans le fichier,', presence.here.length, 'ici,', presence.elsewhere.length, 'ailleurs');
+        send({ type: 'PRESENCE', ...presence });
+      } catch (e) {
+        console.error('[DG] vérification de présence impossible', e);
       }
-      send({ type: 'PRESENCE', ...classifyPresence(msg.identities, found) });
       break;
     }
     case 'SPLIT_BEGIN': {

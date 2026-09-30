@@ -10,20 +10,24 @@ export interface AssetIdentity {
 }
 
 /**
- * `found` : nœuds trouvés dans le fichier ouvert → leur dg_id ('' si non stampé).
- * « Ici » = nœud trouvé ET même dg_id (un id de nœud seul peut coïncider entre fichiers).
- * Capture ancienne sans dg_id : le nœud trouvé suffit (seul indice disponible).
+ * `found` : nœuds trouvés dans le fichier ouvert par leur id → leur dg_id ('' si non stampé).
+ * `dgIdsInFile` : tous les dg_id présents dans le fichier (restauration / branche : le nœud
+ * est remplacé par une copie au NOUVEL id Figma qui garde son dg_id).
+ * « Ici » = nœud trouvé avec le même dg_id, ou dg_id présent dans le fichier (un id de nœud
+ * seul peut coïncider entre fichiers). Capture ancienne sans dg_id : le nœud trouvé suffit.
  */
 export function classifyPresence(
   identities: readonly AssetIdentity[],
   found: ReadonlyMap<string, string>,
+  dgIdsInFile: ReadonlySet<string> = new Set(),
 ): { here: string[]; elsewhere: string[] } {
   const here: string[] = [];
   const elsewhere: string[] = [];
   for (const i of identities) {
     const dg = found.get(i.figma_node_id);
-    const isHere = dg !== undefined && (i.dg_id === null || dg === i.dg_id);
-    (isHere ? here : elsewhere).push(i.asset_id);
+    const byNode = dg !== undefined && (i.dg_id === null || dg === i.dg_id);
+    const byDgId = i.dg_id !== null && dgIdsInFile.has(i.dg_id);
+    (byNode || byDgId ? here : elsewhere).push(i.asset_id);
   }
   return { here, elsewhere };
 }
