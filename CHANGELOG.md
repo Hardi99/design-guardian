@@ -9,6 +9,7 @@ Versioning [Semver](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- **Diff : trous de détection comblés** — couleurs d'un dégradé, image remplacée, tous les contours (ajout, suppression, couleur, visibilité — plus seulement le premier contour uni), ombres (type, décalage, étalement), auto-layout (direction, espacement, marges, alignements, retour à la ligne), composant échangé et variante changée. Libellés en français, capture ancienne jamais signalée à tort.
 - **Page-centric Phase 3 — navigation par frame** : la page affiche la liste de ses frames ; un clic ouvre l'historique de la frame (versions où elle est apparue ou a changé), puis son diff (rendu, surlignages et changements de cette frame seulement). Identité stable d'une frame par `dg_id` (survit au couper-coller), résumé `frames[]` à chaque version (y compris la v1), rendus par frame (nouvelles + modifiées, 20 max), onglet « Toutes les versions » conservé.
 
 ### Security

@@ -40,8 +40,19 @@ Résultat : `FigmaSnapshot` (JSON pur, aucun binaire).
 3. **Added** : ids présents en v2 mais absents de v1
 4. **Modified** : `compareNodes()` pour chaque id commun
 
-Propriétés comparées avec tolérance `ε = 0.01px` : `x, y` (dans le parent), `width, height`.
-Sans tolérance : `opacity` (seuil 0.001), `cornerRadius`, `strokeWeight`, couleur fill/stroke, `vectorPaths`.
+Propriétés comparées :
+
+| Famille | Propriétés | Tolérance |
+|---|---|---|
+| Géométrie | `x, y` (dans le parent), `width, height`, `rotation`, `cornerRadius` / `cornerRadii`, `strokeWeight`, `parent` | ε = 0,01 px (1° pour la rotation) |
+| Peintures (remplissages **et** contours) | nombre, type, couleur unie, **étapes et angle d'un dégradé**, **image** (`imageHash`, `scaleMode`), visibilité | couleur 0,004 ; étape ε ; angle 1° |
+| Ombres et flous | nombre, **type**, rayon, couleur, **décalage**, **étalement**, visibilité | ε |
+| Auto-layout | **direction** (`layoutMode`), **espacement**, **marges** (une seule propriété `padding`), **alignements**, **retour à la ligne** | ε |
+| Composants | **composant échangé** (hors jeu de variantes), **variantes** (propriétés VARIANT et BOOLEAN) | — |
+| Texte | contenu, police, graisse, style, taille, interlettrage, interligne | ε |
+| Autres | `opacity` (0,001), `visible`, `vectorPaths` | — |
+
+Une propriété **absente d'un des deux snapshots** (capture antérieure à son ajout) n'est **jamais** comparée : aucun faux changement sur l'historique existant.
 
 Sortie : `DeltaJSON` → stocké dans `analysis_json`, transmis à OpenAI.
 
