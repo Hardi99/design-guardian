@@ -13,6 +13,7 @@ function Icon({ size = 14, children }: { size?: number; children: ComponentChild
 export const IconBack    = () => <Icon><path d="M10 3 5 8l5 5" /></Icon>;
 export const IconPrev    = () => <Icon><path d="M10 4 6 8l4 4" /></Icon>;
 export const IconNext    = () => <Icon><path d="m6 4 4 4-4 4" /></Icon>;
+export const IconLocate = () => <Icon><circle cx="8" cy="8" r="3" /><path d="M8 1.5v2.5M8 12v2.5M1.5 8H4M12 8h2.5" /></Icon>;
 export const IconChevron = () => <Icon size={12}><path d="m6 4 4 4-4 4" /></Icon>;
 export const IconMore    = () => <Icon><circle cx="3.5" cy="8" r=".75" fill="currentColor" /><circle cx="8" cy="8" r=".75" fill="currentColor" /><circle cx="12.5" cy="8" r=".75" fill="currentColor" /></Icon>;
 export const IconRestore = () => <Icon><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9" /><path d="M2.5 2.5v2.6h2.6" /></Icon>;

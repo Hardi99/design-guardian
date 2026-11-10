@@ -14,7 +14,7 @@ import { Spinner } from '../components/common.js';
 import { HighlightCanvas } from './DiffCanvas.js';
 import { NodeDetail } from './NodeDetail.js';
 import { DiffChips } from './DiffChips.js';
-import { IconBack, IconPrev, IconNext, IconRestore, IconCamera, IconSparkle, IconStar } from '../components/icons.js';
+import { IconBack, IconPrev, IconNext, IconRestore, IconCamera, IconSparkle, IconStar, IconLocate } from '../components/icons.js';
 
 // Cache client des payloads diff (lourds, avec vignettes), par versionId. Niveau module
 // pour survivre au remount de DiffScreen (key={version.id} lors de la nav ◀▶).
@@ -203,6 +203,10 @@ export function DiffScreen() {
           <button aria-label="Version suivante" title="Version suivante (→)" disabled={!nextV}
             class="icon-btn" onClick={() => nextV && setDiffVersion(nextV)}><IconNext /></button>
         </div>
+        {frame && (
+          <button class="icon-btn flex-shrink-0" aria-label="Voir sur le canvas" title="Voir sur le canvas"
+            onClick={() => send({ type: 'SHOW_ON_CANVAS', key: frame.key })}><IconLocate /></button>
+        )}
         {/* Statut + explication (visible au survol ET au focus clavier) */}
         <div class="relative group flex-shrink-0">
           <button onClick={cycleStatus} disabled={statusBusy} aria-label={st.aria} aria-describedby="status-help"

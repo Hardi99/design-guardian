@@ -19,7 +19,7 @@ let capturedComponents = new Map<string, ComponentInfo>();
 import { IDENTITY_KEY } from './identity.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
-import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
+import { listFrames, locateFrame, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
 figma.showUI(__html__, { width: 400, height: 600, themeColors: true });
 
@@ -173,6 +173,20 @@ figma.ui.onmessage = async (raw: unknown) => {
       break;
 
     case 'REQUEST_FRAMES': sendFrames(); break;
+
+    case 'SHOW_ON_CANVAS': {
+      // Page courante d'abord (aucun chargement) ; sinon toutes les pages (chargement différé).
+      const cur = figma.currentPage as unknown as TrackableNode;
+      let hit = locateFrame([cur], msg.key);
+      if (!hit) { await ensurePagesLoaded(); hit = locateFrame(figma.root.children as unknown as TrackableNode[], msg.key); }
+      if (!hit) { figma.notify('Frame introuvable : elle a peut-être été supprimée.'); break; }
+      const page = hit.page as unknown as PageNode;
+      const node = hit.node as unknown as SceneNode;
+      if (page.id !== figma.currentPage.id) await figma.setCurrentPageAsync(page);
+      page.selection = [node];
+      figma.viewport.scrollAndZoomIntoView([node]);
+      break;
+    }
 
     case 'GO_TO_PAGE': { // choix dans le sélecteur → Figma suit ; currentpagechange prévient l'UI
       const page = figma.root.children.find(p => p.id === msg.pageId);

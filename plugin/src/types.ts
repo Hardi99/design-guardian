@@ -134,4 +134,5 @@ export type UIToMain =
   | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
   | { type: 'REQUEST_FRAMES' }
   | { type: 'GO_TO_PAGE'; pageId: string }
+  | { type: 'SHOW_ON_CANVAS'; key: string } // sélectionne la frame et zoome dessus (change de page si besoin)
   | { type: 'SET_TRACKED'; nodeId: string; tracked: boolean };
