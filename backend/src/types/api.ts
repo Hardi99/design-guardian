@@ -31,7 +31,8 @@ export const splitSchema = autoInitSchema.extend({
 export interface AutoInitResponse {
   api_key: string;
   project: { id: string; name: string; plan: string };
-  assets: Asset[];
+  // page_id : page Figma suivie (première capture) ; null = aucune capture (cf. asset-page.service).
+  assets: Array<Asset & { page_id: string | null }>;
 }
 
 // ── Assets (plugin) ───────────────────────────────────────────────────────────

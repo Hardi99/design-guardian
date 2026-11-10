@@ -10,7 +10,8 @@ export const session = {
   linkToken: null as string | null,
   fileName: '',            // nom du fichier Figma ouvert
   fileKey: '',             // identifiant du fichier (dg_file_id)
-  lastAssetId: null as string | null, // dernier historique utilisé dans ce fichier
+  pageId: '',              // page Figma courante : un historique par page
+  pageName: '',
 };
 
 const PLAN_RANK: Record<Plan, number> = { free: 0, pro: 1, team: 2 };

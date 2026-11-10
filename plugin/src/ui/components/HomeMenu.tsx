@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { useAppStore } from '../../useAppStore.js';
 import { appStore } from '../../store.js';
-import { send } from '../api.js';
-import { rememberHistory } from '../history.js';
+import { send, session } from '../api.js';
 import { AccountLink } from './AccountLink.js';
 import { IconMore } from './icons.js';
 
@@ -31,7 +30,8 @@ function SplitOffer() {
 }
 
 export function HomeMenu() {
-  const assets     = useAppStore(s => s.assets);
+  // Seuls les historiques de la page courante : en ouvrir un autre bloquerait la capture.
+  const assets     = useAppStore(s => s.assets).filter(a => a.page_id === session.pageId);
   const asset      = useAppStore(s => s.asset);
   const setAsset   = useAppStore(s => s.setAsset);
   const splitOffer = useAppStore(s => s.splitOffer);
@@ -60,7 +60,7 @@ export function HomeMenu() {
               <select class="input" value={asset?.id}
                 onChange={e => {
                   const next = assets.find(x => x.id === (e.target as HTMLSelectElement).value);
-                  if (next) { rememberHistory(next); setAsset(next); setOpen(false); }
+                  if (next) { setAsset(next); setOpen(false); }
                 }}>
                 {assets.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>

@@ -43,6 +43,15 @@ vi.mock('../config/supabase.js', () => {
         }),
       };
     }
+    if (table === 'versions') {
+      return {
+        select: () => ({
+          in: () => ({
+            order: async () => ({ data: [{ asset_id: 'a1', figma_node_id: '0:1' }], error: null }),
+          }),
+        }),
+      };
+    }
     throw new Error(`unexpected table: ${table}`);
   };
 
@@ -73,5 +82,15 @@ describe('POST /api/projects/auto-init — includes assets', () => {
     expect(body.project.id).toBe('p1');
     expect(Array.isArray(body.assets)).toBe(true);
     expect(body.assets).toHaveLength(2);
+  });
+
+  it("chaque historique indique la page Figma suivie (null si aucune capture)", async () => {
+    const res = await createApp().request('/api/projects/auto-init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ figma_file_key: 'f'.repeat(32), figma_file_name: 'F' }),
+    });
+    const body = await res.json() as { assets: Array<{ id: string; page_id: string | null }> };
+    expect(body.assets.map(a => [a.id, a.page_id])).toEqual([['a1', '0:1'], ['a2', null]]);
   });
 });

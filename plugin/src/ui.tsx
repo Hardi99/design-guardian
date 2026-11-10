@@ -45,7 +45,8 @@ function App() {
         case 'FILE_INFO': {
           session.fileName = msg.fileName;
           session.fileKey = msg.fileKey;
-          session.lastAssetId = msg.lastAssetId;
+          session.pageId = msg.pageId;
+          session.pageName = msg.pageName;
           try {
             const res = await fetch(`${API_BASE}/api/projects/auto-init`, {
               method: 'POST',
@@ -59,11 +60,8 @@ function App() {
             setApiKey(data.api_key);
             setPlan(maxPlan(appStore.getState().plan, (data.project.plan as Plan) ?? 'free'));
             setAssets(data.assets);
-            // Réponse fraîche : l'historique déjà ouvert (depuis le cache) reste ouvert s'il existe.
-            const open = appStore.getState().asset;
-            if (appStore.getState().screen === 'loading' || !open || !data.assets.some(a => a.id === open.id)) {
-              await openHistory(data.api_key, data.assets, open?.id ?? null);
-            }
+            // Réponse fraîche : l'historique de la page (celui déjà ouvert depuis le cache s'il la suit).
+            await openHistory(data.api_key, data.assets, appStore.getState().asset?.id ?? null);
             // Rafraîchit le cache stale-while-revalidate (source de vérité = ce fetch frais).
             send({ type: 'PERSIST_STATE', fileKey: msg.fileKey, apiKey: data.api_key, plan: data.project.plan, assets: data.assets });
             // Projet partagé avec d'autres fichiers (anciennes versions du plugin) ? Le plugin
@@ -89,9 +87,18 @@ function App() {
             setApiKey(msg.apiKey);
             if (msg.plan) setPlan(maxPlan(appStore.getState().plan, msg.plan as Plan));
             setAssets(msg.assets);
-            const cachedPick = pickHistory(msg.assets, { currentId: null, lastId: session.lastAssetId });
+            const cachedPick = pickHistory(msg.assets, { pageId: session.pageId, currentId: null });
             if (cachedPick) { appStore.getState().setAsset(cachedPick); setScreen('home'); }
           }
+          break;
+        }
+        case 'PAGE_CHANGED': {
+          session.pageId = msg.pageId;
+          session.pageName = msg.pageName;
+          // Sur l'accueil, on bascule tout de suite ; ailleurs (diff, capture en cours), au retour
+          // sur l'accueil (cf. effet ci-dessous) pour ne pas changer l'historique sous l'utilisateur.
+          const { apiKey, assets, asset, screen } = appStore.getState();
+          if (apiKey && screen === 'home') await openHistory(apiKey, assets, asset?.id ?? null);
           break;
         }
         case 'INIT_ERROR':     setInitErr(msg.message); break;
@@ -148,10 +155,20 @@ function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  // Retour sur l'accueil après un changement de page survenu ailleurs : historique de la page.
+  useEffect(() => {
+    const { apiKey, assets, asset } = appStore.getState();
+    if (screen === 'home' && apiKey && session.pageId && asset?.page_id !== session.pageId) {
+      void openHistory(apiKey, assets, asset?.id ?? null);
+    }
+  }, [screen]);
+  const assetId = useAppStore(s => s.asset?.id ?? null);
+
   if (showUpgrade) return <UpgradeScreen onBack={() => setShowUpgrade(false)} />;
 
   if (screen === 'loading')    return <LoadingScreen />;
-  if (screen === 'home')       return <HomeScreen onUpgrade={() => setShowUpgrade(true)} />;
+  // key : nouvelle page = nouvel historique → l'accueil se recharge (frames, versions, nom de page).
+  if (screen === 'home')       return <HomeScreen key={assetId} onUpgrade={() => setShowUpgrade(true)} />;
   if (screen === 'frameHistory') return <FrameHistoryScreen />;
   if (screen === 'diff')       return <DiffScreen key={diffVersionId} />;
   if (screen === 'checkpoint') return <CheckpointScreen />;
