@@ -29,3 +29,22 @@ describe('GET /api/link/me — sans token', () => {
     expect(await res.json()).toEqual({ linked: false, plan: 'free' });
   });
 });
+
+describe('GET /api/link/pricing — redirection vers la page tarifs', () => {
+  it('302 vers WEBAPP_URL/pricing', async () => {
+    process.env.WEBAPP_URL = 'https://app.example.test';
+    const { loadEnv } = await import('../config/env.js');
+    loadEnv();
+    const res = await createApp().request('/api/link/pricing');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://app.example.test/pricing');
+  });
+
+  it('503 si WEBAPP_URL n\'est pas configurée', async () => {
+    process.env.WEBAPP_URL = '';
+    const { loadEnv } = await import('../config/env.js');
+    loadEnv();
+    const res = await createApp().request('/api/link/pricing');
+    expect(res.status).toBe(503);
+  });
+});
