@@ -69,7 +69,7 @@ export function listFrames(children: readonly TrackableNode[]): FrameEntry[] {
 // Lecture seule : lister ne stampe rien (le dg_id est posé à la capture). Le dg_id n'est la
 // clé que si la frame en est PROPRIÉTAIRE : un double (Ctrl+D) copie l'el_uid de l'original
 // et hériterait de son historique. (Coupée-collée pas encore recapturée : id Figma en attendant.)
-function frameKey(n: TrackableNode): string {
+export function frameKey(n: TrackableNode): string {
   const uid = n.getPluginData(IDENTITY_KEY);
   return uid && n.getPluginData(OWNER_KEY) === n.id ? uid : n.id;
 }

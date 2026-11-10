@@ -6,8 +6,8 @@ import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVec
 import type { Asset, Version } from './store.js';
 import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
-import { changedProps, pickMatch, planResize, restoreRoots } from './restoreDiff.js';
-import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
+import { changedProps, pickMatch, planResize } from './restoreDiff.js';
+import { framesToPrune, pickHistoryClone, hashSnapshot, latestCopy, planPageRestore, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
 import { classifyPresence, shouldOfferSplit, parseDismissed, SPLIT_DISMISSED_KEY } from './fileSplit.js';
 import { autoLayoutOf, strokeOf, spreadOf, variantOf, collectComponents, type ComponentInfo, type TreeLike, type AutoLayoutLike, type PaintLike, type EffectLike } from './capture.js';
@@ -19,7 +19,7 @@ let capturedComponents = new Map<string, ComponentInfo>();
 import { IDENTITY_KEY } from './identity.js';
 import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
-import { listFrames, locateFrame, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
+import { listFrames, locateFrame, frameKey, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
 figma.showUI(__html__, { width: 400, height: 600, themeColors: true });
 
@@ -100,6 +100,7 @@ figma.ui.onmessage = async (raw: unknown) => {
     case 'RESIZE':            figma.ui.resize(msg.width, msg.height); break;
     case 'CREATE_BRANCH':     await handleCreateBranch(msg.branchName); break;
     case 'SWITCH_BRANCH':     await handleSwitchBranch(msg.branchName); break;
+    case 'PROTECT_HISTORY':   await protectHistory(msg.versionId, msg.gold); break;
     case 'STORE_HISTORY_CLONE': await handleStoreHistoryClone(msg.nodeId, msg.versionId, msg.versionNumber); break;
     case 'RESTORE_TO_FIGMA':  await handleRestoreToFigma(msg.versionId, msg.snapshot, msg.render_svg_b64); break;
     case 'PERSIST_STATE':
@@ -460,7 +461,7 @@ function tryRestoreFromClone(versionId: string): boolean {
     const fresh = (stored as SceneNode & { clone(): SceneNode }).clone();
     fresh.locked = false;
     // Nettoyer les tags d'historique sur la copie restaurée.
-    for (const k of ['dg_history_pending', 'dg_history_version', 'dg_history_asset', 'dg_history_vnum']) fresh.setPluginData(k, '');
+    for (const k of HISTORY_TAGS) fresh.setPluginData(k, '');
     if (live && live.parent) {
       live.parent.appendChild(fresh);
       (fresh as SceneNode & { x: number; y: number }).x = (live as SceneNode & { x: number }).x;
@@ -481,15 +482,13 @@ function tryRestoreFromClone(versionId: string): boolean {
 
 async function handleRestoreToFigma(versionId: string | undefined, snapshot: FigmaSnapshot, renderSvgB64?: string): Promise<void> {
   if (renderSvgB64 && renderSvgB64.startsWith('iVBO')) renderSvgB64 = undefined; // PNG → pas de createNodeFromSvg
+  if (snapshot.root.type === 'PAGE') { await restorePage(versionId ?? '', snapshot); return; }
   await ensurePagesLoaded(); // dynamic-page : le clone d'historique vit sur dg/_history
   // 0. Restore LOSSLESS par clone d'historique (primaire). Repli sur la suite si absent.
   if (versionId && tryRestoreFromClone(versionId)) {
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0, mode: 'clone' });
     return;
   }
-  // Checkpoint d'une page : Figma va d'abord sur cette page (restaurer depuis une autre page).
-  const snapPage = snapshot.root.type === 'PAGE' ? figma.root.children.find(p => p.id === snapshot.figmaNodeId) : undefined;
-  if (snapPage && snapPage.id !== figma.currentPage.id) await figma.setCurrentPageAsync(snapPage);
   // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
   //    getNodeByIdAsync peut throw (pas juste renvoyer null) si le nœud n'existe pas.
   let root: SceneNode | null = null;
@@ -506,18 +505,11 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
   //    currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
   if (root) {
     try {
-      // Checkpoint d'une page : on restaure chacune de ses frames (la page n'a pas de géométrie).
-      const { pairs, missing } = restoreRoots(snapshot.root, root as unknown as BranchNode, readDgId);
-      let applied = 0, skipped = missing;
-      for (const { node, snap } of pairs) {
-        const live = node as unknown as SceneNode;
-        const currMap = new Map<string, NodeSnapshot>();
-        flattenSnapshot(extractSnapshot(live), currMap);
-        const r = await applyFullSnapshot(live, snap, currMap, true);
-        applied += r.applied; skipped += r.skipped;
-      }
+      const currMap = new Map<string, NodeSnapshot>();
+      flattenSnapshot(extractSnapshot(root), currMap);
+      const result = await applyFullSnapshot(root, snapshot.root, currMap, true);
       figma.commitUndo();
-      send({ type: 'RESTORE_COMPLETE', applied, skipped, mode: 'reapply' });
+      send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped, mode: 'reapply' });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
     }
@@ -567,66 +559,139 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
 const HISTORY_PAGE = 'dg/_history';
 const HISTORY_KEEP_N = 5;
 
-function getOrCreateHistoryPage(): PageNode {
-  const existing = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
-  if (existing) return existing;
-  const page = figma.createPage();      // ne change PAS figma.currentPage
-  page.name = HISTORY_PAGE;
+// Marques posées sur une copie d'historique (effacées sur la frame restaurée).
+const HISTORY_TAGS = ['dg_history_pending', 'dg_history_version', 'dg_history_versions', 'dg_history_asset', 'dg_history_vnum', 'dg_history_hash', 'dg_history_gold'];
+
+/** Page dg/_history chargée (dynamic-page : seule cette page, pas tout le fichier). */
+async function historyPage(create: boolean): Promise<PageNode | undefined> {
+  let page = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
+  if (!page && create) { page = figma.createPage(); page.name = HISTORY_PAGE; } // ne change PAS currentPage
+  await page?.loadAsync();
   return page;
 }
 
 function readHistoryFrames(page: PageNode): HistoryFrameInfo[] {
   return page.children.map(c => {
+    const list = (k: string): string[] => { try { return JSON.parse(c.getPluginData(k) || '[]') as string[]; } catch { return []; } };
     const vnum = c.getPluginData('dg_history_vnum');
+    const legacy = c.getPluginData('dg_history_version'); // copie d'avant la couverture multi-versions
+    const versionIds = list('dg_history_versions');
     return {
       id: c.id,
-      versionId: c.getPluginData('dg_history_version') || undefined,
-      assetId: c.getPluginData('dg_history_asset') || undefined,
+      key: c.getPluginData('dg_history_asset'),
+      versionIds: versionIds.length ? versionIds : legacy ? [legacy] : [],
       versionNumber: vnum ? Number(vnum) : undefined,
+      hash: c.getPluginData('dg_history_hash') || undefined,
+      gold: list('dg_history_gold'),
     };
   });
 }
 
-// Phase 2 : le checkpoint est sauvé → finaliser le clone pending (version id + vnum),
-// puis élaguer aux N derniers de l'asset.
-async function handleStoreHistoryClone(nodeId: string, versionId: string, versionNumber: number): Promise<void> {
-  await ensurePagesLoaded(); // dg/_history vit sur une autre page → children pas accessibles sans load
-  const page = figma.root.children.find(p => p.name === HISTORY_PAGE) as PageNode | undefined;
-  if (!page) return;
-  const pending = page.children.find(c => c.getPluginData('dg_history_pending') === nodeId);
-  if (!pending) return;
+// Capture → sauvegarde : dernières copies des frames inchangées, qui couvriront aussi la nouvelle version.
+let pendingCover: { pageId: string; copyIds: string[] } | null = null;
+
+// Capture (avant le POST) : copie seulement les frames qui ont changé depuis leur dernière
+// copie ; les autres seront couvertes par celle-ci. Copies « en attente » jusqu'à la sauvegarde.
+async function prepareCopies(pageId: string, frames: Array<{ node: SceneNode; snap: NodeSnapshot }>): Promise<void> {
+  pendingCover = null;
   try {
-    pending.setPluginData('dg_history_version', versionId);
-    pending.setPluginData('dg_history_vnum', String(versionNumber));
-    pending.setPluginData('dg_history_pending', ''); // finalisé
-    const assetId = pending.getPluginData('dg_history_asset');
-    for (const id of framesToPrune(readHistoryFrames(page), assetId, HISTORY_KEEP_N)) {
-      const f = page.children.find(c => c.id === id);
-      if (f) f.remove();
+    const hist = await historyPage(true);
+    if (!hist) return;
+    for (const c of [...hist.children]) if (c.getPluginData('dg_history_pending') === pageId) c.remove(); // capture non sauvée
+    const copies = readHistoryFrames(hist);
+    const cover: string[] = [];
+    for (const { node, snap } of frames) {
+      const key = snap.dg_id || snap.id;
+      const hash = hashSnapshot(snap);
+      const last = latestCopy(copies, key);
+      if (last && last.hash === hash) { cover.push(last.id); continue; }
+      if (!('clone' in node)) continue;
+      const copy = (node as SceneNode & { clone(): SceneNode }).clone();
+      hist.appendChild(copy);
+      copy.setPluginData('dg_history_pending', pageId);
+      copy.setPluginData('dg_history_asset', key);
+      copy.setPluginData('dg_history_hash', hash);
+      copy.locked = true;
     }
+    pendingCover = { pageId, copyIds: cover };
   } catch (e) {
-    console.log('[DG] history clone (finalize) échec', e);
+    console.log('[DG] copies d\'historique (capture) échec', e);
   }
 }
 
-// Phase 1 : fige l'état exact du nœud capturé en le clonant sur dg/_history,
-// taggé "pending". Finalisé (version id) seulement quand le checkpoint est sauvé.
-function storeHistoryClonePending(node: SceneNode): void {
-  if (!('clone' in node)) return;
+// Sauvegarde réussie : les copies couvrent la version, puis nettoyage (N par frame, Gold gardées).
+async function handleStoreHistoryClone(pageId: string, versionId: string, versionNumber: number): Promise<void> {
+  const cover = pendingCover?.pageId === pageId ? pendingCover.copyIds : [];
+  pendingCover = null;
   try {
-    const page = getOrCreateHistoryPage();
-    // Nettoyer un pending orphelin du même nœud (capture précédente non sauvée).
-    for (const c of [...page.children]) {
-      if (c.getPluginData('dg_history_pending') === node.id) c.remove();
+    const hist = await historyPage(false);
+    if (!hist) return;
+    const infos = new Map(readHistoryFrames(hist).map(i => [i.id, i]));
+    const keys = new Set<string>();
+    for (const c of hist.children) {
+      const info = infos.get(c.id)!;
+      const isNew = c.getPluginData('dg_history_pending') === pageId;
+      if (!isNew && !cover.includes(c.id)) continue;
+      c.setPluginData('dg_history_versions', JSON.stringify([...info.versionIds, versionId]));
+      if (isNew) { c.setPluginData('dg_history_vnum', String(versionNumber)); c.setPluginData('dg_history_pending', ''); }
+      keys.add(info.key);
     }
-    const clone = (node as SceneNode & { clone(): SceneNode }).clone();
-    page.appendChild(clone);
-    clone.setPluginData('dg_history_pending', node.id);
-    clone.setPluginData('dg_history_asset', readDgId(node) || node.id);
-    clone.locked = true;
+    const all = readHistoryFrames(hist);
+    for (const key of keys) for (const id of framesToPrune(all, key, HISTORY_KEEP_N)) hist.children.find(c => c.id === id)?.remove();
   } catch (e) {
-    console.log('[DG] history clone (pending) échec', e);
+    console.log('[DG] copies d\'historique (sauvegarde) échec', e);
   }
+}
+
+// Statut Gold : les copies qui couvrent la version ne seront jamais supprimées par le nettoyage.
+async function protectHistory(versionId: string, gold: boolean): Promise<void> {
+  const hist = await historyPage(false);
+  if (!hist) return;
+  for (const info of readHistoryFrames(hist)) {
+    if (!info.versionIds.includes(versionId)) continue;
+    const next = gold ? [...new Set([...info.gold, versionId])] : info.gold.filter(v => v !== versionId);
+    hist.children.find(c => c.id === info.id)?.setPluginData('dg_history_gold', JSON.stringify(next));
+  }
+}
+
+// Remplace la frame par une copie de sa copie d'historique, à sa place dans la pile (ou la
+// fait revenir si elle a été supprimée). L'identité (dg_id) est conservée.
+function restoreFromCopy(hist: PageNode, page: PageNode, copyId: string, live: SceneNode | undefined): SceneNode {
+  const stored = hist.children.find(c => c.id === copyId) as SceneNode & { clone(): SceneNode };
+  const fresh = stored.clone();
+  for (const k of HISTORY_TAGS) fresh.setPluginData(k, '');
+  fresh.locked = false;
+  page.insertChild(live ? page.children.indexOf(live) : page.children.length, fresh);
+  propagateIdentity(stored as unknown as BranchNode, fresh as unknown as BranchNode);
+  live?.remove();
+  return fresh;
+}
+
+// Checkpoint d'une page : chaque frame de la version revient à l'identique depuis sa copie,
+// sinon par réapplication des valeurs. Restaurer ne supprime jamais rien.
+async function restorePage(versionId: string, snapshot: FigmaSnapshot): Promise<void> {
+  const page = figma.root.children.find(p => p.id === snapshot.figmaNodeId);
+  if (!page) { send({ type: 'ERROR', message: 'La page de cette version n\'existe plus.' }); return; }
+  if (page.id !== figma.currentPage.id) await figma.setCurrentPageAsync(page);
+  const hist = await historyPage(false);
+  const live = new Map(page.children.map(n => [frameKey(n as unknown as TrackableNode), n]));
+  const steps = planPageRestore(snapshot.root.children ?? [], hist ? readHistoryFrames(hist) : [], versionId, live);
+  let exact = 0, partial = 0, missing = 0;
+  const restored: SceneNode[] = [];
+  for (const step of steps) {
+    try {
+      if (step.kind === 'copy') { restored.push(restoreFromCopy(hist!, page, step.copyId, step.live)); exact++; }
+      else if (step.kind === 'reapply') {
+        const currMap = new Map<string, NodeSnapshot>();
+        flattenSnapshot(extractSnapshot(step.live), currMap);
+        await applyFullSnapshot(step.live, step.snap, currMap, true);
+        restored.push(step.live); partial++;
+      } else missing++;
+    } catch (e) { console.warn('[DG] restore: frame sautée', step.snap.id, e); missing++; }
+  }
+  figma.commitUndo();
+  if (restored.length) { page.selection = restored; figma.viewport.scrollAndZoomIntoView(restored); }
+  send({ type: 'RESTORE_COMPLETE', applied: exact + partial, skipped: missing, mode: 'frames', exact, partial, missing });
 }
 
 async function handleSnapshot(): Promise<void> {
@@ -694,7 +759,7 @@ async function handleSnapshot(): Promise<void> {
   // Clone d'historique PROVISOIRE (première frame suivie) : restauration par frame et clones
   // bornés relèvent de la Phase 4. Les rendus, eux, sont faits APRÈS le POST, frame par frame
   // (RENDER_FRAMES) : seul le serveur sait lesquelles ont changé.
-  storeHistoryClonePending(tracked[0]);
+  await prepareCopies(page.id, tracked.map((node, i) => ({ node, snap: figmaSnapshot.root.children![i] })));
   // nodeId = la PAGE : c'est elle l'identifiant du checkpoint, pas une frame.
   send({ type: 'SNAPSHOT_READY', snapshot: figmaSnapshot, nodeId: page.id });
 }

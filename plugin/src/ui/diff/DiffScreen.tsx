@@ -1,3 +1,4 @@
+import { restoreSummary } from '../../restoreClone.js';
 import { useState, useEffect, useCallback, useReducer, useRef } from 'preact/hooks';
 import type { FigmaSnapshot, RestorationDelta } from '../../types.js';
 import { useAppStore } from '../../useAppStore.js';
@@ -66,7 +67,8 @@ export function useDiffLoader(dispatch: (a: DiffAction) => void, apiKey: string,
   }, [apiKey, versionId, frameKey]);
 }
 
-export function buildRestoreMsg(msg: { applied?: number; skipped?: number; mode?: 'clone' | 'reapply' }): string | undefined {
+export function buildRestoreMsg(msg: { applied?: number; skipped?: number; mode?: 'clone' | 'reapply' | 'frames'; exact?: number; partial?: number; missing?: number }): string | undefined {
+  if (msg.mode === 'frames') return restoreSummary({ exact: msg.exact ?? 0, partial: msg.partial ?? 0, missing: msg.missing ?? 0 });
   if (msg.mode === 'clone') return '✓ Restauré à l\'identique';
   if (msg.mode === 'reapply') {
     const applied = msg.applied ?? 0;
@@ -82,7 +84,7 @@ export function useRestoreListener(dispatch: (a: DiffAction) => void) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number; mode?: 'clone' | 'reapply' } | undefined;
+      const msg = e.data?.pluginMessage as { type: string; applied?: number; skipped?: number; mode?: 'clone' | 'reapply' | 'frames'; exact?: number; partial?: number; missing?: number } | undefined;
       if (!msg || msg.type !== 'RESTORE_COMPLETE') return;
       dispatch({ type: 'APPLY_COMPLETE', applied: msg.applied ?? 0, skipped: msg.skipped, restoreMsg: buildRestoreMsg(msg) });
       if (timerRef.current !== null) clearTimeout(timerRef.current);
@@ -105,6 +107,7 @@ export function useCycleStatus(dispatch: (a: DiffAction) => void, apiKey: string
         method: 'PUT', body: JSON.stringify({ status: next }),
       });
       dispatch({ type: 'STATUS_SUCCESS', status: next });
+      send({ type: 'PROTECT_HISTORY', versionId, gold: next === 'approved' }); // Gold : copies gardées
     } catch (e) { dispatch({ type: 'STATUS_ERROR', err: (e as Error).message }); }
   }, [apiKey, versionId, status]);
 }

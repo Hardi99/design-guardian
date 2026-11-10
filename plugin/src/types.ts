@@ -98,7 +98,7 @@ export type MainToUI =
   | { type: 'INIT_ERROR'; message: string } // démarrage impossible (ex. fichier en lecture seule sans identifiant)
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
-  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
+  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' | 'frames'; exact?: number; partial?: number; missing?: number }
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null }
   | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
@@ -127,6 +127,7 @@ export type UIToMain =
   | { type: 'CREATE_BRANCH'; branchName: string }
   | { type: 'SWITCH_BRANCH'; branchName: string }
   | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
+  | { type: 'PROTECT_HISTORY'; versionId: string; gold: boolean } // Gold : copies jamais supprimées
   | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
   | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
