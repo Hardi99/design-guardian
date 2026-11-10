@@ -10,11 +10,13 @@
 export function withPages<A extends { id: string }>(
   assets: A[],
   versions: Array<{ asset_id: string; figma_node_id: string | null }>,
-): Array<A & { page_id: string | null }> {
+): Array<A & { page_id: string | null; version_count: number }> {
   const page = new Map<string, string>();
+  const count = new Map<string, number>();
   for (const v of versions) {
+    count.set(v.asset_id, (count.get(v.asset_id) ?? 0) + 1);
     const known = page.get(v.asset_id);
     if (known === undefined || (known === '' && v.figma_node_id)) page.set(v.asset_id, v.figma_node_id ?? '');
   }
-  return assets.map(a => ({ ...a, page_id: page.get(a.id) ?? null }));
+  return assets.map(a => ({ ...a, page_id: page.get(a.id) ?? null, version_count: count.get(a.id) ?? 0 }));
 }

@@ -23,17 +23,19 @@ import { listFrames, setTracked, isTracked, assignFloating, type TrackableNode, 
 
 figma.showUI(__html__, { width: 400, height: 600, themeColors: true });
 
-// documentAccess: "dynamic-page" → charger toutes les pages est coûteux sur les gros
-// fichiers. On le diffère jusqu'au premier accès cross-page réel (historique, branches)
-// au lieu de bloquer le démarrage. Idempotent : un seul appel réseau, quel que soit
-// le nombre de handlers qui le déclenchent.
 // Un historique par page : l'UI a besoin de la page courante, et de la suivre quand elle change.
 function sendFileInfo(fileKey: string) {
   send({ type: 'FILE_INFO', fileKey, fileName: figma.root.name, pageId: figma.currentPage.id, pageName: figma.currentPage.name });
 }
 figma.on('currentpagechange', () => {
   send({ type: 'PAGE_CHANGED', pageId: figma.currentPage.id, pageName: figma.currentPage.name });
+  sendFrames(); // l'accueil affiche les frames (et le sélecteur) de la nouvelle page
 });
+
+// documentAccess: "dynamic-page" → charger toutes les pages est coûteux sur les gros
+// fichiers. On le diffère jusqu'au premier accès cross-page réel (historique, branches)
+// au lieu de bloquer le démarrage. Idempotent : un seul appel réseau, quel que soit
+// le nombre de handlers qui le déclenchent.
 
 let pagesLoaded = false;
 async function ensurePagesLoaded(): Promise<void> {
@@ -172,6 +174,12 @@ figma.ui.onmessage = async (raw: unknown) => {
 
     case 'REQUEST_FRAMES': sendFrames(); break;
 
+    case 'GO_TO_PAGE': { // choix dans le sélecteur → Figma suit ; currentpagechange prévient l'UI
+      const page = figma.root.children.find(p => p.id === msg.pageId);
+      if (page) await figma.setCurrentPageAsync(page);
+      break;
+    }
+
     case 'SET_TRACKED': {
       const node = figma.currentPage.children.find(c => c.id === msg.nodeId);
       if (node) setTracked(node as unknown as TrackableNode, msg.tracked);
@@ -193,6 +201,8 @@ function sendFrames(): void {
     frames: listFrames(page.children as unknown as readonly TrackableNode[]),
     pageName: page.name,
     capturable: isCapturablePage(page.name),
+    // Liste des pages pour le sélecteur (noms seulement : aucun chargement de page requis).
+    pages: figma.root.children.filter(p => isCapturablePage(p.name)).map(p => ({ id: p.id, name: p.name })),
   });
 }
 

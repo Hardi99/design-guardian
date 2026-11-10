@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'preact/hooks';
 import { useAppStore } from '../../useAppStore.js';
 import { pollPatchNote } from '../../patchNote.js';
 import { awaitCheckpointSummary } from '../../realtime.js';
-import { api, send } from '../api.js';
+import { api, send, session } from '../api.js';
+import { appStore } from '../../store.js';
+import { claimForPage } from '../historyPick.js';
 import { Spinner } from '../components/common.js';
 import { Header } from '../components/Header.js';
 import { IconCheck, IconSparkle } from '../components/icons.js';
@@ -46,6 +48,10 @@ export function CheckpointScreen() {
       send({ type: 'STORE_HISTORY_CLONE', nodeId: snapshot.figmaNodeId, versionId: data.version.id, versionNumber: data.version.version_number });
       // Page-centric : rendus des frames nouvelles/modifiées (le serveur dit lesquelles).
       if (data.render_frames?.length) send({ type: 'RENDER_FRAMES', versionId: data.version.id, frames: data.render_frames });
+      // L'historique suit désormais cette page (et compte une version de plus dans le sélecteur).
+      const assets = claimForPage(appStore.getState().assets, asset.id, session.pageId);
+      appStore.getState().setAssets(assets);
+      appStore.getState().setAsset(assets.find(a => a.id === asset.id) ?? asset);
       setSaved({ summary: data.ai_summary, changes: data.analysis?.totalChanges ?? 0, versionId: data.version.id });
       // Upload différé du rendu (best-effort, non bloquant) : si ça échoue, le viewer
       // retombe sur la reconstruction — aucune conséquence sur la validité du checkpoint.

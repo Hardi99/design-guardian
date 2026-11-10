@@ -27,4 +27,12 @@ describe('withPages — page Figma suivie par chaque historique', () => {
     ]);
     expect(out.map(x => x.page_id)).toEqual(['0:1', '2:0']);
   });
+
+  it('compte les versions de chaque historique (affiché dans le sélecteur de page)', () => {
+    const out = withPages([asset('a'), asset('vide')], [
+      { asset_id: 'a', figma_node_id: '0:1' },
+      { asset_id: 'a', figma_node_id: '0:1' },
+    ]);
+    expect(out.map(x => x.version_count)).toEqual([2, 0]);
+  });
 });

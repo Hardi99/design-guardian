@@ -4,7 +4,8 @@ import type { Version } from '../../store.js';
 import { useAppStore } from '../../useAppStore.js';
 import { frameHistory, defaultHomeTab } from '../../frameNav.js';
 import type { FrameEntry } from '../../trackedFrames.js';
-import { api, send } from '../api.js';
+import { api, send, session } from '../api.js';
+import { pageOptions } from '../historyPick.js';
 import { clearDiffCache } from '../diff/DiffScreen.js';
 import { Header, PlanBadge } from '../components/Header.js';
 import { HomeMenu } from '../components/HomeMenu.js';
@@ -12,7 +13,23 @@ import { SummaryCard } from '../components/SummaryCard.js';
 import { FramesPanel } from '../components/FramesPanel.js';
 import { VersionRow } from '../components/VersionRow.js';
 import { Spinner } from '../components/common.js';
-import { IconCamera, IconSparkle } from '../components/icons.js';
+import { IconCamera, IconSparkle, IconChevron } from '../components/icons.js';
+
+// Sélecteur de page (un historique par page) : choisir une page y emmène aussi Figma.
+function PageSelect({ pages }: { pages: Array<{ id: string; name: string }> }) {
+  const assets = useAppStore(s => s.assets);
+  if (pages.length < 2) return <>{pages[0]?.name ?? session.pageName}</>;
+  return (
+    <label class="relative flex items-center gap-1 max-w-full hover:text-dg-accent-text transition-colors">
+      <span class="sr-only">Page</span>
+      <select class="appearance-none bg-transparent truncate pr-4 cursor-pointer font-semibold"
+        value={session.pageId} onChange={e => send({ type: 'GO_TO_PAGE', pageId: (e.target as HTMLSelectElement).value })}>
+        {pageOptions(pages, assets).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      <span class="absolute right-0 pointer-events-none rotate-90"><IconChevron /></span>
+    </label>
+  );
+}
 
 export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const apiKey         = useAppStore(s => s.apiKey)!;
@@ -29,7 +46,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const [tabChoice, setTab]     = useState<'frames' | 'versions' | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [err,      setErr]      = useState<string | null>(null);
-  const [pageName, setPageName] = useState('');
+  const [pages,    setPages]    = useState<Array<{ id: string; name: string }>>([]);
   // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
   // après le fetch frais ne doit pas écraser l'affichage à jour.
   const freshLoaded = useRef(false);
@@ -55,7 +72,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
     const handler = (e: MessageEvent) => {
       const msg = e.data.pluginMessage as MainToUI;
       if (!msg) return;
-      if (msg.type === 'FRAMES_LIST') { setPageName(msg.pageName); return; }
+      if (msg.type === 'FRAMES_LIST') { setPages(msg.pages ?? []); return; }
       if (msg.type !== 'VERSION_CACHE' || msg.assetId !== asset.id || freshLoaded.current) return;
       setVersions(msg.versions);
       setLoading(false);
@@ -80,7 +97,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
   return (
     <div class="flex flex-col h-screen bg-dg-bg text-dg-text">
-      <Header title={pageName || asset.name} subtitle={pageName ? asset.name : undefined}
+      <Header title={<PageSelect pages={pages} />}
         right={<><PlanBadge plan={plan} onUpgrade={onUpgrade} /><HomeMenu /></>} />
 
       {latest && <SummaryCard version={latest} onOpen={() => openDiff(latest)} />}

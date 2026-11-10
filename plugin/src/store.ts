@@ -5,7 +5,7 @@ import type { FrameSummary } from './frameNav.js'
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
 // page_id : page Figma suivie (null = aucune capture, '' = inconnue) ; scope 'frame' = ancien modèle.
-export interface Asset { id: string; name: string; asset_type: string; page_id?: string | null; scope?: 'page' | 'frame' }
+export interface Asset { id: string; name: string; asset_type: string; page_id?: string | null; scope?: 'page' | 'frame'; version_count?: number }
 
 export interface Version {
   id: string; version_number: number; branch_name: string; parent_id: string | null;

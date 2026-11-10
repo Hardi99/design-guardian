@@ -105,7 +105,7 @@ export type MainToUI =
   | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
   // Page-centric : toutes les frames de la page courante, suivies ou non.
   // `capturable` est false sur une page dg/* → l'UI explique AVANT que l'utilisateur clique.
-  | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean };
+  | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean; pages: Array<{ id: string; name: string }> };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -133,4 +133,5 @@ export type UIToMain =
   | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
   | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
   | { type: 'REQUEST_FRAMES' }
+  | { type: 'GO_TO_PAGE'; pageId: string }
   | { type: 'SET_TRACKED'; nodeId: string; tracked: boolean };

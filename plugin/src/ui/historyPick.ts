@@ -18,8 +18,21 @@ export function pickHistory(assets: Asset[], { pageId, currentId }: Ctx): Asset 
     ?? assets.find(a => a.page_id === null && a.scope !== 'frame') ?? null;
 }
 
-/** Comme pickHistory, mais crée l'historique de la page s'il n'y en a aucun. L'historique
- *  retourné est rattaché à la page (un historique vide ne resservira pas pour une autre). */
+/** Comme pickHistory, mais crée l'historique s'il n'y en a aucun. Un historique vide reste
+ *  libre (page_id null) : parcourir des pages sans capturer n'en crée qu'un, réutilisé partout. */
 export async function ensureHistory(assets: Asset[], ctx: Ctx, create: () => Promise<Asset>): Promise<Asset> {
-  return { ...(pickHistory(assets, ctx) ?? await create()), page_id: ctx.pageId };
+  return pickHistory(assets, ctx) ?? { ...await create(), page_id: null, version_count: 0 };
+}
+
+/** Après une capture réussie : l'historique suit désormais la page, avec une version de plus. */
+export function claimForPage(assets: Asset[], assetId: string, pageId: string): Asset[] {
+  return assets.map(a => a.id === assetId ? { ...a, page_id: pageId, version_count: (a.version_count ?? 0) + 1 } : a);
+}
+
+/** Options du sélecteur de page : « Nom · N versions » pour les pages qui ont un historique. */
+export function pageOptions(pages: Array<{ id: string; name: string }>, assets: Asset[]) {
+  return pages.map(p => {
+    const n = assets.filter(a => a.page_id === p.id).reduce((s, a) => s + (a.version_count ?? 0), 0);
+    return { id: p.id, label: n ? `${p.name} · ${n} version${n > 1 ? 's' : ''}` : p.name };
+  });
 }

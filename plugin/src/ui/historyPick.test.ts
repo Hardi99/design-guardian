@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { pickHistory, ensureHistory } from './historyPick.js';
+import { pickHistory, ensureHistory, claimForPage, pageOptions } from './historyPick.js';
 import type { Asset } from '../store.js';
 
 const a = (id: string, page_id: string | null, scope: 'page' | 'frame' = 'page'): Asset =>
@@ -33,18 +33,38 @@ describe('pickHistory — serveur pas encore à jour (aucune page renvoyée)', (
 });
 
 describe('ensureHistory', () => {
-  it("historique trouvé → aucune création, et il est rattaché à la page", async () => {
+  it("historique vide trouvé → aucune création, et il reste libre tant qu'on n'a rien capturé", async () => {
     const create = vi.fn(async () => a('new', null));
     const got = await ensureHistory([a('vide', null)], on('5:0'), create);
-    expect(got).toMatchObject({ id: 'vide', page_id: '5:0' });
+    expect(got).toMatchObject({ id: 'vide', page_id: null });
     expect(create).not.toHaveBeenCalled();
   });
-  it('aucun historique pour la page → une création, rattachée à la page', async () => {
-    const create = vi.fn(async () => a('new', null));
-    expect(await ensureHistory([a('p1', '0:1')], on('5:0'), create)).toMatchObject({ id: 'new', page_id: '5:0' });
+  it('aucun historique pour la page → une création, encore libre (réutilisée par la page suivante)', async () => {
+    const create = vi.fn(async () => ({ id: 'new', name: 'new', asset_type: 'ui' }));
+    expect(await ensureHistory([a('p1', '0:1')], on('5:0'), create)).toMatchObject({ id: 'new', page_id: null });
     expect(create).toHaveBeenCalledTimes(1);
   });
   it("création en échec → l'erreur remonte (l'appelant affiche « Réessayer »)", async () => {
     await expect(ensureHistory([], on('0:1'), async () => { throw new Error('réseau'); })).rejects.toThrow('réseau');
+  });
+});
+
+describe('claimForPage — la première capture rattache l’historique à la page', () => {
+  it('rattache et compte la nouvelle version, sans toucher aux autres historiques', () => {
+    const got = claimForPage([{ ...a('vide', null), version_count: 0 }, a('autre', '0:1')], 'vide', '5:0');
+    expect(got).toEqual([{ ...a('vide', '5:0'), version_count: 1 }, a('autre', '0:1')]);
+  });
+});
+
+describe('pageOptions — libellés du sélecteur de page', () => {
+  it('nombre de versions pour les pages qui ont un historique, rien pour les autres', () => {
+    const assets = [{ ...a('h1', '0:1'), version_count: 3 }, { ...a('h2', '0:1'), version_count: 1 }, { ...a('vide', null), version_count: 0 }];
+    expect(pageOptions([{ id: '0:1', name: 'Accueil' }, { id: '5:0', name: 'Panier' }], assets)).toEqual([
+      { id: '0:1', label: 'Accueil · 4 versions' },
+      { id: '5:0', label: 'Panier' },
+    ]);
+  });
+  it('accorde au singulier', () => {
+    expect(pageOptions([{ id: '0:1', name: 'A' }], [{ ...a('h', '0:1'), version_count: 1 }])[0].label).toBe('A · 1 version');
   });
 });

@@ -32,7 +32,7 @@ export interface AutoInitResponse {
   api_key: string;
   project: { id: string; name: string; plan: string };
   // page_id : page Figma suivie (première capture) ; null = aucune capture (cf. asset-page.service).
-  assets: Array<Asset & { page_id: string | null }>;
+  assets: Array<Asset & { page_id: string | null; version_count: number }>;
 }
 
 // ── Assets (plugin) ───────────────────────────────────────────────────────────
