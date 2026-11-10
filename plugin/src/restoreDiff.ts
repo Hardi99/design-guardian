@@ -71,6 +71,25 @@ export function pickMatch<T>(
   return (snap.dg_id ? byDgId.get(snap.dg_id) : undefined) ?? byId.get(snap.id);
 }
 
+type SnapRef = { id: string; dg_id?: string; type: string; children?: readonly SnapRef[] };
+
+/** Racines à restaurer : la frame capturée, ou — checkpoint d'une PAGE (une page n'a pas de
+ *  position) — chacune de ses frames suivies, retrouvées parmi les enfants actuels de la page. */
+export function restoreRoots<T extends { id: string; children?: readonly T[] }, S extends SnapRef>(
+  snap: S, live: T, dgIdOf: (n: T) => string,
+): { pairs: Array<{ node: T; snap: S }>; missing: number } {
+  if (snap.type !== 'PAGE') return { pairs: [{ node: live, snap }], missing: 0 };
+  const byDgId = new Map<string, T>(), byId = new Map<string, T>();
+  for (const c of live.children ?? []) { const d = dgIdOf(c); if (d) byDgId.set(d, c); byId.set(c.id, c); }
+  const pairs: Array<{ node: T; snap: S }> = [];
+  let missing = 0;
+  for (const child of (snap.children ?? []) as readonly S[]) {
+    const node = pickMatch(child, byDgId, byId);
+    if (node) pairs.push({ node, snap: child }); else missing++;
+  }
+  return { pairs, missing };
+}
+
 export type LayoutSizing = 'FIXED' | 'HUG' | 'FILL';
 
 export interface ResizePlan {

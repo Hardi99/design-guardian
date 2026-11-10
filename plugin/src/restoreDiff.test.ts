@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { changedProps, pickMatch, planResize } from './restoreDiff.js';
+import { changedProps, pickMatch, planResize, restoreRoots } from './restoreDiff.js';
 import type { NodeSnapshot } from './types.js';
 
 // Snapshot minimal de base (champs non testés laissés à des valeurs neutres).
@@ -134,5 +134,25 @@ describe("changedProps — champs absents d'une capture ancienne", () => {
   });
   it('champ présent dans la cible et différent → changé', () => {
     expect([...changedProps(snap({ strokes: [{ type: 'SOLID', color: red, visible: true }] }), snap({ strokes: [{ type: 'SOLID', color: red, visible: false }] }), C)]).toEqual(['strokes']);
+  });
+});
+
+describe('restoreRoots — que restaurer pour un checkpoint', () => {
+  type N = { id: string; dg?: string; children?: N[] };
+  const dgOf = (n: N) => n.dg ?? '';
+  it('checkpoint d’une frame → la frame elle-même', () => {
+    const live: N = { id: '1:2' };
+    expect(restoreRoots({ id: '1:2', type: 'FRAME' }, live, dgOf)).toEqual({ pairs: [{ node: live, snap: { id: '1:2', type: 'FRAME' } }], missing: 0 });
+  });
+  it('checkpoint d’une page → chaque frame suivie, appariée par dg_id puis par id (une page n’a pas de position)', () => {
+    const a: N = { id: '1:2', dg: 'uid-a' }, b: N = { id: '7:7' };
+    const page: N = { id: '0:1', children: [a, b] };
+    const snapA = { id: 'ancien', dg_id: 'uid-a', type: 'FRAME' }, snapB = { id: '7:7', type: 'FRAME' };
+    const got = restoreRoots({ id: '0:1', type: 'PAGE', children: [snapA, snapB] }, page, dgOf);
+    expect(got.pairs).toEqual([{ node: a, snap: snapA }, { node: b, snap: snapB }]);
+  });
+  it('frame supprimée depuis → comptée comme manquante, pas d’erreur', () => {
+    const got = restoreRoots({ id: '0:1', type: 'PAGE', children: [{ id: 'disparue', type: 'FRAME' }] }, { id: '0:1', children: [] } as N, dgOf);
+    expect(got).toEqual({ pairs: [], missing: 1 });
   });
 });

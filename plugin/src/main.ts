@@ -6,7 +6,7 @@ import type { MainToUI, UIToMain, NodeSnapshot, FigmaFill, FigmaStroke, FigmaVec
 import type { Asset, Version } from './store.js';
 import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
-import { changedProps, pickMatch, planResize } from './restoreDiff.js';
+import { changedProps, pickMatch, planResize, restoreRoots } from './restoreDiff.js';
 import { framesToPrune, pickHistoryClone, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
 import { classifyPresence, shouldOfferSplit, parseDismissed, SPLIT_DISMISSED_KEY } from './fileSplit.js';
@@ -487,6 +487,9 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
     send({ type: 'RESTORE_COMPLETE', applied: 1, skipped: 0, mode: 'clone' });
     return;
   }
+  // Checkpoint d'une page : Figma va d'abord sur cette page (restaurer depuis une autre page).
+  const snapPage = snapshot.root.type === 'PAGE' ? figma.root.children.find(p => p.id === snapshot.figmaNodeId) : undefined;
+  if (snapPage && snapPage.id !== figma.currentPage.id) await figma.setCurrentPageAsync(snapPage);
   // 1. Fast path same-branch : le nœud d'origine est-il sur la page courante ?
   //    getNodeByIdAsync peut throw (pas juste renvoyer null) si le nœud n'existe pas.
   let root: SceneNode | null = null;
@@ -503,11 +506,18 @@ async function handleRestoreToFigma(versionId: string | undefined, snapshot: Fig
   //    currMap = snapshot de l'état ACTUEL du canvas (une seule traversée O(n)).
   if (root) {
     try {
-      const currMap = new Map<string, NodeSnapshot>();
-      flattenSnapshot(extractSnapshot(root), currMap);
-      const result = await applyFullSnapshot(root, snapshot.root, currMap, true);
+      // Checkpoint d'une page : on restaure chacune de ses frames (la page n'a pas de géométrie).
+      const { pairs, missing } = restoreRoots(snapshot.root, root as unknown as BranchNode, readDgId);
+      let applied = 0, skipped = missing;
+      for (const { node, snap } of pairs) {
+        const live = node as unknown as SceneNode;
+        const currMap = new Map<string, NodeSnapshot>();
+        flattenSnapshot(extractSnapshot(live), currMap);
+        const r = await applyFullSnapshot(live, snap, currMap, true);
+        applied += r.applied; skipped += r.skipped;
+      }
       figma.commitUndo();
-      send({ type: 'RESTORE_COMPLETE', applied: result.applied, skipped: result.skipped, mode: 'reapply' });
+      send({ type: 'RESTORE_COMPLETE', applied, skipped, mode: 'reapply' });
     } catch (e) {
       send({ type: 'ERROR', message: `Erreur restauration : ${String(e)}` });
     }
