@@ -14,7 +14,7 @@ export function LoadingScreen() {
           <button class="btn-secondary" onClick={() => { setInitErr(null); send({ type: 'RETRY_INIT' }); }}>Réessayer</button>
         </>
       ) : (
-        <p class="text-dg-text-3 text-[11px]" aria-hidden="true">Ouverture de l'historique…</p>
+        <p class="text-dg-text-2 text-[12px]" aria-hidden="true">Ouverture de l'historique…</p>
       )}
     </div>
   );

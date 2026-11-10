@@ -12,6 +12,7 @@ import { SummaryCard } from '../components/SummaryCard.js';
 import { FramesPanel } from '../components/FramesPanel.js';
 import { VersionRow } from '../components/VersionRow.js';
 import { Spinner } from '../components/common.js';
+import { IconCamera, IconSparkle } from '../components/icons.js';
 
 export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const apiKey         = useAppStore(s => s.apiKey)!;
@@ -84,13 +85,21 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
       {latest && <SummaryCard version={latest} onOpen={() => openDiff(latest)} />}
 
-      {visible.length > 0 && (
-        <div role="tablist" class="flex gap-1 px-3 pt-2 flex-shrink-0">
+      {visible.length > 0 ? (
+        <div role="tablist" aria-label="Affichage" class="mx-3 mt-3 p-0.5 flex gap-0.5 rounded-full bg-dg-raised border border-dg-border flex-shrink-0">
           {(['frames', 'versions'] as const).map(t => (
             <button key={t} role="tab" aria-selected={tab === t}
-              class={`px-2 py-1 rounded-dg text-[11px] ${tab === t ? 'bg-dg-selected text-dg-text' : 'text-dg-text-2 hover:bg-dg-hover'}`}
+              class={`flex-1 py-1 rounded-full text-[11px] font-medium transition-colors ${tab === t ? 'bg-dg-bg text-dg-text shadow-sm' : 'text-dg-text-2 hover:text-dg-text'}`}
               onClick={() => setTab(t)}>{t === 'frames' ? 'Frames' : 'Toutes les versions'}</button>
           ))}
+        </div>
+      ) : !loading && (
+        // Premier lancement : dire en une phrase ce que fait le plugin et comment démarrer.
+        <div class="mx-3 mt-3 p-3.5 rounded-dg bg-dg-accent-soft border border-dg-accent-line flex-shrink-0">
+          <p class="flex items-center gap-1.5 text-[13px] font-semibold"><span class="text-dg-accent-text"><IconSparkle size={14} /></span> Ton design a maintenant une mémoire</p>
+          <p class="text-[12px] text-dg-text-2 mt-1 leading-snug">
+            Coche les frames à suivre, puis capture un checkpoint. À chaque capture, l'IA résume ce qui a changé.
+          </p>
         </div>
       )}
 
@@ -110,12 +119,12 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
 
       <div class="p-3 border-t border-dg-border flex flex-col gap-2 flex-shrink-0">
         {limitReached && (
-          <p class="text-[11px] text-dg-warning text-center">
-            Limite Free atteinte (10 checkpoints). <button class="underline" onClick={onUpgrade}>Passer à Pro</button>
+          <p class="text-[12px] text-dg-warning text-center">
+            Limite Free atteinte (10 checkpoints). <button class="underline font-semibold" onClick={onUpgrade}>Passer à Pro</button>
           </p>
         )}
-        <button class="btn-primary w-full" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={limitReached}>
-          Capturer un checkpoint
+        <button class="btn-primary w-full flex items-center justify-center gap-2" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={limitReached}>
+          <IconCamera /> Capturer un checkpoint
         </button>
       </div>
     </div>

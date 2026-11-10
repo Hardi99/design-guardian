@@ -5,6 +5,7 @@ import { awaitCheckpointSummary } from '../../realtime.js';
 import { api, send } from '../api.js';
 import { Spinner } from '../components/common.js';
 import { Header } from '../components/Header.js';
+import { IconCheck, IconSparkle } from '../components/icons.js';
 
 export function CheckpointScreen() {
   const apiKey       = useAppStore(s => s.apiKey)!;
@@ -98,14 +99,15 @@ export function CheckpointScreen() {
   if (saved) return (
     <div class="flex flex-col h-screen bg-dg-bg text-dg-text p-4">
       <div class="flex-1 flex flex-col justify-center gap-3">
-        <p class="text-dg-success text-[12px] font-semibold">✦ Checkpoint enregistré</p>
-        <div class="p-3 bg-dg-raised rounded-dg border border-dg-border flex flex-col gap-1.5">
+        <p class="flex items-center gap-1.5 text-dg-success text-[13px] font-semibold"><IconCheck /> Checkpoint enregistré</p>
+        <div class="p-3.5 bg-dg-accent-soft rounded-dg border border-dg-accent-line flex flex-col gap-1.5">
+          <p class="flex items-center gap-1.5 text-[11px] font-semibold text-dg-accent-text"><IconSparkle /> Résumé IA</p>
           {patchNote ? (
-            <p class="text-[12px] leading-snug">{patchNote}</p>
+            <p class="text-[13px] leading-snug">{patchNote}</p>
           ) : saved.changes <= 0 ? (
             <p class="text-[12px] leading-snug">Aucune modification détectée.</p>
           ) : patchState === 'pending' ? (
-            <p class="text-[12px] text-dg-text-2 flex items-center gap-2"><Spinner /> Résumé en cours…</p>
+            <p class="text-[12px] text-dg-text-2 flex items-center gap-2"><Spinner inline /> L'IA rédige le résumé…</p>
           ) : (
             <div class="flex flex-col gap-2">
               <p class="text-[12px] text-dg-text-2">Résumé indisponible.</p>
@@ -114,10 +116,10 @@ export function CheckpointScreen() {
               </button>
             </div>
           )}
-          {saved.changes > 0 && <p class="text-[10px] text-dg-accent-text">{saved.changes} modification(s)</p>}
+          {saved.changes > 0 && <p class="text-[11px] text-dg-text-2">{saved.changes} modification(s)</p>}
         </div>
       </div>
-      <button class="btn-secondary w-full" onClick={() => setScreen('home')}>← Retour à l'accueil</button>
+      <button class="btn-secondary w-full" onClick={() => setScreen('home')}>Retour à l'accueil</button>
     </div>
   );
 
@@ -126,8 +128,8 @@ export function CheckpointScreen() {
   if (loading) return (
     <div class="flex flex-col h-screen bg-dg-bg text-dg-text items-center justify-center gap-3">
       <Spinner />
-      <p class="text-[12px]">Capture en cours…</p>
-      <p class="text-[11px] text-dg-text-3">{snapshot.figmaNodeName}</p>
+      <p class="text-[13px] font-medium">Capture en cours…</p>
+      <p class="text-[12px] text-dg-text-2">{snapshot.figmaNodeName}</p>
     </div>
   );
 
@@ -136,8 +138,8 @@ export function CheckpointScreen() {
       <Header title="Nouveau checkpoint" onBack={() => setScreen('home')} />
       <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         <div class="p-3 bg-dg-raised rounded-dg border border-dg-border">
-          <p class="text-[10px] text-dg-text-3 mb-0.5">Capturé</p>
-          <p class="text-[12px] font-medium">{snapshot.figmaNodeName}</p>
+          <p class="text-[11px] text-dg-text-2 mb-0.5">Capturé</p>
+          <p class="text-[13px] font-medium">{snapshot.figmaNodeName}</p>
         </div>
         {err && <p role="alert" class="text-dg-danger text-[11px]">{err}</p>}
       </div>

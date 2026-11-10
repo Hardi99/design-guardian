@@ -4,6 +4,7 @@ import { frameStats } from '../../frameNav.js';
 import { estimateMs, WARN_MS, type FrameEntry } from '../../trackedFrames.js';
 import { timeAgo } from '../../utils.js';
 import { send } from '../api.js';
+import { IconChevron } from './icons.js';
 
 function FrameIcon() {
   return (
@@ -54,14 +55,14 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
   return (
     <div class="flex flex-col py-1">
       <div class="flex items-baseline justify-between px-3 py-1.5">
-        <span class="text-[11px] text-dg-text-2">{tracked.length} / {frames.length} frames suivies</span>
-        <span class={`text-[10px] ${ms >= WARN_MS ? 'text-dg-warning' : 'text-dg-text-3'}`}>
+        <span class="text-[11px] font-medium text-dg-text-2">{tracked.length} / {frames.length} frames suivies</span>
+        <span class={`text-[11px] ${ms >= WARN_MS ? 'text-dg-warning' : 'text-dg-text-2'}`}>
           {tracked.length === 0 ? 'coche les frames à suivre' : `~${nodes} calques · ~${(ms / 1000).toFixed(1)} s`}
         </span>
       </div>
 
       {ms >= WARN_MS && (
-        <p role="alert" class="text-[10px] text-dg-warning px-3 pb-1.5">
+        <p role="alert" class="text-[11px] text-dg-warning px-3 pb-1.5">
           Périmètre large : la capture gèlera Figma pendant l'extraction. Retire des frames pour l'accélérer.
         </p>
       )}
@@ -77,26 +78,28 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
         const stats = frameStats(versions, f.key);
         const hasHistory = stats.versions > 0;
         return (
-          <label key={f.id} class="flex items-center gap-2 h-7 px-3 text-[11px] hover:bg-dg-hover cursor-pointer">
-            <input type="checkbox" class="accent-dg-accent" checked={f.tracked}
+          <div key={f.id} class="flex items-center gap-2 h-8 px-3 text-[12px] hover:bg-dg-hover">
+            <input type="checkbox" id={`track-${f.id}`} class="accent-dg-accent cursor-pointer" checked={f.tracked}
               aria-label={`Suivre ${f.name}`}
               onChange={() => send({ type: 'SET_TRACKED', nodeId: f.id, tracked: !f.tracked })} />
             <FrameIcon />
             {hasHistory ? (
-              <button type="button" class="flex-1 min-w-0 flex items-baseline gap-2 text-left"
-                onClick={(e) => { e.preventDefault(); onOpen(f); }}>
+              // Deux cibles distinctes : la case coche, le nom ouvre l'historique (chevron = indice).
+              <button type="button" class="flex-1 min-w-0 flex items-center gap-2 text-left"
+                aria-label={`Historique de ${f.name}`} onClick={() => onOpen(f)}>
                 <span class="flex-1 truncate">{f.name}</span>
-                <span class="text-[10px] text-dg-text-3 whitespace-nowrap">
+                <span class="text-[11px] text-dg-text-2 whitespace-nowrap">
                   {stats.versions} v.{stats.lastAt ? ` · ${timeAgo(stats.lastAt)}` : ''}
                 </span>
+                <span class="text-dg-text-3"><IconChevron /></span>
               </button>
             ) : (
-              <span class={`flex-1 truncate ${f.tracked ? '' : 'text-dg-text-3'}`}>{f.name}</span>
+              <label for={`track-${f.id}`} class={`flex-1 truncate cursor-pointer ${f.tracked ? '' : 'text-dg-text-2'}`}>{f.name}</label>
             )}
-          </label>
+          </div>
         );
       })}
-      {shown.length === 0 && <p class="text-[11px] text-dg-text-3 px-3 py-1">Aucune frame ne correspond.</p>}
+      {shown.length === 0 && <p class="text-[12px] text-dg-text-2 px-3 py-1">Aucune frame ne correspond.</p>}
     </div>
   );
 }

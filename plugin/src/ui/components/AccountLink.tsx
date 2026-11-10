@@ -3,6 +3,7 @@ import { useAppStore } from '../../useAppStore.js';
 import type { Plan } from '../../store.js';
 import { linkReducer } from '../../linkFlow.js';
 import { api, send, session } from '../api.js';
+import { IconCheck } from './icons.js';
 
 export function AccountLink() {
   const apiKey = useAppStore(s => s.apiKey)!;
@@ -42,8 +43,8 @@ export function AccountLink() {
     return () => clearInterval(id);
   }, [state, apiKey]);
 
-  if (state.phase === 'linked')   return <p class="text-[11px] text-dg-success">✓ Compte lié</p>;
-  if (state.phase === 'awaiting') return <p class="text-[11px] text-dg-text-2">En attente d'approbation dans le navigateur…</p>;
+  if (state.phase === 'linked')   return <p class="flex items-center gap-1.5 text-[12px] text-dg-success"><IconCheck /> Compte lié</p>;
+  if (state.phase === 'awaiting') return <p class="text-[12px] text-dg-text-2">En attente d'approbation dans le navigateur…</p>;
   if (state.phase === 'expired')  return <button class="btn-secondary" onClick={() => dispatch({ type: 'RESET' })}>Code expiré — réessayer</button>;
   if (state.phase === 'error')    return <button class="btn-secondary" onClick={start}>Erreur — réessayer</button>;
   return (

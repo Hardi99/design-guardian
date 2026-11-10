@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useReducer, useRef } from 'preact/hooks';
-import type { FigmaSnapshot, PluginAuthor, RestorationDelta } from '../../types.js';
+import type { FigmaSnapshot, RestorationDelta } from '../../types.js';
 import { useAppStore } from '../../useAppStore.js';
 import { appStore } from '../../store.js';
-import type { Version, Screen } from '../../store.js';
+import type { Version } from '../../store.js';
 import { frameHistory, touchedFrames, restoreAllowedInDiff, cacheableDiff } from '../../frameNav.js';
 import type { FrameSummary } from '../../frameNav.js';
 import { diffReducer, initialDiffState } from '../../diffReducer.js';
@@ -14,6 +14,7 @@ import { Spinner } from '../components/common.js';
 import { HighlightCanvas } from './DiffCanvas.js';
 import { NodeDetail } from './NodeDetail.js';
 import { DiffChips } from './DiffChips.js';
+import { IconBack, IconPrev, IconNext, IconRestore, IconCamera, IconSparkle, IconStar } from '../components/icons.js';
 
 // Cache client des payloads diff (lourds, avec vignettes), par versionId. Niveau module
 // pour survivre au remount de DiffScreen (key={version.id} lors de la nav ◀▶).
@@ -121,38 +122,26 @@ export function useApplyToFigma(dispatch: (a: DiffAction) => void, apiKey: strin
   }, [apiKey, versionId, renderUrl, renderKind, delta]);
 }
 
-export function useRestore(
-  dispatch: (a: DiffAction) => void, apiKey: string, versionId: string,
-  author: PluginAuthor | null, branch: string, setScreen: (s: Screen) => void,
-) {
-  return useCallback(async () => {
-    if (!author) return;
-    dispatch({ type: 'RESTORE_START' });
-    try {
-      await api(apiKey, `/api/versions/versions/${versionId}/restore`, {
-        method: 'POST',
-        body: JSON.stringify({
-          branch_name: branch,
-          author: { figma_id: author.figma_id, name: author.name, avatar_url: author.avatar_url },
-        }),
-      });
-      send({ type: 'RESIZE', width: 400, height: 600 });
-      setScreen('home');
-    } catch (e) { dispatch({ type: 'RESTORE_ERROR', err: (e as Error).message }); }
-  }, [apiKey, versionId, author, branch]);
-}
+const STATUS_UI = {
+  approved: { label: 'Gold',   cls: 'bg-dg-success/15 text-dg-success hover:bg-dg-success/25', aria: 'Statut : Gold. Cliquer pour repasser en Draft.' },
+  review:   { label: 'Review', cls: 'bg-dg-warning/15 text-dg-warning hover:bg-dg-warning/25', aria: 'Statut : Review. Cliquer pour passer en Gold.' },
+  draft:    { label: 'Draft',  cls: 'bg-dg-raised text-dg-text-2 border border-dg-border hover:bg-dg-hover hover:text-dg-text', aria: 'Statut : Draft. Cliquer pour soumettre en Review.' },
+} as const;
 
 export function DiffScreen() {
   const apiKey    = useAppStore(s => s.apiKey)!;
   const version   = useAppStore(s => s.diffVersion)!;
-  const author    = useAppStore(s => s.author);
-  const branch    = useAppStore(s => s.branch);
   const setScreen = useAppStore(s => s.setScreen);
   const siblings       = useAppStore(s => s.siblings);
   const setDiffVersion = useAppStore(s => s.setDiffVersion);
   const frame          = useAppStore(s => s.frame);
   const setFrame       = useAppStore(s => s.setFrame);
   const setSiblings    = useAppStore(s => s.setSiblings);
+
+  const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [beforeMode, setBeforeMode] = useState(false);
+  const [showMinor, setShowMinor] = useState(false); // changements dérivés (move porté/auto-layout) repliés
 
   // Navigation ◀▶ entre versions de la branche (siblings ordonnés ancien→récent).
   // Le remount par key={version.id} côté App réinitialise le reducer/loader à chaque saut.
@@ -164,26 +153,21 @@ export function DiffScreen() {
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return; // ne pas voler les flèches dans les inputs
       if (e.key === 'ArrowLeft' && prevV) setDiffVersion(prevV);
       else if (e.key === 'ArrowRight' && nextV) setDiffVersion(nextV);
+      else if (e.key === 'Escape') dispatch({ type: 'CANCEL_RESTORE' });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [prevV, nextV]);
 
-  const [state, dispatch] = useReducer(diffReducer, version.status, initialDiffState);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [beforeMode, setBeforeMode] = useState(false);
-  const [showMinor, setShowMinor] = useState(false); // changements dérivés (move porté/auto-layout) repliés
-
   useDiffLoader(dispatch, apiKey, version.id);
   useRestoreListener(dispatch);
   const cycleStatus  = useCycleStatus(dispatch, apiKey, version.id, state.status);
   const applyToFigma = useApplyToFigma(dispatch, apiKey, version.id, state.data?.render_url ?? null, state.data?.render_kind ?? null, (state.data?.version.analysis_json ?? null) as RestorationDelta | null);
-  const restore      = useRestore(dispatch, apiKey, version.id, author, branch, setScreen);
 
   // Retour à l'historique de la frame si on vient de là, sinon à l'accueil.
   const goBack = useCallback(() => { send({ type: 'RESIZE', width: 400, height: 600 }); setScreen(appStore.getState().frame ? 'frameHistory' : 'home'); }, []);
 
-  const { data, loading, err, status, statusBusy, restoring, applyingToFigma, restoreMsg, heavyDone } = state;
+  const { data, loading, err, status, statusBusy, confirmingRestore, applyingToFigma, restoreMsg, heavyDone } = state;
   const hasPrev = !!data?.prev_version;
   // Page-centric : frames touchées par cette version (vide hors page ou versions sans résumé).
   const pageFrames = touchedFrames((data?.version.analysis_json as { frames?: FrameSummary[] } | null)?.frames);
@@ -203,81 +187,78 @@ export function DiffScreen() {
   const canvasKind   = beforeMode ? data?.prev_render_kind   : data?.render_kind;
   const canvasFrame  = beforeMode ? data?.prev_frame         : data?.current_frame;
   const canvasSource = beforeMode ? data?.prev_render_source : data?.render_source;
+  const st = STATUS_UI[status];
+  const canRestore = !!data && restoreAllowedInDiff(frame);
 
   return (
     <div class="flex flex-col h-screen bg-dg-bg text-dg-text">
-      {/* Header */}
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-dg-border flex-shrink-0">
-        <button aria-label="Retour" class="icon-btn" onClick={goBack}>←</button>
-        <button aria-label="Version précédente" title="Version précédente (←)" disabled={!prevV}
-          class="icon-btn"
-          onClick={() => prevV && setDiffVersion(prevV)}>◀</button>
-        <span class="font-medium text-sm flex-1 truncate text-center">
-          v{version.version_number}
-        </span>
-        <button aria-label="Version suivante" title="Version suivante (→)" disabled={!nextV}
-          class="icon-btn"
-          onClick={() => nextV && setDiffVersion(nextV)}>▶</button>
-        {/* Status toggle + tooltip explicatif */}
+      <div class="flex items-center gap-1 px-2.5 h-12 border-b border-dg-border flex-shrink-0">
+        <button aria-label="Retour" class="icon-btn" onClick={goBack}><IconBack /></button>
+        <div class="flex items-center gap-0.5 flex-1 min-w-0 justify-center">
+          <button aria-label="Version précédente" title="Version précédente (←)" disabled={!prevV}
+            class="icon-btn" onClick={() => prevV && setDiffVersion(prevV)}><IconPrev /></button>
+          <span class="text-[13px] font-semibold truncate px-1">
+            v{version.version_number}{frame && <span class="font-normal text-dg-text-2"> · {frame.name}</span>}
+          </span>
+          <button aria-label="Version suivante" title="Version suivante (→)" disabled={!nextV}
+            class="icon-btn" onClick={() => nextV && setDiffVersion(nextV)}><IconNext /></button>
+        </div>
+        {/* Statut + explication (visible au survol ET au focus clavier) */}
         <div class="relative group flex-shrink-0">
-          <button
-            onClick={cycleStatus} disabled={statusBusy}
-            aria-label={status === 'approved' ? 'Statut : Gold. Cliquer pour repasser en Draft.' : status === 'review' ? 'Statut : Review. Cliquer pour passer en Gold.' : 'Statut : Draft. Cliquer pour soumettre en Review.'}
-            class={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-              status === 'approved' ? 'bg-dg-success/20 text-dg-success hover:bg-dg-success/30' :
-              status === 'review'   ? 'bg-dg-warning/20 text-dg-warning hover:bg-dg-warning/30' :
-                                      'bg-dg-hover text-dg-text-3 hover:bg-dg-hover'
-            }`}
-          >
-            {status === 'approved' ? '✦ Gold' : status === 'review' ? 'Review' : 'Draft'}
+          <button onClick={cycleStatus} disabled={statusBusy} aria-label={st.aria} aria-describedby="status-help"
+            class={`chip py-1 transition-colors ${st.cls}`}>
+            {status === 'approved' && <IconStar />}{st.label}
           </button>
-          <div role="tooltip" class="hidden group-hover:block absolute top-full left-0 mt-1.5 z-50 w-56 p-2.5 bg-dg-raised border border-dg-border rounded-lg shadow-xl text-left">
-            <p class="text-[11px] font-semibold text-dg-text mb-1">Cycle de validation</p>
-            <p class="text-[10px] leading-relaxed text-dg-text-2">
-              <span class="text-dg-text-3">Draft</span> (brouillon) →
-              <span class="text-dg-warning"> Review</span> (en relecture) →
-              <span class="text-dg-success"> ✦ Gold</span> (version approuvée, référence de l'équipe).
+          <div id="status-help" role="tooltip" class="hidden group-hover:block group-focus-within:block absolute top-full right-0 mt-1.5 z-50 w-56 p-2.5 bg-dg-raised border border-dg-border rounded-dg shadow-xl text-left">
+            <p class="text-[12px] font-semibold text-dg-text mb-1">Cycle de validation</p>
+            <p class="text-[11px] leading-relaxed text-dg-text-2">
+              Draft (brouillon) → <span class="text-dg-warning">Review</span> (en relecture) → <span class="text-dg-success">Gold</span> (version approuvée, référence de l'équipe).
             </p>
-            <p class="text-[10px] text-dg-text-3 mt-1">Cliquer pour changer de statut.</p>
+            <p class="text-[11px] text-dg-text-2 mt-1">Cliquer pour changer de statut.</p>
           </div>
         </div>
-        {/* Restore checkpoint — pas sur le diff d'une frame : réappliquerait toute la page (Phase 4) */}
-        {data && restoreAllowedInDiff(frame) && (
-          <button onClick={restore} disabled={restoring}
-            class="btn-secondary py-1 px-2 flex-shrink-0"
-            aria-label="Créer un checkpoint depuis cette version">
-            {restoring ? '…' : '↩ Checkpoint'}
-          </button>
-        )}
-        {/* Apply to Figma canvas */}
-        {data && restoreAllowedInDiff(frame) && (
-          <button onClick={applyToFigma} disabled={applyingToFigma}
-            class="btn-primary py-1 px-2 flex-shrink-0"
+        {/* Une seule action de restauration : elle réécrit le canvas, donc elle se confirme.
+            Absente du diff d'une frame : réappliquerait toute la page (Phase 4). */}
+        {canRestore && !confirmingRestore && (
+          <button onClick={() => dispatch({ type: 'ASK_RESTORE' })} disabled={applyingToFigma}
+            class="btn-primary py-1 px-3 flex items-center gap-1.5 flex-shrink-0"
             aria-label="Restaurer cette version sur le canvas Figma">
-            {applyingToFigma ? '…' : '↩ Restore'}
+            <IconRestore /> {applyingToFigma ? 'Restauration…' : 'Restaurer'}
           </button>
         )}
       </div>
 
-      {version.ai_summary && (
-        <div class="px-3 py-2 border-b border-dg-border flex-shrink-0 bg-dg-raised">
-          <p class="text-[12px] leading-snug">{version.ai_summary}</p>
+      {canRestore && confirmingRestore && (
+        <div role="alertdialog" aria-labelledby="restore-q" class="px-3 py-2.5 border-b border-dg-border bg-dg-accent-soft flex items-center gap-2 flex-shrink-0">
+          <p id="restore-q" class="flex-1 text-[12px] leading-snug">
+            Remplacer le canvas par la <strong>v{version.version_number}</strong> ? Les versions suivantes restent dans l'historique.
+          </p>
+          <button class="btn-secondary py-1 px-3" onClick={() => dispatch({ type: 'CANCEL_RESTORE' })}>Annuler</button>
+          <button class="btn-primary py-1 px-3" autoFocus onClick={applyToFigma}>Restaurer</button>
         </div>
       )}
-      {restoreMsg && <div role="status" class="px-3 py-2 bg-dg-success/10 border-b border-dg-success text-dg-success text-[11px] flex-shrink-0">{restoreMsg}</div>}
+
+      {version.ai_summary && (
+        <div class="px-3 py-2.5 border-b border-dg-border flex-shrink-0 bg-dg-accent-soft flex gap-2">
+          <span class="text-dg-accent-text mt-0.5"><IconSparkle /></span>
+          <p class="text-[13px] leading-snug">{version.ai_summary}</p>
+        </div>
+      )}
+      {restoreMsg && <div role="status" class="px-3 py-2 bg-dg-success/10 border-b border-dg-success/40 text-dg-success text-[12px] flex-shrink-0">{restoreMsg}</div>}
       {loading && <Spinner full />}
-      {err     && <p role="alert" class="text-dg-danger text-[11px] p-4">{err}</p>}
+      {err     && <p role="alert" class="text-dg-danger text-[12px] p-4">{err}</p>}
 
       {/* Version de page ouverte depuis « Toutes les versions » : pas de rendu global, on
           choisit une frame touchée (son diff, et son historique pour la nav ◀▶). */}
       {data && !frame && pageFrames.length > 0 && (
         <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-          <p class="text-[11px] text-dg-text-2">Frames modifiées dans cette version :</p>
+          <p class="text-[12px] text-dg-text-2">Frames modifiées dans cette version :</p>
           {pageFrames.map(f => (
-            <button key={f.key} class="text-left p-3 bg-dg-raised hover:bg-dg-hover border border-dg-border rounded-lg text-sm"
+            <button key={f.key} class="text-left px-3.5 py-3 bg-dg-raised hover:bg-dg-hover border border-dg-border rounded-dg text-[13px] flex items-center gap-2 transition-colors"
               onClick={() => { setFrame({ key: f.key, name: f.name }); setSiblings(frameHistory(siblings, f.key)); }}>
-              {f.name}
-              <span class="text-[11px] text-dg-text-3 ml-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
+              <span class="flex-1 truncate">{f.name}</span>
+              <span class="text-[11px] text-dg-text-2">{f.status === 'initial' ? 'nouvelle' : `${f.changes} changement(s)`}</span>
+              <span class="text-dg-text-3"><IconNext /></span>
             </button>
           ))}
         </div>
@@ -293,7 +274,7 @@ export function DiffScreen() {
                 ? <HighlightCanvas url={canvasUrl} kind={canvasKind} frame={canvasFrame}
                     highlights={highlights} selectedId={selectedId} onSelect={setSelectedId} />
                 : <div class="flex-1 flex items-center justify-center">
-                    <p class="text-dg-text-3 text-[11px]">{heavyDone ? 'Rendu indisponible.' : 'Chargement du rendu…'}</p>
+                    <p class="text-dg-text-2 text-[12px]">{heavyDone ? 'Rendu indisponible.' : 'Chargement du rendu…'}</p>
                   </div>}
             </div>
             <div class="w-72 flex flex-col overflow-hidden">
@@ -305,25 +286,24 @@ export function DiffScreen() {
           // v1 : pas de diff (aucun parent), mais on montre le rendu de la version
           // initiale — le jury voit la baseline avant le restore, plus de "preview vide".
           <div class="flex flex-1 flex-col overflow-hidden relative">
-            <div class="px-3 py-1.5 text-[11px] text-dg-text-3 border-b border-dg-border flex items-center gap-1.5 flex-shrink-0">
-              <span>📸</span><span>Version initiale — le comparatif démarre à la v2</span>
+            <div class="px-3 py-2 text-[12px] text-dg-text-2 border-b border-dg-border flex items-center gap-1.5 flex-shrink-0">
+              <IconCamera /><span>Version initiale — le comparatif démarre à la v2</span>
             </div>
             <HighlightCanvas url={data.render_url} kind={data.render_kind} frame={data.current_frame}
               highlights={[]} selectedId={null} onSelect={() => {}} />
           </div>
         ) : (
-          <div class="flex-1 flex flex-col items-center justify-center gap-6 p-8 text-center">
-            <div class="w-14 h-14 rounded-2xl bg-dg-accent/20 border border-dg-accent/30 flex items-center justify-center">
-              <span class="text-2xl">📸</span>
+          <div class="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center">
+            <div class="w-14 h-14 rounded-full bg-dg-accent-soft border border-dg-accent-line text-dg-accent-text flex items-center justify-center">
+              <IconCamera size={24} />
             </div>
             <div class="flex flex-col gap-1">
-              <p class="text-sm font-medium text-dg-text">Checkpoint initial</p>
-              <p class="text-[11px] text-dg-text-3">{heavyDone ? 'Le diff visuel apparaîtra à partir de la v2' : 'Chargement du rendu…'}</p>
+              <p class="text-[14px] font-semibold text-dg-text">Checkpoint initial</p>
+              <p class="text-[12px] text-dg-text-2">{heavyDone ? 'Le diff visuel apparaîtra à partir de la v2' : 'Chargement du rendu…'}</p>
             </div>
-            <div class="flex flex-col gap-1.5 text-[11px] text-dg-text-3">
-              <span>{timeAgo(version.created_at)}</span>
-              {version.author_name && <span>par {version.author_name}</span>}
-            </div>
+            <p class="text-[12px] text-dg-text-2">
+              {timeAgo(version.created_at)}{version.author_name && ` · par ${version.author_name}`}
+            </p>
           </div>
         )
       )}

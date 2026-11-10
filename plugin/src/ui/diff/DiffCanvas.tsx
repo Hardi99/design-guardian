@@ -44,15 +44,22 @@ export function FrameImage({ url, kind, onReady }: { url: string; kind: 'svg' | 
   useEffect(() => { if (kind === 'svg' && svg) onReady?.(); }, [svg, kind]);
   if (kind === 'png') return <img src={url} alt="Rendu de la frame" draggable={false} onLoad={() => onReady?.()} class="w-full h-full object-contain" style={{ pointerEvents: 'none' }} />;
   if (svg === null) return <div class="w-full h-full animate-pulse bg-dg-hover/40" />;
-  if (!svg) return <p class="text-dg-text-3 text-[11px]">Erreur rendu</p>;
+  if (!svg) return <p class="text-dg-text-2 text-[12px]">Rendu indisponible</p>;
   return <div class="w-full h-full" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 const TONE_CLASS: Record<Highlight['tone'], string> = {
-  modified: 'border-dg-accent',
+  modified: 'border-dg-info',
   added:    'border-dg-success',
   removed:  'border-dg-danger',
   derived:  'border-dg-text-3/50',
+};
+// Le type de changement ne passe pas que par la couleur (daltonisme) : style du trait + libellé.
+const TONE_STYLE: Record<Highlight['tone'], { border: string; label: string }> = {
+  modified: { border: 'solid',  label: 'modifié' },
+  added:    { border: 'solid',  label: 'ajouté' },
+  removed:  { border: 'dashed', label: 'supprimé' },
+  derived:  { border: 'dotted', label: 'déplacé par son parent' },
 };
 
 export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSelect }: {
@@ -116,15 +123,15 @@ export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSe
         <div class="absolute inset-0"><FrameImage url={url} kind={kind} onReady={() => setImgReady(true)} /></div>
         {imgReady && view.scale > 0 && highlights.map(hl => (
           <button key={hl.nodeId}
-            aria-label={`Voir le changement de ${hl.nodeId}`}
+            aria-label={`Voir l'élément ${TONE_STYLE[hl.tone].label}`}
             onClick={(e) => { e.stopPropagation(); onSelect(hl.nodeId); }}
             class={`absolute rounded-sm transition-colors ${TONE_CLASS[hl.tone]} ${selectedId === hl.nodeId ? 'ring-2 ring-dg-text/70 bg-dg-text/5' : 'hover:bg-dg-text/5'}`}
-            style={{ left: `${hl.bbox.x}px`, top: `${hl.bbox.y}px`, width: `${Math.max(6, hl.bbox.w)}px`, height: `${Math.max(6, hl.bbox.h)}px`, borderWidth: `${2 / view.scale}px`, borderStyle: 'solid' }}
+            style={{ left: `${hl.bbox.x}px`, top: `${hl.bbox.y}px`, width: `${Math.max(6, hl.bbox.w)}px`, height: `${Math.max(6, hl.bbox.h)}px`, borderWidth: `${2 / view.scale}px`, borderStyle: TONE_STYLE[hl.tone].border }}
           />
         ))}
       </div>
       <button aria-label="Réinitialiser la vue" onClick={() => setView(fitView())}
-        class="absolute bottom-2 right-2 z-10 px-2 py-1 text-[10px] bg-dg-hover/80 text-dg-text-2 rounded hover:bg-dg-hover">Réinitialiser</button>
+        class="chip absolute bottom-2 right-2 z-10 py-1 bg-dg-raised/90 border border-dg-border text-dg-text-2 hover:text-dg-text hover:bg-dg-hover">Réinitialiser la vue</button>
     </div>
   );
 }
