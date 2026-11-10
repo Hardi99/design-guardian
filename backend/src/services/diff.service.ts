@@ -45,16 +45,27 @@ export class DiffService {
     const added: NodeDelta[] = [];
     const removed: NodeDelta[] = [];
 
+    // Instance échangée (autre composant ou variante) : Figma recrée ses calques internes avec
+    // de nouveaux ids. Ils font partie de l'échange (signalé sur l'instance), pas des ajouts/suppressions.
+    const swapped = new Set([...v1Map].filter(([k, e]) => {
+      const b = v2Map.get(k)?.node.component;
+      return !!e.node.component && !!b && e.node.component.key !== b.key;
+    }).map(([k]) => k));
+    const inSwap = (map: Map<string, FlatEntry>, key: string): boolean => {
+      for (let p = map.get(key)?.parentKey ?? null; p; p = map.get(p)?.parentKey ?? null) if (swapped.has(p)) return true;
+      return false;
+    };
+
     // Removed: in v1 but not in v2. nodeId = raw Figma id (downstream lookups key on it).
     for (const [key, { node }] of v1Map) {
-      if (!v2Map.has(key)) {
+      if (!v2Map.has(key) && !inSwap(v1Map, key)) {
         removed.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
     // Added: in v2 but not in v1.
     for (const [key, { node }] of v2Map) {
-      if (!v1Map.has(key)) {
+      if (!v1Map.has(key) && !inSwap(v2Map, key)) {
         added.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }

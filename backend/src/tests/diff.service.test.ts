@@ -925,3 +925,31 @@ describe('trous de détection — dégradé dont seule la géométrie change', (
     expect(change(0, 0, 1, 0.6)?.delta).toBe('positions des couleurs modifiées');
   });
 });
+
+describe('échange de composant — les calques internes recréés par Figma ne sont pas du bruit', () => {
+  // Données réelles (v2 de « Page 2 ») : à l'échange, Figma recrée les calques de l'instance
+  // avec de nouveaux ids (I<instance>;<calque du composant>).
+  const inst = (key: string, kids: Array<[string, string]>) => makeRoot({
+    id: 'page', type: 'PAGE', children: [makeRoot({
+      id: '5:1', name: 'Swap-DG', type: 'FRAME', children: [makeRoot({
+        id: '5:2', name: key === 'k1' ? 'Button' : 'Tag', type: 'INSTANCE', component: { key, name: key === 'k1' ? 'Button' : 'Tag' },
+        children: kids.map(([id, name]) => makeRoot({ id, name })),
+      })],
+    })],
+  });
+  it('seul l’échange est signalé : ni suppressions ni ajouts', () => {
+    const v1 = { ...makeSnapshot(), root: inst('k1', [['I5:2;1:1', 'Rectangle 1'], ['I5:2;1:2', 'Button']]) };
+    const v2 = { ...makeSnapshot(), root: inst('k2', [['I5:2;3:1', 'Tag'], ['I5:2;3:2', 'Rectangle 1'], ['I5:2;3:3', 'Button']]) };
+    const d = svc.compareSnapshots(v1, v2);
+    expect(d.removed).toEqual([]);
+    expect(d.added).toEqual([]);
+    expect(d.modified.map(m => m.changes.map(c => c.delta))).toEqual([['Button → Tag']]);
+  });
+  it('un calque ajouté HORS de l’instance échangée reste signalé', () => {
+    const v1 = { ...makeSnapshot(), root: inst('k1', []) };
+    const v2root = inst('k2', []);
+    v2root.children![0].children!.push(makeRoot({ id: '5:9', name: 'Badge' }));
+    const d = svc.compareSnapshots(v1, { ...makeSnapshot(), root: v2root });
+    expect(d.added.map(a => a.nodeName)).toEqual(['Badge']);
+  });
+});
