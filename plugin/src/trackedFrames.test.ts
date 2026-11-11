@@ -44,12 +44,13 @@ describe('countNodes', () => {
 });
 
 describe('listFrames', () => {
-  it('liste toutes les frames, suivies ou non', () => {
+  it('liste toutes les frames, suivies ou non, dans l’ordre du panneau Calques de Figma', () => {
+    // page.children va du dessous vers le dessus ; le panneau Calques affiche le dessus en premier.
     const a = fake('a', 'Accueil');
     const b = fake('b', 'Panier');
     setTracked(a, true);
     const out = listFrames([a, b]);
-    expect(out.map(f => [f.id, f.tracked])).toEqual([['a', true], ['b', false]]);
+    expect(out.map(f => [f.id, f.tracked])).toEqual([['b', false], ['a', true]]);
   });
 
   it('ne compte les nœuds QUE pour les frames suivies (la liste doit rester instantanée)', () => {
@@ -121,7 +122,7 @@ describe('listFrames — clé', () => {
       setPluginData: () => { writes++; },
     });
     const out = listFrames([node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }), node('1:2', {})]);
-    expect(out.map(f => f.key)).toEqual(['DG-A', '1:2']);
+    expect(out.map(f => f.key)).toEqual(['1:2', 'DG-A']);
     expect(writes).toBe(0);
   });
 });
@@ -139,7 +140,7 @@ describe('listFrames — frame dupliquée', () => {
       node('1:1', { el_uid: 'DG-A', el_owner: '1:1' }),
       node('1:9', { el_uid: 'DG-A', el_owner: '1:1' }), // la copie
     ]);
-    expect(out.map(f => f.key)).toEqual(['DG-A', '1:9']);
+    expect(out.map(f => f.key)).toEqual(['1:9', 'DG-A']);
   });
 });
 

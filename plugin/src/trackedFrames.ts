@@ -60,7 +60,8 @@ export function countNodes(n: TrackableNode): number {
  * d'une page réelle prendrait ~2 s et rendrait la liste poussive.
  */
 export function listFrames(children: readonly TrackableNode[]): FrameEntry[] {
-  return children.map(n => {
+  // Ordre du panneau Calques : page.children va du dessous vers le dessus, Figma affiche le dessus en premier.
+  return [...children].reverse().map(n => {
     const tracked = isTracked(n);
     return { id: n.id, key: frameKey(n), name: n.name, type: n.type, tracked, nodes: tracked ? countNodes(n) : 0 };
   });
