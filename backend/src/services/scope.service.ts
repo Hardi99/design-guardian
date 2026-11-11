@@ -38,10 +38,14 @@ export function classifyScopeChanges(
   const curVp  = viewportRootMap(currentSnap.root);
   const prevVp = viewportRootMap(prevSnap.root);
 
+  const added   = delta.added.filter(n   => !inIds.has(curVp.get(n.nodeId)?.id   ?? ''));
+  const removed = delta.removed.filter(n => !outIds.has(prevVp.get(n.nodeId)?.id ?? ''));
   return {
     ...delta,
-    added:   delta.added.filter(n   => !inIds.has(curVp.get(n.nodeId)?.id   ?? '')),
-    removed: delta.removed.filter(n => !outIds.has(prevVp.get(n.nodeId)?.id ?? '')),
+    added,
+    removed,
+    // Le total suit les listes purgées : sinon un diff vide garde un compteur > 0 et l'IA résume du vide.
+    totalChanges: delta.modified.length + added.length + removed.length,
     ...(scopeIn.length  > 0 ? { scopeIn }  : {}),
     ...(scopeOut.length > 0 ? { scopeOut } : {}),
   };

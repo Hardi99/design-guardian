@@ -31,6 +31,16 @@ describe('classifyScopeChanges', () => {
     expect(out.added).toHaveLength(0);
   });
 
+  it('le total suit les listes purgées : rien de changé dans le design → 0 (pas de résumé IA inventé)', () => {
+    const prev = page([frame('a', 'Accueil', 'a1')]);
+    const cur  = page([frame('a', 'Accueil', 'a1'), frame('b', 'Panier', 'b1')]);
+    const d = delta({ totalChanges: 2, added: [
+      { nodeId: 'b',  nodeName: 'Panier', nodeType: 'FRAME', changes: [] },
+      { nodeId: 'b1', nodeName: 'b1',     nodeType: 'RECTANGLE', changes: [] },
+    ] });
+    expect(classifyScopeChanges(d, cur, prev).totalChanges).toBe(0);
+  });
+
   it('une frame retirée du suivi est scopeOut, pas removed', () => {
     const prev = page([frame('a', 'Accueil', 'a1'), frame('b', 'Panier', 'b1')]);
     const cur  = page([frame('a', 'Accueil', 'a1')]);
