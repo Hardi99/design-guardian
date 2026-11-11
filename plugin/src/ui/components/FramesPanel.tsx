@@ -43,6 +43,7 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
   const ms = estimateMs(frames);
   const nodes = tracked.reduce((s, f) => s + f.nodes, 0);
   const shown = q ? frames.filter(f => f.name.toLowerCase().includes(q.toLowerCase())) : frames;
+  const allOn = shown.length > 0 && shown.every(f => f.tracked); // agit sur les frames affichées (filtre compris)
 
   if (!capturable) {
     return (
@@ -55,7 +56,15 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
   return (
     <div class="flex flex-col py-1">
       <div class="flex items-baseline justify-between px-3 py-1.5">
-        <span class="text-[11px] font-medium text-dg-text-2">{tracked.length} / {frames.length} frames suivies</span>
+        <span class="text-[11px] font-medium text-dg-text-2">
+          {tracked.length} / {frames.length} frames suivies
+          {shown.length > 1 && (
+            <button type="button" class="ml-2 text-dg-accent-text hover:underline"
+              onClick={() => send({ type: 'SET_TRACKED', nodeIds: shown.map(f => f.id), tracked: !allOn })}>
+              {allOn ? 'Tout retirer' : 'Tout suivre'}
+            </button>
+          )}
+        </span>
         <span class={`text-[11px] ${ms >= WARN_MS ? 'text-dg-warning' : 'text-dg-text-2'}`}>
           {tracked.length === 0 ? 'coche les frames à suivre' : `~${nodes} calques · ~${(ms / 1000).toFixed(1)} s`}
         </span>
@@ -81,7 +90,7 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
           <div key={f.id} class="flex items-center gap-2 h-8 px-3 text-[12px] hover:bg-dg-hover">
             <input type="checkbox" id={`track-${f.id}`} class="accent-dg-accent cursor-pointer" checked={f.tracked}
               aria-label={`Suivre ${f.name}`}
-              onChange={() => send({ type: 'SET_TRACKED', nodeId: f.id, tracked: !f.tracked })} />
+              onChange={() => send({ type: 'SET_TRACKED', nodeIds: [f.id], tracked: !f.tracked })} />
             <FrameIcon />
             {hasHistory ? (
               // Deux cibles distinctes : la case coche, le nom ouvre l'historique (chevron = indice).

@@ -103,6 +103,7 @@ export type MainToUI =
   | { type: 'LINK_TOKEN'; token: string | null }
   | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
   | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  | { type: 'SEEN'; assetId: string; versionNumber: number | null }
   // Page-centric : toutes les frames de la page courante, suivies ou non.
   // `capturable` est false sur une page dg/* → l'UI explique AVANT que l'utilisateur clique.
   | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean; pages: Array<{ id: string; name: string }> };
@@ -136,4 +137,5 @@ export type UIToMain =
   | { type: 'REQUEST_FRAMES' }
   | { type: 'GO_TO_PAGE'; pageId: string }
   | { type: 'SHOW_ON_CANVAS'; key: string } // sélectionne la frame et zoome dessus (change de page si besoin)
-  | { type: 'SET_TRACKED'; nodeId: string; tracked: boolean };
+  | { type: 'SET_TRACKED'; nodeIds: string[]; tracked: boolean }
+  | { type: 'SWAP_SEEN'; assetId: string; versionNumber: number };

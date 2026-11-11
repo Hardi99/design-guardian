@@ -112,6 +112,13 @@ figma.ui.onmessage = async (raw: unknown) => {
       if (c) send({ type: 'VERSION_CACHE', assetId: msg.assetId, versions: c.versions, branches: c.branches });
       break;
     }
+    case 'SWAP_SEEN': { // dernière version vue PAR CE designer (clientStorage = par utilisateur)
+      const key = 'dg_seen_' + msg.assetId;
+      const old = await figma.clientStorage.getAsync(key) as number | undefined;
+      await figma.clientStorage.setAsync(key, msg.versionNumber);
+      send({ type: 'SEEN', assetId: msg.assetId, versionNumber: old ?? null });
+      break;
+    }
     case 'CHECK_PRESENCE': {
       // Quels éléments suivis du projet sont dans CE fichier ? (nœud + dg_id, cf. fileSplit.ts)
       try {
@@ -195,9 +202,9 @@ figma.ui.onmessage = async (raw: unknown) => {
       break;
     }
 
-    case 'SET_TRACKED': {
-      const node = figma.currentPage.children.find(c => c.id === msg.nodeId);
-      if (node) setTracked(node as unknown as TrackableNode, msg.tracked);
+    case 'SET_TRACKED': { // une case, ou « Tout suivre / Tout retirer » en 1 clic
+      const ids = new Set(msg.nodeIds);
+      for (const node of figma.currentPage.children) if (ids.has(node.id)) setTracked(node as unknown as TrackableNode, msg.tracked);
       sendFrames(); // liste à jour → l'estimation se recalcule côté UI
       break;
     }

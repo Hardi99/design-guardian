@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import type { MainToUI } from '../../types.js';
 import type { Version } from '../../store.js';
 import { useAppStore } from '../../useAppStore.js';
-import { frameHistory, defaultHomeTab } from '../../frameNav.js';
+import { frameHistory, defaultHomeTab, sinceLastVisit } from '../../frameNav.js';
 import type { FrameEntry } from '../../trackedFrames.js';
 import { api, send, session } from '../api.js';
 import { pageOptions } from '../historyPick.js';
@@ -10,6 +10,7 @@ import { clearDiffCache } from '../diff/DiffScreen.js';
 import { Header, PlanBadge } from '../components/Header.js';
 import { HomeMenu } from '../components/HomeMenu.js';
 import { SummaryCard } from '../components/SummaryCard.js';
+import { SinceVisitCard } from '../components/SinceVisitCard.js';
 import { FramesPanel } from '../components/FramesPanel.js';
 import { VersionRow } from '../components/VersionRow.js';
 import { Spinner } from '../components/common.js';
@@ -31,6 +32,10 @@ function PageSelect({ pages }: { pages: Array<{ id: string; name: string }> }) {
   );
 }
 
+// Dernière version vue AVANT cette ouverture, par historique : la carte « Depuis ta dernière
+// visite » reste affichée toute la session, même si la version la plus récente est déjà marquée vue.
+const seenAtOpen = new Map<string, number | null>();
+
 export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const apiKey         = useAppStore(s => s.apiKey)!;
   const asset          = useAppStore(s => s.asset)!;
@@ -47,6 +52,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const [loading,  setLoading]  = useState(true);
   const [err,      setErr]      = useState<string | null>(null);
   const [pages,    setPages]    = useState<Array<{ id: string; name: string }>>([]);
+  const [seen,     setSeen]     = useState<number | null>(null);
   // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
   // après le fetch frais ne doit pas écraser l'affichage à jour.
   const freshLoaded = useRef(false);
@@ -54,6 +60,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   useEffect(() => {
     setLoading(true);
     freshLoaded.current = false;
+    setSeen(seenAtOpen.get(asset.id) ?? null);
     // Rechargement de la timeline : le cache diff peut contenir des entrées d'un autre historique.
     clearDiffCache();
     send({ type: 'REQUEST_VERSION_CACHE', assetId: asset.id });
@@ -61,6 +68,8 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
       .then(d => {
         freshLoaded.current = true;
         setVersions(d.versions ?? []);
+        const top = Math.max(0, ...(d.versions ?? []).map(v => v.version_number));
+        if (top > 0 && !seenAtOpen.has(asset.id)) send({ type: 'SWAP_SEEN', assetId: asset.id, versionNumber: top });
         send({ type: 'PERSIST_VERSION_CACHE', assetId: asset.id, versions: d.versions ?? [], branches: d.branches ?? ['main'] });
       })
       .catch(e => setErr((e as Error).message))
@@ -73,6 +82,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
       const msg = e.data.pluginMessage as MainToUI;
       if (!msg) return;
       if (msg.type === 'FRAMES_LIST') { setPages(msg.pages ?? []); return; }
+      if (msg.type === 'SEEN') { if (msg.assetId === asset.id) { seenAtOpen.set(asset.id, msg.versionNumber); setSeen(msg.versionNumber); } return; }
       if (msg.type !== 'VERSION_CACHE' || msg.assetId !== asset.id || freshLoaded.current) return;
       setVersions(msg.versions);
       setLoading(false);
@@ -84,6 +94,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const visible = versions.filter(v => v.branch_name === branch);
   const latest  = visible.length > 0 ? visible[visible.length - 1] : null;
   const tab     = tabChoice ?? defaultHomeTab(visible);
+  const since   = sinceLastVisit(visible, seen);
 
   const openDiff = useCallback((v: Version) => { setFrame(null); setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
   // Page-centric : clic sur une frame → son historique (versions où elle est apparue ou a changé).
@@ -100,7 +111,9 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
       <Header title={<PageSelect pages={pages} />}
         right={<><PlanBadge plan={plan} onUpgrade={onUpgrade} /><HomeMenu /></>} />
 
-      {latest && <SummaryCard version={latest} onOpen={() => openDiff(latest)} />}
+      {since
+        ? <SinceVisitCard since={since} apiKey={apiKey} onOpen={() => openDiff(since.to)} />
+        : latest && <SummaryCard version={latest} onOpen={() => openDiff(latest)} />}
 
       {visible.length > 0 ? (
         <div role="tablist" aria-label="Affichage" class="mx-3 mt-3 p-0.5 flex gap-0.5 rounded-full bg-dg-raised border border-dg-border flex-shrink-0">
