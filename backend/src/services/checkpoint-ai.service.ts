@@ -9,6 +9,11 @@ import type { DeltaJSON } from '../types/figma.js';
 let openai: OpenAIService | null = null;
 const getOpenAI = () => (openai ??= new OpenAIService(getEnv().OPENAI_API_KEY));
 
+/** Résumé IA d'un diff, sans l'écrire en base (comparaison de deux versions). null si l'IA échoue. */
+export async function summarizeDelta(delta: DeltaJSON, authorName: string): Promise<string | null> {
+  try { return await getOpenAI().generatePatchNote(delta, authorName); } catch { return null; }
+}
+
 export interface GenerateSummaryParams {
   versionId: string;
   delta: DeltaJSON;

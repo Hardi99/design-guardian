@@ -6,20 +6,18 @@ import { generateSvgFromSnapshot } from '../services/svg-generator.service.js';
 import type { VersionTreeResponse, ApproveVersionResponse, ErrorResponse } from '../types/api.js';
 import { statusSchema, restoreSchema } from '../types/api.js';
 import { createVersionAtomic, resolveSnapshot, downloadSnapshot, renderPathFor } from '../services/versioning.service.js';
-import { DiffService } from '../services/diff.service.js';
-import { enrichDeltaGeometry, nodeBboxRelative, renderFrame } from '../services/geometry.service.js';
-import { generateAndStoreSummary } from '../services/checkpoint-ai.service.js';
+import { netDelta } from '../services/net-delta.service.js';
+import { nodeBboxRelative, renderFrame } from '../services/geometry.service.js';
+import { generateAndStoreSummary, summarizeDelta } from '../services/checkpoint-ai.service.js';
 import type { Version } from '../types/database.js';
 import type { ProjectEnv } from '../types/hono.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
-import { derivedMoveIds, rankDelta, stampSignificance } from '../services/significance.service.js';
-import { classifyScopeChanges } from '../services/scope.service.js';
+import { derivedMoveIds, rankDelta } from '../services/significance.service.js';
 import { formatNodeChanges, type ReadableChange } from '../services/change-format.service.js';
 import { buildTreeMaps } from '../services/tree.service.js';
 import { loadOwnedVersion } from '../services/ownership.service.js';
 
 const versionsRouter = new Hono<ProjectEnv>();
-const diffService = new DiffService();
 
 const SNAPSHOTS_BUCKET = 'snapshots';
 
@@ -332,11 +330,7 @@ versionsRouter.post('/versions/:id/restore', pluginMiddleware, zValidator('json'
       if (!prev?.storage_path) return { analysisJson: null, aiSummary: baseSummary };
       const headSnap = await downloadSnapshot(storage, prev.storage_path);
       if (!headSnap) return { analysisJson: null, aiSummary: baseSummary };
-      const rawDelta = diffService.compareSnapshots(headSnap, snapshot);
-      const delta = enrichDeltaGeometry(
-        classifyScopeChanges(stampSignificance(rawDelta, snapshot), snapshot, headSnap ?? null),
-        snapshot, headSnap ?? null,
-      );
+      const delta = netDelta(headSnap, snapshot);
       if (delta.totalChanges > 0) pendingDelta = delta;
       return { analysisJson: delta.totalChanges > 0 ? delta : null, aiSummary: baseSummary };
     },
@@ -424,6 +418,31 @@ versionsRouter.put('/versions/:id/status', pluginMiddleware, zValidator('json', 
 
   if (error || !data) return c.json<ErrorResponse>({ error: 'Version not found', details: error?.message }, 404);
   return c.json<ApproveVersionResponse>({ version: data });
+});
+
+/**
+ * GET /api/versions/compare?from=<id>&to=<id>
+ * « Depuis ta dernière visite » : changement NET entre deux versions d'un même historique
+ * (diff direct, pas la somme des étapes) résumé par l'IA. Rien n'est stocké.
+ */
+versionsRouter.get('/compare', pluginMiddleware, async (c) => {
+  const supabase = getSupabaseClient();
+  const storage = getSupabaseStorage();
+  const load = (id?: string) => loadOwnedVersion(supabase, id ?? '', c.get('projectId'));
+  const [f, t] = await Promise.all([load(c.req.query('from')), load(c.req.query('to'))]);
+  if ('error' in f || 'error' in t) {
+    const forbidden = ('error' in f && f.error === 'forbidden') || ('error' in t && t.error === 'forbidden');
+    return forbidden ? c.json<ErrorResponse>({ error: 'Forbidden' }, 403) : c.json<ErrorResponse>({ error: 'Version not found' }, 404);
+  }
+  type Row = { asset_id: string; storage_path: string | null; author_name: string | null };
+  const from = f.version as unknown as Row, to = t.version as unknown as Row;
+  if (from.asset_id !== to.asset_id) return c.json<ErrorResponse>({ error: 'Versions from different histories' }, 400);
+
+  const [a, b] = await Promise.all([resolveSnapshot(storage, from), resolveSnapshot(storage, to)]);
+  if (!a || !b) return c.json<ErrorResponse>({ error: 'Snapshot not found in storage' }, 404);
+  const delta = netDelta(a, b);
+  const summary = await summarizeDelta(delta, to.author_name ?? 'l’équipe');
+  return c.json({ summary, totalChanges: delta.totalChanges });
 });
 
 export { versionsRouter };

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
-import { DiffService } from '../services/diff.service.js';
+import { netDelta } from '../services/net-delta.service.js';
 import { enrichDeltaGeometry } from '../services/geometry.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { checkpointsCreatedTotal } from '../services/metrics.service.js';
@@ -10,15 +10,12 @@ import { sendCheckpointNotification } from '../services/notification.service.js'
 import { createCheckpointSchema, uploadRenderSchema } from '../types/api.js';
 import { isNodeMismatch } from '../services/node-match.js';
 import { createVersionAtomic, downloadSnapshot, uploadRender } from '../services/versioning.service.js';
-import { stampSignificance } from '../services/significance.service.js';
-import { classifyScopeChanges } from '../services/scope.service.js';
 import { framesToRender } from '../services/frames.service.js';
 import type { CheckpointResponse, ErrorResponse } from '../types/api.js';
 import type { FigmaSnapshot, DeltaJSON } from '../types/figma.js';
 import type { ProjectEnv } from '../types/hono.js';
 
 const checkpointsRouter = new Hono<ProjectEnv>();
-const diffService = new DiffService();
 
 checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpointSchema), async (c) => {
   const supabase = getSupabaseClient();
@@ -84,16 +81,7 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
       }
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
-      const rawDelta = diffService.compareSnapshots(prevSnapshot, body.snapshot_json as FigmaSnapshot);
-      // L'ordre compte : on CLASSE avant d'enrichir, pour ne pas enrichir des nœuds
-      // qu'on va retirer (entrées/sorties de périmètre de suivi).
-      const delta = enrichDeltaGeometry(
-        classifyScopeChanges(
-          stampSignificance(rawDelta, body.snapshot_json as FigmaSnapshot),
-          body.snapshot_json as FigmaSnapshot, prevSnapshot ?? null,
-        ),
-        body.snapshot_json as FigmaSnapshot, prevSnapshot ?? null,
-      );
+      const delta = netDelta(prevSnapshot, body.snapshot_json as FigmaSnapshot);
       if (delta.totalChanges > 0) { pendingDelta = delta; return { analysisJson: delta, aiSummary: null }; }
       return { analysisJson: delta, aiSummary: 'Aucune modification détectée.' };
     },

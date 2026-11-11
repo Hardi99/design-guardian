@@ -249,3 +249,18 @@ describe('GET /api/versions/versions/:id — cadre 0×0 enregistré (page)', () 
     expect(body.current_frame).toEqual({ w: 428, h: 926 });
   });
 });
+
+describe('GET /api/versions/compare — « depuis ta dernière visite »', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const get = (q: string) => createApp().request(`/api/versions/compare?${q}`, { headers: { 'X-API-Key': 'key-of-p1' } });
+
+  it("refuse de comparer les versions d'un autre projet (403)", async () => {
+    mockState.versionRow = { id: 'v1', asset_id: 'a1', assets: { project_id: 'OTHER' } };
+    expect((await get('from=v1&to=v2')).status).toBe(403);
+  });
+  it('snapshot introuvable → 404, sans appel IA', async () => {
+    versioningMocks.resolveSnapshot.mockResolvedValue(null);
+    mockState.versionRow = { id: 'v1', asset_id: 'a1', storage_path: null, assets: { project_id: 'p1' } };
+    expect((await get('from=v1&to=v2')).status).toBe(404);
+  });
+});
