@@ -84,6 +84,21 @@ export interface BranchNode extends IdentifiableNode {
  * (→ correspondance cross-branche) MAIS `owner = son propre id` : il *possède* la clé,
  * donc `decideStamp` ne le prendra pas pour une copie à re-minter. Apparie par index.
  */
+/**
+ * Frame restaurée depuis une copie d'historique : le clone hérite des el_uid de la copie, mais
+ * avec el_owner = id de la frame d'ORIGINE → ensureNodeIdentity le prendrait pour un doublon
+ * et changerait son identité (la restauration suivante ne la retrouverait plus → frame en double).
+ * On garde chaque el_uid tel quel et le nœud en devient propriétaire ; la racine reprend la clé
+ * de la frame (`frameKey`), au cas où la copie aurait été ré-identifiée par un ancien bug.
+ */
+export function claimIdentity(node: BranchNode, frameKey?: string): void {
+  try {
+    if (frameKey) node.setPluginData(IDENTITY_KEY, frameKey);
+    if (readDgId(node)) node.setPluginData(OWNER_KEY, node.id);
+  } catch { /* viewer read-only */ }
+  for (const c of node.children ?? []) claimIdentity(c);
+}
+
 export function propagateIdentity(original: BranchNode, clone: BranchNode): void {
   const dgId = ensureNodeIdentity(original); // garantit que l'original a un dg_id
   try {

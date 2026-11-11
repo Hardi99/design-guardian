@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  hashSnapshot, latestCopy, pickHistoryClone, framesToPrune, planPageRestore, restoreSummary,
+  hashSnapshot, latestCopy, pickHistoryClone, framesToPrune, planPageRestore, restoreSummary, stalePending,
   type HistoryFrameInfo,
 } from './restoreClone.js';
 
 const f = (over: Partial<HistoryFrameInfo>): HistoryFrameInfo =>
-  ({ id: 'x', key: 'A', versionIds: [], versionNumber: undefined, hash: undefined, gold: [], ...over });
+  ({ id: 'x', key: 'A', versionIds: [], versionNumber: undefined, hash: undefined, gold: [], pending: false, ...over });
 
 describe('hashSnapshot', () => {
   it('même contenu → même empreinte ; un pixel de différence → autre empreinte', () => {
@@ -79,5 +79,19 @@ describe('restoreSummary — message au designer', () => {
   });
   it('sans aucune copie : pas de « 0 frame restaurée à l’identique »', () => {
     expect(restoreSummary({ exact: 0, partial: 2, missing: 0 })).toBe('✓ 2 frames restaurées partiellement (copie trop ancienne)');
+  });
+});
+
+describe('stalePending — copies en attente abandonnées (captures simultanées)', () => {
+  const H = 3_600_000, now = 10 * H;
+  it("garde la capture d'un collègue encore en route, supprime celles de plus d'une heure", () => {
+    const frames = [f({ id: 'lea', pending: true, pendingAt: now - 2_000 }), f({ id: 'oubliee', pending: true, pendingAt: now - 2 * H })];
+    expect(stalePending(frames, now, H)).toEqual(['oubliee']);
+  });
+  it("une copie en attente sans heure (ancienne version du plugin) est abandonnée", () => {
+    expect(stalePending([f({ id: 'vieille', pending: true })], now, H)).toEqual(['vieille']);
+  });
+  it('ne touche jamais aux copies validées', () => {
+    expect(stalePending([f({ id: 'ok', versionNumber: 1, versionIds: ['v1'] })], now, H)).toEqual([]);
   });
 });

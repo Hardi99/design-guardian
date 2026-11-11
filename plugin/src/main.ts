@@ -7,7 +7,7 @@ import type { Asset, Version } from './store.js';
 import { chooseFormat, PNG_MAX_B64, PNG_SCALES } from './renderFormat';
 import { computeCornerRadii, type CornerInput } from './cornerRadii.js';
 import { changedProps, pickMatch, planResize } from './restoreDiff.js';
-import { framesToPrune, pickHistoryClone, hashSnapshot, latestCopy, planPageRestore, type HistoryFrameInfo } from './restoreClone.js';
+import { framesToPrune, pickHistoryClone, hashSnapshot, latestCopy, planPageRestore, stalePending, type HistoryFrameInfo } from './restoreClone.js';
 import { decideFileId, isValidFileId, generateFileId, FILE_ID_KEY } from './fileId.js';
 import { classifyPresence, shouldOfferSplit, parseDismissed, SPLIT_DISMISSED_KEY } from './fileSplit.js';
 import { autoLayoutOf, strokeOf, spreadOf, variantOf, collectComponents, type ComponentInfo, type TreeLike, type AutoLayoutLike, type PaintLike, type EffectLike } from './capture.js';
@@ -17,7 +17,7 @@ import { autoLayoutOf, strokeOf, spreadOf, variantOf, collectComponents, type Co
 // à Array.map, d'où une variable plutôt qu'un paramètre).
 let capturedComponents = new Map<string, ComponentInfo>();
 import { IDENTITY_KEY } from './identity.js';
-import { ensureNodeIdentity, propagateIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, propagateIdentity, claimIdentity, readDgId, findByDgId, adoptMovedIdentities, type BranchNode, type IdentifiableNode } from './figmaIdentity.js';
 import { decodeBase64Utf8 } from './utils.js';
 import { listFrames, locateFrame, frameKey, setTracked, isTracked, assignFloating, type TrackableNode, type Box } from './trackedFrames.js';
 
@@ -560,7 +560,7 @@ const HISTORY_PAGE = 'dg/_history';
 const HISTORY_KEEP_N = 5;
 
 // Marques posées sur une copie d'historique (effacées sur la frame restaurée).
-const HISTORY_TAGS = ['dg_history_pending', 'dg_history_version', 'dg_history_versions', 'dg_history_asset', 'dg_history_vnum', 'dg_history_hash', 'dg_history_gold'];
+const HISTORY_TAGS = ['dg_history_pending', 'dg_history_pending_at', 'dg_history_version', 'dg_history_versions', 'dg_history_asset', 'dg_history_vnum', 'dg_history_hash', 'dg_history_gold'];
 
 /** Page dg/_history chargée (dynamic-page : seule cette page, pas tout le fichier). */
 async function historyPage(create: boolean): Promise<PageNode | undefined> {
@@ -583,12 +583,16 @@ function readHistoryFrames(page: PageNode): HistoryFrameInfo[] {
       versionNumber: vnum ? Number(vnum) : undefined,
       hash: c.getPluginData('dg_history_hash') || undefined,
       gold: list('dg_history_gold'),
+      pending: c.getPluginData('dg_history_pending') !== '',
+      pendingAt: Number(c.getPluginData('dg_history_pending_at')) || undefined,
     };
   });
 }
 
-// Capture → sauvegarde : dernières copies des frames inchangées, qui couvriront aussi la nouvelle version.
-let pendingCover: { pageId: string; copyIds: string[] } | null = null;
+// Capture → sauvegarde : identifiant de CETTE capture (ses copies en attente le portent) et dernières
+// copies des frames inchangées, qui couvriront aussi la nouvelle version.
+let pendingCover: { pageId: string; captureId: string; copyIds: string[] } | null = null;
+const PENDING_MAX_AGE_MS = 3_600_000; // 1 h : absorbe les horloges décalées entre ordinateurs
 
 // Capture (avant le POST) : copie seulement les frames qui ont changé depuis leur dernière
 // copie ; les autres seront couvertes par celle-ci. Copies « en attente » jusqu'à la sauvegarde.
@@ -597,7 +601,10 @@ async function prepareCopies(pageId: string, frames: Array<{ node: SceneNode; sn
   try {
     const hist = await historyPage(true);
     if (!hist) return;
-    for (const c of [...hist.children]) if (c.getPluginData('dg_history_pending') === pageId) c.remove(); // capture non sauvée
+    // Plusieurs designers capturent dans le même fichier : chacun n'efface que les captures
+    // ABANDONNÉES (> 1 h), jamais celle d'un collègue encore en route.
+    for (const id of stalePending(readHistoryFrames(hist), Date.now(), PENDING_MAX_AGE_MS)) hist.children.find(c => c.id === id)?.remove();
+    const captureId = Math.random().toString(36).slice(2) + Date.now().toString(36);
     const copies = readHistoryFrames(hist);
     const cover: string[] = [];
     for (const { node, snap } of frames) {
@@ -608,12 +615,13 @@ async function prepareCopies(pageId: string, frames: Array<{ node: SceneNode; sn
       if (!('clone' in node)) continue;
       const copy = (node as SceneNode & { clone(): SceneNode }).clone();
       hist.appendChild(copy);
-      copy.setPluginData('dg_history_pending', pageId);
+      copy.setPluginData('dg_history_pending', captureId);
+      copy.setPluginData('dg_history_pending_at', String(Date.now()));
       copy.setPluginData('dg_history_asset', key);
       copy.setPluginData('dg_history_hash', hash);
       copy.locked = true;
     }
-    pendingCover = { pageId, copyIds: cover };
+    pendingCover = { pageId, captureId, copyIds: cover };
   } catch (e) {
     console.log('[DG] copies d\'historique (capture) échec', e);
   }
@@ -621,8 +629,9 @@ async function prepareCopies(pageId: string, frames: Array<{ node: SceneNode; sn
 
 // Sauvegarde réussie : les copies couvrent la version, puis nettoyage (N par frame, Gold gardées).
 async function handleStoreHistoryClone(pageId: string, versionId: string, versionNumber: number): Promise<void> {
-  const cover = pendingCover?.pageId === pageId ? pendingCover.copyIds : [];
+  const mine = pendingCover?.pageId === pageId ? pendingCover : null;
   pendingCover = null;
+  if (!mine) return;
   try {
     const hist = await historyPage(false);
     if (!hist) return;
@@ -630,10 +639,14 @@ async function handleStoreHistoryClone(pageId: string, versionId: string, versio
     const keys = new Set<string>();
     for (const c of hist.children) {
       const info = infos.get(c.id)!;
-      const isNew = c.getPluginData('dg_history_pending') === pageId;
-      if (!isNew && !cover.includes(c.id)) continue;
+      const isNew = c.getPluginData('dg_history_pending') === mine.captureId;
+      if (!isNew && !mine.copyIds.includes(c.id)) continue;
       c.setPluginData('dg_history_versions', JSON.stringify([...info.versionIds, versionId]));
-      if (isNew) { c.setPluginData('dg_history_vnum', String(versionNumber)); c.setPluginData('dg_history_pending', ''); }
+      if (isNew) {
+        c.setPluginData('dg_history_vnum', String(versionNumber));
+        c.setPluginData('dg_history_pending', '');
+        c.setPluginData('dg_history_pending_at', '');
+      }
       keys.add(info.key);
     }
     const all = readHistoryFrames(hist);
@@ -662,7 +675,8 @@ function restoreFromCopy(hist: PageNode, page: PageNode, copyId: string, live: S
   for (const k of HISTORY_TAGS) fresh.setPluginData(k, '');
   fresh.locked = false;
   page.insertChild(live ? page.children.indexOf(live) : page.children.length, fresh);
-  propagateIdentity(stored as unknown as BranchNode, fresh as unknown as BranchNode);
+  // PAS propagateIdentity : elle ré-identifierait la copie (prise pour un doublon) → frame en double.
+  claimIdentity(fresh as unknown as BranchNode, stored.getPluginData('dg_history_asset') || undefined);
   live?.remove();
   return fresh;
 }

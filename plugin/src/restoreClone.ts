@@ -12,6 +12,8 @@ export interface HistoryFrameInfo {
   versionNumber?: number; // version de création (tri du nettoyage)
   hash?: string;          // empreinte du snapshot de la frame au moment de la copie
   gold: string[];         // versions Gold couvertes : copie jamais supprimée
+  pending: boolean;       // en attente de sauvegarde (capture en route ou abandonnée)
+  pendingAt?: number;     // heure de la capture (ms), pour reconnaître les abandons
 }
 
 /** Empreinte FNV-1a du snapshot : détecte qu'une frame a changé entre deux captures. */
@@ -42,6 +44,12 @@ export function framesToPrune(frames: HistoryFrameInfo[], key: string, keepN: nu
     .slice(keepN)
     .filter(f => f.gold.length === 0)
     .map(f => f.id);
+}
+
+/** Copies en attente abandonnées (capture jamais sauvegardée) : plus vieilles que `maxAgeMs`.
+ *  Seuil large : l'heure vient de l'ordinateur de chacun, les horloges peuvent différer. */
+export function stalePending(frames: HistoryFrameInfo[], now: number, maxAgeMs: number): string[] {
+  return frames.filter(f => f.pending && (f.pendingAt === undefined || now - f.pendingAt > maxAgeMs)).map(f => f.id);
 }
 
 type FrameSnap = { id: string; dg_id?: string };
