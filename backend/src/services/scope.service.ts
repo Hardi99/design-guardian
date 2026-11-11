@@ -50,3 +50,21 @@ export function classifyScopeChanges(
     ...(scopeOut.length > 0 ? { scopeOut } : {}),
   };
 }
+
+// Textes de périmètre, calculés sans IA : une capture qui ne fait qu'ajouter des frames au
+// suivi n'est ni vide (« Aucune modification ») ni un changement de design.
+type Named = { name: string };
+const list = (f: Named[]) => f.slice(0, 3).map(x => x.name).join(', ') + (f.length > 3 ? ` + ${f.length - 3} autres` : '');
+
+export function firstCheckpointNote(frames: Named[]): string {
+  return `Premier checkpoint · ${frames.length} frame${frames.length > 1 ? 's suivies' : ' suivie'} : ${list(frames)}`;
+}
+
+export function scopeNote(scopeIn: Named[] | undefined): string | null {
+  if (!scopeIn?.length) return null;
+  return `${scopeIn.length > 1 ? 'Nouvelles frames suivies' : 'Nouvelle frame suivie'} : ${list(scopeIn)}`;
+}
+
+export function withScopeNote(summary: string, scopeIn: Named[] | undefined): string {
+  return scopeIn?.length ? `${summary} · + ${list(scopeIn)} suivie${scopeIn.length > 1 ? 's' : ''}` : summary;
+}

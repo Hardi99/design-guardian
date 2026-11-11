@@ -23,6 +23,7 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
   const [pageName, setPageName] = useState('');
   const [capturable, setCapturable] = useState(true);
   const [q, setQ] = useState('');
+  const [listed, setListed] = useState(false);
 
   useEffect(() => {
     const h = (e: MessageEvent) => {
@@ -31,6 +32,7 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
       };
       if (m?.type !== 'FRAMES_LIST' || !m.frames) return;
       setFrames(m.frames);
+      setListed(true);
       setPageName(m.pageName ?? '');
       setCapturable(m.capturable ?? true);
     };
@@ -49,6 +51,14 @@ export function FramesPanel({ versions, onOpen }: { versions: Version[]; onOpen:
     return (
       <p class="text-[11px] text-dg-warning p-3">
         La page « {pageName} » est une page technique Design Guardian : elle n'est pas suivie.
+      </p>
+    );
+  }
+
+  if (listed && frames.length === 0) {
+    return (
+      <p class="text-[12px] text-dg-text-2 p-3 leading-snug">
+        La page « {pageName} » n'a pas encore de frame. Crée-en une (touche F) pour la suivre.
       </p>
     );
   }

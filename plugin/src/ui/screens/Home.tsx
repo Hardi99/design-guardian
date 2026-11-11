@@ -53,6 +53,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
   const [err,      setErr]      = useState<string | null>(null);
   const [pages,    setPages]    = useState<Array<{ id: string; name: string }>>([]);
   const [seen,     setSeen]     = useState<number | null>(null);
+  const [tracked,  setTracked]  = useState<number | null>(null); // null = liste pas encore reçue
   // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
   // après le fetch frais ne doit pas écraser l'affichage à jour.
   const freshLoaded = useRef(false);
@@ -81,7 +82,7 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
     const handler = (e: MessageEvent) => {
       const msg = e.data.pluginMessage as MainToUI;
       if (!msg) return;
-      if (msg.type === 'FRAMES_LIST') { setPages(msg.pages ?? []); return; }
+      if (msg.type === 'FRAMES_LIST') { setPages(msg.pages ?? []); setTracked(msg.frames.filter(f => f.tracked).length); return; }
       if (msg.type === 'SEEN') { if (msg.assetId === asset.id) { seenAtOpen.set(asset.id, msg.versionNumber); setSeen(msg.versionNumber); } return; }
       if (msg.type !== 'VERSION_CACHE' || msg.assetId !== asset.id || freshLoaded.current) return;
       setVersions(msg.versions);
@@ -153,7 +154,10 @@ export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
             Limite Free atteinte (10 checkpoints). <button class="underline font-semibold" onClick={onUpgrade}>Passer à Pro</button>
           </p>
         )}
-        <button class="btn-primary w-full flex items-center justify-center gap-2" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={limitReached}>
+        {tracked === 0 && !limitReached && (
+          <p class="text-[12px] text-dg-text-2 text-center">Coche au moins une frame à suivre pour capturer.</p>
+        )}
+        <button class="btn-primary w-full flex items-center justify-center gap-2" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={limitReached || tracked === 0}>
           <IconCamera /> Capturer un checkpoint
         </button>
       </div>

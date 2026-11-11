@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { getSupabaseClient, getSupabaseStorage } from '../config/supabase.js';
 import { netDelta } from '../services/net-delta.service.js';
+import { firstCheckpointNote, scopeNote } from '../services/scope.service.js';
 import { enrichDeltaGeometry } from '../services/geometry.service.js';
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { checkpointsCreatedTotal } from '../services/metrics.service.js';
@@ -77,13 +78,13 @@ checkpointsRouter.post('/', pluginMiddleware, zValidator('json', createCheckpoin
           modified: [], added: [], removed: [], totalChanges: 0,
           metadata: { v1CapturedAt: snap.capturedAt, v2CapturedAt: snap.capturedAt, epsilon: 0.01, processingTimeMs: 0 },
         };
-        return { analysisJson: enrichDeltaGeometry(base, snap, null), aiSummary: null };
+        return { analysisJson: enrichDeltaGeometry(base, snap, null), aiSummary: firstCheckpointNote(snap.root.children ?? []) };
       }
       const prevSnapshot = await downloadSnapshot(storage, prev.storage_path);
       if (!prevSnapshot) return { analysisJson: null, aiSummary: null };
       const delta = netDelta(prevSnapshot, body.snapshot_json as FigmaSnapshot);
       if (delta.totalChanges > 0) { pendingDelta = delta; return { analysisJson: delta, aiSummary: null }; }
-      return { analysisJson: delta, aiSummary: 'Aucune modification détectée.' };
+      return { analysisJson: delta, aiSummary: scopeNote(delta.scopeIn) ?? 'Aucune modification détectée.' };
     },
   });
 
