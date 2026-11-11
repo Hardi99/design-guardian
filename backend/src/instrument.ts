@@ -18,8 +18,9 @@ if (dsn) {
     environment: process.env.NODE_ENV ?? 'development',
     // 100 % en dev pour tout voir ; échantillonné en prod (quota free tier).
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    // Valeurs des variables locales dans les stack frames — debug plus rapide.
-    includeLocalVariables: true,
+    // Variables locales des stack frames : dev seulement. En prod elles contiendraient des clés
+    // d'API, tokens et snapshots envoyés à Sentry, et l'option ouvre le débogueur Node (inspector).
+    includeLocalVariables: process.env.NODE_ENV !== 'production',
     // Pas de dataCollection → PII conservateur (pas d'IP/headers/cookies) : on
     // capte l'erreur et le contexte requête sans données personnelles.
   });
