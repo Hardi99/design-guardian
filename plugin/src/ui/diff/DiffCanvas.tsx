@@ -80,8 +80,10 @@ export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSe
   const fitView = (): View => ({ scale: fit, tx: (box.w - frame.w * fit) / 2, ty: (box.h - frame.h * fit) / 2 });
   useEffect(() => { setView(fitView()); }, [fit, frame.w, frame.h, box.w, box.h]);
   // Surlignages affichés seulement une fois le rendu de la frame chargé (sinon encadrés « flottants » sur un canvas vide).
-  const [imgReady, setImgReady] = useState(false);
-  useEffect(() => { setImgReady(false); }, [url]);
+  // URL de l'image prête (et non un booléen) : changer d'image invalide seul l'état, sans course
+  // entre un onLoad instantané (PNG en cache) et un reset par useEffect, qui arrive après.
+  const [readyUrl, setReadyUrl] = useState<string | null>(null);
+  const imgReady = readyUrl === url;
 
   const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean; onBg: boolean; captured: boolean } | null>(null);
   const onWheel = (e: WheelEvent) => {
@@ -120,7 +122,7 @@ export function HighlightCanvas({ url, kind, frame, highlights, selectedId, onSe
       onDblClick={() => setView(fitView())}>
       <div class="absolute top-0 left-0 origin-top-left"
         style={{ width: `${frame.w}px`, height: `${frame.h}px`, transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})` }}>
-        <div class="absolute inset-0"><FrameImage url={url} kind={kind} onReady={() => setImgReady(true)} /></div>
+        <div class="absolute inset-0"><FrameImage url={url} kind={kind} onReady={() => setReadyUrl(url)} /></div>
         {imgReady && view.scale > 0 && highlights.map(hl => (
           <button key={hl.nodeId}
             aria-label={`Voir l'élément ${TONE_STYLE[hl.tone].label}`}
