@@ -2,6 +2,8 @@ import type {
   FigmaSnapshot,
   NodeSnapshot,
   FigmaColor,
+  FigmaFill,
+  FigmaStroke,
   NodeDelta,
   PropertyChange,
   DeltaJSON,
@@ -43,16 +45,27 @@ export class DiffService {
     const added: NodeDelta[] = [];
     const removed: NodeDelta[] = [];
 
+    // Instance échangée (autre composant ou variante) : Figma recrée ses calques internes avec
+    // de nouveaux ids. Ils font partie de l'échange (signalé sur l'instance), pas des ajouts/suppressions.
+    const swapped = new Set([...v1Map].filter(([k, e]) => {
+      const b = v2Map.get(k)?.node.component;
+      return !!e.node.component && !!b && e.node.component.key !== b.key;
+    }).map(([k]) => k));
+    const inSwap = (map: Map<string, FlatEntry>, key: string): boolean => {
+      for (let p = map.get(key)?.parentKey ?? null; p; p = map.get(p)?.parentKey ?? null) if (swapped.has(p)) return true;
+      return false;
+    };
+
     // Removed: in v1 but not in v2. nodeId = raw Figma id (downstream lookups key on it).
     for (const [key, { node }] of v1Map) {
-      if (!v2Map.has(key)) {
+      if (!v2Map.has(key) && !inSwap(v1Map, key)) {
         removed.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
 
     // Added: in v2 but not in v1.
     for (const [key, { node }] of v2Map) {
-      if (!v1Map.has(key)) {
+      if (!v1Map.has(key) && !inSwap(v2Map, key)) {
         added.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, changes: [] });
       }
     }
@@ -212,38 +225,9 @@ export class DiffService {
       this.compareNumeric(changes, 'strokeWeight', v1.strokeWeight, v2.strokeWeight, 'px');
     }
 
-    // Fills — compare all fills, not just the first
-    if (v1.fills.length !== v2.fills.length) {
-      changes.push({ property: 'fills', oldValue: `${v1.fills.length} fill(s)`, newValue: `${v2.fills.length} fill(s)`, delta: `${v1.fills.length} → ${v2.fills.length}` });
-    }
-    const fillCount = Math.min(v1.fills.length, v2.fills.length);
-    for (let i = 0; i < fillCount; i++) {
-      const f1 = v1.fills[i];
-      const f2 = v2.fills[i];
-      if (!f1 || !f2) continue;
-      const label = v1.fills.length > 1 ? `fill[${i}]` : 'fill';
-      if (f1.type !== f2.type) {
-        changes.push({ property: label, oldValue: f1.type, newValue: f2.type, delta: `${f1.type} → ${f2.type}` });
-        continue;
-      }
-      if (f1.type === 'SOLID' && f2.type === 'SOLID' && f1.color && f2.color && !this.colorsEqual(f1.color, f2.color)) {
-        const oldHex = this.colorToHex(f1.color);
-        const newHex = this.colorToHex(f2.color);
-        changes.push({ property: label, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
-      }
-      if ((f1.visible ?? true) !== (f2.visible ?? true)) {
-        changes.push({ property: `${label}.visible`, oldValue: f1.visible, newValue: f2.visible, delta: f2.visible ? 'masqué → visible' : 'visible → masqué' });
-      }
-    }
-
-    // Strokes (compare first solid stroke)
-    const v1Stroke = v1.strokes.find(s => s.type === 'SOLID' && s.color);
-    const v2Stroke = v2.strokes.find(s => s.type === 'SOLID' && s.color);
-    if (v1Stroke?.color && v2Stroke?.color && !this.colorsEqual(v1Stroke.color, v2Stroke.color)) {
-      const oldHex = this.colorToHex(v1Stroke.color);
-      const newHex = this.colorToHex(v2Stroke.color);
-      changes.push({ property: 'stroke', oldValue: oldHex, newValue: newHex, delta: `${oldHex} -> ${newHex}` });
-    }
+    // Peintures : remplissages ET contours, par le même comparateur (tous, pas seulement le premier).
+    this.comparePaints(changes, 'fill', v1.fills, v2.fills);
+    this.comparePaints(changes, 'stroke', v1.strokes, v2.strokes);
 
     // Vector paths (for VECTOR nodes)
     if (v1.vectorPaths && v2.vectorPaths) {
@@ -313,6 +297,15 @@ export class DiffService {
         const e2 = v2Effects[i];
         if (!e1 || !e2) continue;
         const label = v1Effects.length > 1 ? `effect[${i}]` : 'effect';
+        if (e1.type !== e2.type) {
+          changes.push({ property: `${label}.type`, oldValue: e1.type, newValue: e2.type, delta: `${e1.type} → ${e2.type}` });
+          continue;
+        }
+        if (e1.offset && e2.offset && (Math.abs(e1.offset.x - e2.offset.x) > this.EPSILON || Math.abs(e1.offset.y - e2.offset.y) > this.EPSILON)) {
+          const fmt = (o: { x: number; y: number }) => `(${o.x}, ${o.y})`;
+          changes.push({ property: `${label}.offset`, oldValue: fmt(e1.offset), newValue: fmt(e2.offset), delta: `${fmt(e1.offset)} → ${fmt(e2.offset)}` });
+        }
+        if (e1.spread !== undefined && e2.spread !== undefined) this.compareNumeric(changes, `${label}.spread`, e1.spread, e2.spread, 'px');
         if (e1.visible !== e2.visible)
           changes.push({ property: `${label}.visible`, oldValue: e1.visible, newValue: e2.visible, delta: e2.visible ? 'caché → visible' : 'visible → caché' });
         if (Math.abs(e1.radius - e2.radius) > this.EPSILON)
@@ -325,7 +318,115 @@ export class DiffService {
       }
     }
 
+    this.compareAutoLayout(changes, v1, v2);
+    this.compareComponent(changes, v1, v2);
+
     return changes;
+  }
+
+  /**
+   * Compare deux listes de peintures (remplissages ou contours). Propriétés émises : `<p>s`
+   * (nombre), `<p>` / `<p>[i]` (type ou couleur unie), `.gradient` (étapes, angle), `.image`,
+   * `.scaleMode`, `.visible`. Un champ absent d'un côté (capture ancienne) n'est pas comparé.
+   */
+  private comparePaints(
+    changes: PropertyChange[],
+    p: 'fill' | 'stroke',
+    a: readonly (FigmaFill | FigmaStroke)[],
+    b: readonly (FigmaFill | FigmaStroke)[],
+  ): void {
+    if (a.length !== b.length) {
+      changes.push({ property: `${p}s`, oldValue: `${a.length} ${p}(s)`, newValue: `${b.length} ${p}(s)`, delta: `${a.length} → ${b.length}` });
+    }
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      const p1 = a[i] as FigmaFill;
+      const p2 = b[i] as FigmaFill;
+      const label = a.length > 1 ? `${p}[${i}]` : p;
+      if (p1.type !== p2.type) {
+        changes.push({ property: label, oldValue: p1.type, newValue: p2.type, delta: `${p1.type} → ${p2.type}` });
+        continue;
+      }
+      if (p1.type === 'SOLID' && p1.color && p2.color && !this.colorsEqual(p1.color, p2.color)) {
+        const oldHex = this.colorToHex(p1.color);
+        const newHex = this.colorToHex(p2.color);
+        changes.push({ property: label, oldValue: oldHex, newValue: newHex, delta: `${oldHex} → ${newHex}` });
+      }
+      if (p1.gradientStops && p2.gradientStops && this.gradientChanged(p1, p2)) {
+        const hexes = (f: FigmaFill) => (f.gradientStops ?? []).map(st => this.colorToHex(st.color)).join(', ');
+        const h1 = hexes(p1), h2 = hexes(p2);
+        const angleChanged = p1.gradientAngle !== undefined && p2.gradientAngle !== undefined && Math.abs(p1.gradientAngle - p2.gradientAngle) > 1;
+        const delta = h1 !== h2 ? `${h1} → ${h2}`
+          : angleChanged ? `angle ${Math.round(p1.gradientAngle!)}° → ${Math.round(p2.gradientAngle!)}°`
+          : 'positions des couleurs modifiées';
+        changes.push({ property: `${label}.gradient`, oldValue: h1, newValue: h2, delta });
+      }
+      if (p1.imageHash !== undefined && p2.imageHash !== undefined && p1.imageHash !== p2.imageHash) {
+        changes.push({ property: `${label}.image`, oldValue: p1.imageHash, newValue: p2.imageHash, delta: 'image remplacée' });
+      }
+      if (p1.scaleMode !== undefined && p2.scaleMode !== undefined && p1.scaleMode !== p2.scaleMode) {
+        changes.push({ property: `${label}.scaleMode`, oldValue: p1.scaleMode, newValue: p2.scaleMode, delta: `${p1.scaleMode} → ${p2.scaleMode}` });
+      }
+      if (p1.visible !== undefined && p2.visible !== undefined && p1.visible !== p2.visible) {
+        changes.push({ property: `${label}.visible`, oldValue: p1.visible, newValue: p2.visible, delta: p2.visible ? 'masqué → visible' : 'visible → masqué' });
+      }
+    }
+  }
+
+  // Auto-layout : direction, espacement, marges (une seule propriété), alignements, retour à la
+  // ligne. Comparé seulement si présent des deux côtés (capture ancienne → rien).
+  private compareAutoLayout(changes: PropertyChange[], v1: NodeSnapshot, v2: NodeSnapshot): void {
+    if (v1.layoutMode !== undefined && v2.layoutMode !== undefined && v1.layoutMode !== v2.layoutMode) {
+      changes.push({ property: 'layoutMode', oldValue: v1.layoutMode, newValue: v2.layoutMode, delta: `${v1.layoutMode} → ${v2.layoutMode}` });
+    }
+    const a = v1.autoLayout, b = v2.autoLayout;
+    if (!a || !b) return;
+    this.compareNumeric(changes, 'itemSpacing', a.itemSpacing, b.itemSpacing, 'px');
+    const pad = (x: typeof a) => [x.paddingTop, x.paddingRight, x.paddingBottom, x.paddingLeft];
+    const p1 = pad(a), p2 = pad(b);
+    if (p1.some((v, i) => Math.abs(v - (p2[i] ?? v)) > this.EPSILON)) {
+      changes.push({ property: 'padding', oldValue: p1.join('/'), newValue: p2.join('/'), delta: `${p1.join('/')} → ${p2.join('/')}` });
+    }
+    for (const k of ['primaryAxisAlignItems', 'counterAxisAlignItems', 'layoutWrap'] as const) {
+      if (a[k] !== b[k]) changes.push({ property: k, oldValue: a[k], newValue: b[k], delta: `${a[k]} → ${b[k]}` });
+    }
+  }
+
+  // Instance : variantes changées (une propriété chacune) ; « composant échangé » si le composant
+  // principal change HORS d'un même jeu de variantes, ou dans le même jeu sans variante changée
+  // (dans le doute, on montre). Jeu identifié par sa clé (setKey) — deux bibliothèques peuvent
+  // avoir des jeux homonymes — ; repli sur le nom pour les captures antérieures à setKey.
+  private compareComponent(changes: PropertyChange[], v1: NodeSnapshot, v2: NodeSnapshot): void {
+    const a = v1.component, b = v2.component;
+    if (!a || !b) return;
+    const sameSet = a.setKey !== undefined && b.setKey !== undefined
+      ? a.setKey === b.setKey
+      : a.set !== undefined && a.set === b.set;
+    const va = a.variant ?? {}, vb = b.variant ?? {};
+    const variantChanges: PropertyChange[] = [];
+    if (sameSet) {
+      for (const k of new Set([...Object.keys(va), ...Object.keys(vb)])) {
+        if (va[k] !== vb[k]) {
+          variantChanges.push({ property: `variant.${k}`, oldValue: va[k], newValue: vb[k], delta: `${String(va[k] ?? '—')} → ${String(vb[k] ?? '—')}` });
+        }
+      }
+    }
+    if (a.key !== b.key && variantChanges.length === 0) {
+      const label = (c: typeof a) => (c.set ? `${c.set} (${c.name})` : c.name);
+      changes.push({ property: 'component', oldValue: label(a), newValue: label(b), delta: `${label(a)} → ${label(b)}` });
+      return;
+    }
+    changes.push(...variantChanges);
+  }
+
+  // Étapes (position ± ε, couleur) ou angle (± 1°) différents.
+  private gradientChanged(a: FigmaFill, b: FigmaFill): boolean {
+    const s1 = a.gradientStops ?? [], s2 = b.gradientStops ?? [];
+    if (s1.length !== s2.length) return true;
+    if (a.gradientAngle !== undefined && b.gradientAngle !== undefined && Math.abs(a.gradientAngle - b.gradientAngle) > 1) return true;
+    return s1.some((st, i) => {
+      const other = s2[i];
+      return !other || Math.abs(st.position - other.position) > this.EPSILON || !this.colorsEqual(st.color, other.color);
+    });
   }
 
   private compareNumeric(

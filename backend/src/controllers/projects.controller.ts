@@ -1,3 +1,4 @@
+import { withPages } from '../services/asset-page.service.js';
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -7,13 +8,19 @@ import { createProjectSchema, autoInitSchema, splitSchema } from '../types/api.j
 import { pluginMiddleware } from '../middleware/plugin.middleware.js';
 import { planSplit } from '../services/split.service.js';
 import type { ProjectResponse, ProjectsListResponse, AutoInitResponse, ErrorResponse } from '../types/api.js';
+import type { Asset } from '../types/database.js';
 import type { AppEnv } from '../types/hono.js';
 
 const projectsRouter = new Hono<AppEnv>();
 
 async function loadAssets(supabase: SupabaseClient, projectId: string) {
   const { data } = await supabase.from('assets').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
-  return data ?? [];
+  const assets = (data ?? []) as Asset[];
+  if (assets.length === 0) return withPages(assets, []);
+  // Page suivie par chaque historique (cf. asset-page.service) : le plugin ouvre celui de la page courante.
+  const { data: versions } = await supabase.from('versions').select('asset_id, figma_node_id')
+    .in('asset_id', assets.map(a => a.id)).order('created_at', { ascending: true });
+  return withPages(assets, versions ?? []);
 }
 
 // Simple in-memory rate limiter: max 10 auto-init calls per IP per minute.

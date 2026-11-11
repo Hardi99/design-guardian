@@ -79,3 +79,44 @@ describe('formatNodeChanges', () => {
     expect(r).toEqual([{ kind: 'color', label: 'Couleur', from: '#FFFFFF', to: '#FF0101' }]);
   });
 });
+
+describe('formatChange — trous de détection', () => {
+  const f = (property: string, oldValue: unknown, newValue: unknown, delta?: string) => formatChange(ch({ property, oldValue, newValue, delta }));
+
+  it('dégradé (y compris indexé)', () => {
+    expect(f('fill.gradient', '#FF0000, #0000FF', '#00FF00, #0000FF')).toEqual({ kind: 'text', label: 'Dégradé', from: '#FF0000, #0000FF', to: '#00FF00, #0000FF' });
+    expect(f('fill[1].gradient', 'a', 'b').label).toBe('Dégradé');
+  });
+  it('image remplacée', () => {
+    expect(f('fill.image', 'h1', 'h2', 'image remplacée')).toEqual({ kind: 'generic', label: 'Image', detail: 'image remplacée' });
+  });
+  it('contours : nombre, couleur indexée, visibilité', () => {
+    expect(f('strokes', '0 stroke(s)', '1 stroke(s)', '0 → 1')).toEqual({ kind: 'generic', label: 'Contour', detail: '0 → 1' });
+    expect(f('stroke[1]', '#FF0000', '#00FF00')).toEqual({ kind: 'color', label: 'Contour', from: '#FF0000', to: '#00FF00' });
+    expect(f('stroke.visible', true, false)).toEqual({ kind: 'visibility', label: 'Contour', visible: false });
+  });
+  it('ombre : décalage, type, étalement', () => {
+    expect(f('effect.offset', '(0, 2)', '(0, 6)')).toEqual({ kind: 'text', label: 'Ombre', from: '(0, 2)', to: '(0, 6)' });
+    expect(f('effect[1].type', 'DROP_SHADOW', 'INNER_SHADOW').label).toBe('Ombre');
+    expect(f('effect.spread', 0, 4, '+4.00px')).toEqual({ kind: 'generic', label: 'Ombre', detail: '+4.00px' });
+  });
+  it('auto-layout', () => {
+    expect(f('layoutMode', 'HORIZONTAL', 'VERTICAL').label).toBe('Direction');
+    expect(f('itemSpacing', 8, 12, '+4.00px')).toEqual({ kind: 'generic', label: 'Espacement', detail: '+4.00px' });
+    expect(f('padding', '8/16/8/16', '12/16/8/16')).toEqual({ kind: 'text', label: 'Marges intérieures', from: '8/16/8/16', to: '12/16/8/16' });
+    expect(f('primaryAxisAlignItems', 'MIN', 'CENTER').label).toBe('Alignement');
+    expect(f('counterAxisAlignItems', 'MIN', 'CENTER').label).toBe('Alignement');
+    expect(f('layoutWrap', 'NO_WRAP', 'WRAP').label).toBe('Retour à la ligne');
+  });
+  it('composant et variante', () => {
+    expect(f('component', 'Button', 'Tag')).toEqual({ kind: 'text', label: 'Composant', from: 'Button', to: 'Tag' });
+    expect(f('variant.Size', 'Large', 'Small')).toEqual({ kind: 'text', label: 'Variante Size', from: 'Large', to: 'Small' });
+  });
+});
+
+describe('formatChange — dégradé aux couleurs inchangées', () => {
+  it('mêmes couleurs avant/après → generic avec le delta (angle ou positions)', () => {
+    expect(formatChange(ch({ property: 'fill.gradient', oldValue: '#FF0000, #0000FF', newValue: '#FF0000, #0000FF', delta: 'angle 0° → 90°' })))
+      .toEqual({ kind: 'generic', label: 'Dégradé', detail: 'angle 0° → 90°' });
+  });
+});

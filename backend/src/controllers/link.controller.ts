@@ -40,6 +40,14 @@ linkRouter.post('/start', pluginMiddleware, zValidator('json', linkStartSchema),
   return c.json({ code, approve_url: `${base}/link?code=${code}`, expires_at }, 201);
 });
 
+// GET /api/link/pricing — « S'abonner » du plugin : redirige vers la page tarifs de la webapp
+// (le plugin ne connaît pas son URL ; figma.openExternal ouvre ce lien dans le navigateur).
+linkRouter.get('/pricing', (c) => {
+  const base = getEnv().WEBAPP_URL;
+  if (!base) return c.json<ErrorResponse>({ error: 'WEBAPP_URL not configured' }, 503);
+  return c.redirect(`${base}/pricing`, 302);
+});
+
 // GET /api/link/status?code= — le plugin poll (auth X-API-Key). Livre le token UNE fois.
 linkRouter.get('/status', pluginMiddleware, async (c) => {
   const code = c.req.query('code');

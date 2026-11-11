@@ -29,6 +29,8 @@ const pct = (v: unknown): number => (typeof v === 'number' ? Math.round(v * 100)
 // Traduit UN changement de propriété en descripteur designer. Biais sûr : inconnu → generic.
 // (x/y/width/height sont fusionnés en amont par formatNodeChanges, pas ici.)
 export function formatChange(c: PropertyChange): ReadableChange {
+  const extra = formatDetectionChange(c);
+  if (extra) return extra;
   switch (c.property) {
     case 'fill':       return { kind: 'color', label: 'Couleur', from: str(c.oldValue), to: str(c.newValue) };
     case 'stroke':     return { kind: 'color', label: 'Contour', from: str(c.oldValue), to: str(c.newValue) };
@@ -61,4 +63,37 @@ export function formatNodeChanges(nd: NodeDelta): ReadableChange[] {
   if (hasMove)   out.push({ kind: 'move', label: 'Position', dx, dy });
   if (hasResize) out.push({ kind: 'resize', label: 'Taille', dw, dh });
   return out;
+}
+
+// Propriétés ajoutées par le comblement des trous de détection (peintures indexées, ombres,
+// auto-layout, composants). Renvoie null si la propriété n'en fait pas partie.
+function formatDetectionChange(c: PropertyChange): ReadableChange | null {
+  const p = c.property;
+  const text = (label: string): ReadableChange => ({ kind: 'text', label, from: str(c.oldValue), to: str(c.newValue) });
+  const generic = (label: string): ReadableChange => ({ kind: 'generic', label, detail: c.delta ?? `${str(c.oldValue)} → ${str(c.newValue)}` });
+  if (/^(fill|stroke)(\[\d+\])?\.gradient$/.test(p)) {
+    // Couleurs identiques : seul l'angle ou les positions ont bougé — le delta le dit.
+    return str(c.oldValue) === str(c.newValue) ? generic('Dégradé') : text('Dégradé');
+  }
+  if (/^(fill|stroke)(\[\d+\])?\.image$/.test(p)) return generic('Image');
+  if (p === 'strokes') return generic('Contour');
+  if (/^stroke(\[\d+\])?\.visible$/.test(p)) return { kind: 'visibility', label: 'Contour', visible: c.newValue === true };
+  if (/^stroke(\[\d+\])?$/.test(p)) {
+    return /^#/.test(str(c.oldValue)) && /^#/.test(str(c.newValue))
+      ? { kind: 'color', label: 'Contour', from: str(c.oldValue), to: str(c.newValue) }
+      : text('Contour');
+  }
+  if (/^effect(\[\d+\])?\.(offset|type)$/.test(p)) return text('Ombre');
+  if (/^effect(\[\d+\])?\.spread$/.test(p)) return generic('Ombre');
+  switch (p) {
+    case 'layoutMode':            return text('Direction');
+    case 'itemSpacing':           return generic('Espacement');
+    case 'padding':               return text('Marges intérieures');
+    case 'primaryAxisAlignItems':
+    case 'counterAxisAlignItems': return text('Alignement');
+    case 'layoutWrap':            return text('Retour à la ligne');
+    case 'component':             return text('Composant');
+  }
+  if (p.startsWith('variant.')) return text(`Variante ${p.slice('variant.'.length)}`);
+  return null;
 }

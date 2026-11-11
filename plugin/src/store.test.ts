@@ -30,13 +30,13 @@ describe('état initial', () => {
 // ─── Setters ──────────────────────────────────────────────────────────────────
 
 describe('setScreen', () => {
-  it('passe à assets', () => {
-    getState().setScreen('assets')
-    expect(getState().screen).toBe('assets')
+  it('passe à home', () => {
+    getState().setScreen('home')
+    expect(getState().screen).toBe('home')
   })
 
-  it('cycle complet loading → assets → home → diff → checkpoint → loading', () => {
-    const screens = ['assets', 'home', 'diff', 'checkpoint', 'loading'] as const
+  it('cycle complet loading → home → diff → checkpoint → loading', () => {
+    const screens = ['home', 'diff', 'checkpoint', 'loading'] as const
     for (const s of screens) {
       getState().setScreen(s)
       expect(getState().screen).toBe(s)

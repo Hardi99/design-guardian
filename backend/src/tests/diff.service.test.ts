@@ -781,3 +781,175 @@ describe('éléments flottants', () => {
     expect(svc.compareSnapshots(v2, v2).totalChanges).toBe(0);
   });
 });
+
+// ─── Trous de détection — peintures (remplissages ET contours) ───────────────
+
+describe('trous de détection — peintures', () => {
+  const svc = new DiffService();
+  const red = { r: 1, g: 0, b: 0, a: 1 }, green = { r: 0, g: 1, b: 0, a: 1 }, blue = { r: 0, g: 0, b: 1, a: 1 };
+  const grad = (c: typeof red, pos = 0.3) => ({ type: 'GRADIENT_LINEAR' as const, gradientStops: [{ position: 0, color: c }, { position: pos, color: blue }], gradientAngle: 0 });
+  const props = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) =>
+    svc.compareSnapshots(makeSnapshot(a), makeSnapshot(b)).modified[0]?.changes.map(c => c.property) ?? [];
+
+  it('étape de dégradé qui change de couleur → fill.gradient', () => {
+    expect(props({ fills: [grad(red)] }, { fills: [grad(green)] })).toEqual(['fill.gradient']);
+  });
+
+  it('bruit flottant sur une position d\'étape → aucun changement', () => {
+    expect(props({ fills: [grad(red, 0.3)] }, { fills: [grad(red, 0.300000001)] })).toEqual([]);
+  });
+
+  it('image remplacée → fill.image « image remplacée »', () => {
+    const d = svc.compareSnapshots(
+      makeSnapshot({ fills: [{ type: 'IMAGE', imageHash: 'a', scaleMode: 'FILL' } as never] }),
+      makeSnapshot({ fills: [{ type: 'IMAGE', imageHash: 'b', scaleMode: 'FILL' } as never] }));
+    const c = d.modified[0]?.changes.find(x => x.property === 'fill.image');
+    expect(c?.delta).toBe('image remplacée');
+  });
+
+  it('contour ajouté → strokes (0 → 1)', () => {
+    expect(props({ strokes: [] }, { strokes: [{ type: 'SOLID', color: red }] })).toEqual(['strokes']);
+  });
+
+  it('second contour qui change de couleur → stroke[1]', () => {
+    expect(props(
+      { strokes: [{ type: 'SOLID', color: red }, { type: 'SOLID', color: red }] },
+      { strokes: [{ type: 'SOLID', color: red }, { type: 'SOLID', color: green }] },
+    )).toEqual(['stroke[1]']);
+  });
+
+  it('contour masqué → stroke.visible', () => {
+    expect(props({ strokes: [{ type: 'SOLID', color: red, visible: true }] }, { strokes: [{ type: 'SOLID', color: red, visible: false }] }))
+      .toEqual(['stroke.visible']);
+  });
+
+  it('capture ancienne (contour sans visible d\'un côté) → aucun stroke.visible', () => {
+    expect(props({ strokes: [{ type: 'SOLID', color: red }] }, { strokes: [{ type: 'SOLID', color: red, visible: true }] }))
+      .toEqual([]);
+  });
+});
+
+// ─── Trous de détection — ombres, auto-layout, composants ────────────────────
+
+describe('trous de détection — ombres, auto-layout, composants', () => {
+  const svc = new DiffService();
+  const black = { r: 0, g: 0, b: 0, a: 0.25 };
+  const shadow = (type: 'DROP_SHADOW' | 'INNER_SHADOW', y: number) => ({ type, visible: true, radius: 4, color: black, offset: { x: 0, y } });
+  const al = (o: Partial<NonNullable<NodeSnapshot['autoLayout']>> = {}) => ({
+    itemSpacing: 8, paddingTop: 8, paddingRight: 16, paddingBottom: 8, paddingLeft: 16,
+    primaryAxisAlignItems: 'MIN', counterAxisAlignItems: 'CENTER', layoutWrap: 'NO_WRAP', ...o,
+  });
+  const changes = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) =>
+    svc.compareSnapshots(makeSnapshot(a), makeSnapshot(b)).modified[0]?.changes ?? [];
+  const props = (a: Partial<NodeSnapshot>, b: Partial<NodeSnapshot>) => changes(a, b).map(c => c.property);
+
+  it('décalage d\'ombre → effect.offset', () => {
+    expect(props({ effects: [shadow('DROP_SHADOW', 2)] }, { effects: [shadow('DROP_SHADOW', 6)] })).toEqual(['effect.offset']);
+  });
+
+  it('ombre portée → intérieure → effect.type', () => {
+    expect(props({ effects: [shadow('DROP_SHADOW', 2)] }, { effects: [shadow('INNER_SHADOW', 2)] })).toEqual(['effect.type']);
+  });
+
+  it('direction HORIZONTAL → VERTICAL → layoutMode', () => {
+    expect(props({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'VERTICAL', autoLayout: al() })).toEqual(['layoutMode']);
+  });
+
+  it('espacement 8 → 12 → itemSpacing (+4.00px)', () => {
+    const c = changes({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'HORIZONTAL', autoLayout: al({ itemSpacing: 12 }) });
+    expect(c.map(x => x.property)).toEqual(['itemSpacing']);
+    expect(c[0].delta).toBe('+4.00px');
+  });
+
+  it('marge haute 8 → 12 → une seule propriété padding', () => {
+    const c = changes({ layoutMode: 'HORIZONTAL', autoLayout: al() }, { layoutMode: 'HORIZONTAL', autoLayout: al({ paddingTop: 12 }) });
+    expect(c.map(x => x.property)).toEqual(['padding']);
+    expect(c[0].delta).toBe('8/16/8/16 → 12/16/8/16');
+  });
+
+  // Données réalistes : dans Figma, le nom d'un composant-variante est « Prop=Valeur ».
+  it('composant échangé (jeux différents) → component, libellé « jeu (variante) »', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Tag', setKey: 's2', variant: { Size: 'Large' } } });
+    expect(c.map(x => x.property)).toEqual(['component']);
+    expect(c[0].delta).toBe('Button (Size=Large) → Tag (Size=Large)');
+  });
+
+  it('composant sans jeu de variantes → libellé = son nom', () => {
+    const c = changes({ type: 'INSTANCE', component: { key: 'k1', name: 'Logo' } }, { type: 'INSTANCE', component: { key: 'k2', name: 'Icône' } });
+    expect(c[0].delta).toBe('Logo → Icône');
+  });
+
+  it('deux jeux HOMONYMES (bibliothèques différentes), mêmes variantes → component quand même', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Button', setKey: 's2', variant: { Size: 'Large' } } });
+    expect(c.map(x => x.property)).toEqual(['component']);
+  });
+
+  it('même jeu, composant différent, aucune variante changée → component (dans le doute, on montre)', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } });
+    expect(c.map(x => x.property)).toEqual(['component']);
+  });
+
+  it('variante changée dans le même jeu → uniquement variant.Size', () => {
+    const c = changes(
+      { type: 'INSTANCE', component: { key: 'k1', name: 'Size=Large', set: 'Button', setKey: 's1', variant: { Size: 'Large' } } },
+      { type: 'INSTANCE', component: { key: 'k2', name: 'Size=Small', set: 'Button', setKey: 's1', variant: { Size: 'Small' } } });
+    expect(c.map(x => x.property)).toEqual(['variant.Size']);
+    expect(c[0].delta).toBe('Large → Small');
+  });
+
+  it('capture ancienne (ni autoLayout ni component d\'un côté) → aucun changement', () => {
+    expect(props(
+      { type: 'INSTANCE', layoutMode: 'HORIZONTAL' },
+      { type: 'INSTANCE', layoutMode: 'HORIZONTAL', autoLayout: al({ itemSpacing: 40 }), component: { key: 'k2', name: 'Tag' } },
+    )).toEqual([]);
+  });
+});
+
+describe('trous de détection — dégradé dont seule la géométrie change', () => {
+  const svc = new DiffService();
+  const red = { r: 1, g: 0, b: 0, a: 1 }, blue = { r: 0, g: 0, b: 1, a: 1 };
+  const g = (angle: number, pos = 1) => ({ type: 'GRADIENT_LINEAR' as const, gradientStops: [{ position: 0, color: red }, { position: pos, color: blue }], gradientAngle: angle });
+  const change = (a: number, b: number, pa = 1, pb = 1) =>
+    svc.compareSnapshots(makeSnapshot({ fills: [g(a, pa)] }), makeSnapshot({ fills: [g(b, pb)] })).modified[0]?.changes.find(c => c.property === 'fill.gradient');
+
+  it('angle seul → delta « angle 0° → 90° »', () => {
+    expect(change(0, 90)?.delta).toBe('angle 0° → 90°');
+  });
+  it("position d'étape seule → delta « positions des couleurs modifiées »", () => {
+    expect(change(0, 0, 1, 0.6)?.delta).toBe('positions des couleurs modifiées');
+  });
+});
+
+describe('échange de composant — les calques internes recréés par Figma ne sont pas du bruit', () => {
+  // Données réelles (v2 de « Page 2 ») : à l'échange, Figma recrée les calques de l'instance
+  // avec de nouveaux ids (I<instance>;<calque du composant>).
+  const inst = (key: string, kids: Array<[string, string]>) => makeRoot({
+    id: 'page', type: 'PAGE', children: [makeRoot({
+      id: '5:1', name: 'Swap-DG', type: 'FRAME', children: [makeRoot({
+        id: '5:2', name: key === 'k1' ? 'Button' : 'Tag', type: 'INSTANCE', component: { key, name: key === 'k1' ? 'Button' : 'Tag' },
+        children: kids.map(([id, name]) => makeRoot({ id, name })),
+      })],
+    })],
+  });
+  it('seul l’échange est signalé : ni suppressions ni ajouts', () => {
+    const v1 = { ...makeSnapshot(), root: inst('k1', [['I5:2;1:1', 'Rectangle 1'], ['I5:2;1:2', 'Button']]) };
+    const v2 = { ...makeSnapshot(), root: inst('k2', [['I5:2;3:1', 'Tag'], ['I5:2;3:2', 'Rectangle 1'], ['I5:2;3:3', 'Button']]) };
+    const d = svc.compareSnapshots(v1, v2);
+    expect(d.removed).toEqual([]);
+    expect(d.added).toEqual([]);
+    expect(d.modified.map(m => m.changes.map(c => c.delta))).toEqual([['Button → Tag']]);
+  });
+  it('un calque ajouté HORS de l’instance échangée reste signalé', () => {
+    const v1 = { ...makeSnapshot(), root: inst('k1', []) };
+    const v2root = inst('k2', []);
+    v2root.children![0].children!.push(makeRoot({ id: '5:9', name: 'Badge' }));
+    const d = svc.compareSnapshots(v1, { ...makeSnapshot(), root: v2root });
+    expect(d.added.map(a => a.nodeName)).toEqual(['Badge']);
+  });
+});

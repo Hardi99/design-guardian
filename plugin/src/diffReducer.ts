@@ -60,7 +60,7 @@ export interface DiffState {
   heavyDone:       boolean
   status:          Version['status']
   statusBusy:      boolean
-  restoring:       boolean
+  confirmingRestore: boolean  // « Restaurer » cliqué, en attente de confirmation
   applyingToFigma: boolean
   restoreMsg:      string | null
 }
@@ -71,8 +71,8 @@ export type DiffAction =
   | { type: 'STATUS_START' }
   | { type: 'STATUS_SUCCESS'; status: Version['status'] }
   | { type: 'STATUS_ERROR';   err: string }
-  | { type: 'RESTORE_START' }
-  | { type: 'RESTORE_ERROR';  err: string }
+  | { type: 'ASK_RESTORE' }
+  | { type: 'CANCEL_RESTORE' }
   | { type: 'APPLY_START' }
   | { type: 'APPLY_COMPLETE'; applied: number; skipped?: number; restoreMsg?: string }
   | { type: 'APPLY_ERROR';    err: string }
@@ -89,9 +89,9 @@ export function diffReducer(state: DiffState, action: DiffAction): DiffState {
     case 'STATUS_START':   return { ...state, statusBusy: true }
     case 'STATUS_SUCCESS': return { ...state, statusBusy: false, status: action.status }
     case 'STATUS_ERROR':   return { ...state, statusBusy: false, err: action.err }
-    case 'RESTORE_START':  return { ...state, restoring: true }
-    case 'RESTORE_ERROR':  return { ...state, restoring: false, err: action.err }
-    case 'APPLY_START':    return { ...state, applyingToFigma: true, restoreMsg: null }
+    case 'ASK_RESTORE':    return { ...state, confirmingRestore: true }
+    case 'CANCEL_RESTORE': return { ...state, confirmingRestore: false }
+    case 'APPLY_START':    return { ...state, confirmingRestore: false, applyingToFigma: true, restoreMsg: null }
     case 'APPLY_COMPLETE': return {
       ...state, applyingToFigma: false,
       restoreMsg: action.restoreMsg ?? `✓ ${action.applied} nœud(s) restauré(s)${action.skipped ? ` · ${action.skipped} ignoré(s)` : ''}`,
@@ -117,7 +117,7 @@ export function initialDiffState(status: Version['status']): DiffState {
   return {
     data: null, loading: true, err: null,
     heavyDone: false, status,
-    statusBusy: false, restoring: false, applyingToFigma: false,
+    statusBusy: false, confirmingRestore: false, applyingToFigma: false,
     restoreMsg: null,
   }
 }

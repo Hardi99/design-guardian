@@ -5,9 +5,15 @@ import { aiSummariesGeneratedTotal } from './metrics.service.js';
 import { sendCheckpointNotification } from './notification.service.js';
 import { broadcastSummary } from './realtime.service.js';
 import type { DeltaJSON } from '../types/figma.js';
+import { withScopeNote } from './scope.service.js';
 
 let openai: OpenAIService | null = null;
 const getOpenAI = () => (openai ??= new OpenAIService(getEnv().OPENAI_API_KEY));
+
+/** Résumé IA d'un diff, sans l'écrire en base (comparaison de deux versions). null si l'IA échoue. */
+export async function summarizeDelta(delta: DeltaJSON, authorName: string): Promise<string | null> {
+  try { return await getOpenAI().generatePatchNote(delta, authorName); } catch { return null; }
+}
 
 export interface GenerateSummaryParams {
   versionId: string;
@@ -26,7 +32,7 @@ export interface GenerateSummaryParams {
 export async function generateAndStoreSummary(p: GenerateSummaryParams): Promise<boolean> {
   let summary: string;
   try {
-    summary = await getOpenAI().generatePatchNote(p.delta, p.authorName);
+    summary = withScopeNote(await getOpenAI().generatePatchNote(p.delta, p.authorName), p.delta.scopeIn);
   } catch {
     aiSummariesGeneratedTotal.inc({ status: 'error' });
     return false;

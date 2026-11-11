@@ -14,7 +14,7 @@ describe('initialDiffState', () => {
     expect(base.err).toBeNull()
     expect(base.heavyDone).toBe(false)
     expect(base.statusBusy).toBe(false)
-    expect(base.restoring).toBe(false)
+    expect(base.confirmingRestore).toBe(false)
     expect(base.applyingToFigma).toBe(false)
     expect(base.restoreMsg).toBeNull()
   })
@@ -124,18 +124,24 @@ describe('STATUS_START / SUCCESS / ERROR', () => {
   })
 })
 
-// ─── Restore checkpoint ───────────────────────────────────────────────────────
+// ─── Confirmation de la restauration ─────────────────────────────────────────
+// Restaurer réécrit le canvas : un clic demande confirmation, la confirmation lance l'action.
 
-describe('RESTORE_START / ERROR', () => {
-  it('START active restoring', () => {
-    expect(diffReducer(base, { type: 'RESTORE_START' }).restoring).toBe(true)
+describe('ASK_RESTORE / CANCEL_RESTORE', () => {
+  it('ASK passe en attente de confirmation', () => {
+    expect(diffReducer(base, { type: 'ASK_RESTORE' }).confirmingRestore).toBe(true)
   })
 
-  it('ERROR désactive restoring et set err', () => {
-    const s = diffReducer(base, { type: 'RESTORE_START' })
-    const next = diffReducer(s, { type: 'RESTORE_ERROR', err: 'conflict' })
-    expect(next.restoring).toBe(false)
-    expect(next.err).toBe('conflict')
+  it('CANCEL annule la demande', () => {
+    const s = diffReducer(base, { type: 'ASK_RESTORE' })
+    expect(diffReducer(s, { type: 'CANCEL_RESTORE' }).confirmingRestore).toBe(false)
+  })
+
+  it('APPLY_START (confirmation) referme la demande', () => {
+    const s = diffReducer(base, { type: 'ASK_RESTORE' })
+    const next = diffReducer(s, { type: 'APPLY_START' })
+    expect(next.confirmingRestore).toBe(false)
+    expect(next.applyingToFigma).toBe(true)
   })
 })
 

@@ -45,6 +45,8 @@ export const SIGNIFICANCE_THRESHOLDS: Record<string, number> = {
   cornerRadius: 1, strokeWeight: 1,  // px
   opacity: 0.05,                     // 0..1
   rotation: 1,                       // degrés
+  itemSpacing: 1,                    // px — espacement d'auto-layout
+  'effect.spread': 1,                // px — étalement d'ombre
 };
 
 function magnitude(c: PropertyChange): number | null {
@@ -69,7 +71,8 @@ export function scoreChange(change: PropertyChange, ctx?: LayoutContext): Signif
     if (p === 'height' && (ctx.layoutSizingVertical   === 'FILL' || ctx.layoutSizingVertical   === 'HUG')) return 'minor';
   }
   if (QUALITATIVE.has(change.property)) return 'notable';
-  const threshold = SIGNIFICANCE_THRESHOLDS[change.property];
+  // Propriété indexée (effect[1].spread) : même seuil que sa forme simple (effect.spread).
+  const threshold = SIGNIFICANCE_THRESHOLDS[change.property] ?? SIGNIFICANCE_THRESHOLDS[change.property.replace(/\[\d+\]/, '')];
   if (threshold === undefined) return 'notable';
   const mag = magnitude(change);
   if (mag === null) return 'notable';

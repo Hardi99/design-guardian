@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureNodeIdentity, readDgId, propagateIdentity, findByDgId, adoptMovedIdentities, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
+import { ensureNodeIdentity, readDgId, propagateIdentity, findByDgId, adoptMovedIdentities, claimIdentity, type IdentifiableNode, type BranchNode } from './figmaIdentity.js';
 
 // Faux nœud minimal : implémente uniquement ce que l'adaptateur utilise.
 function fakeNode(id: string, data: Record<string, string> = {}): IdentifiableNode {
@@ -169,5 +169,22 @@ describe('adoptMovedIdentities', () => {
     await adoptMovedIdentities([root], lookup([])); // même si la recherche ne trouvait pas l'original
     expect(ensureNodeIdentity(original)).toBe('ABC');
     expect(ensureNodeIdentity(copy)).not.toBe('ABC');
+  });
+});
+
+describe('claimIdentity — frame restaurée depuis une copie d’historique', () => {
+  // Le clone d'une copie hérite de el_uid ET de el_owner = id de la frame d'ORIGINE.
+  it('garde l’identité (frame et calques) et en devient propriétaire : pas prise pour un doublon', () => {
+    const child: Record<string, string> = { el_uid: 'KID', el_owner: 'orig-2' };
+    const root: Record<string, string> = { el_uid: 'FRAME', el_owner: 'orig-1' };
+    const fresh = fakeTree('new-1', root, [fakeTree('new-2', child)]);
+    claimIdentity(fresh, 'FRAME');
+    expect(ensureNodeIdentity(fresh)).toBe('FRAME');
+    expect(ensureNodeIdentity(fresh.children![0])).toBe('KID');
+  });
+  it('la racine reprend la clé de la frame même si la copie avait été ré-identifiée', () => {
+    const fresh = fakeTree('new-1', { el_uid: 'ABIME', el_owner: 'copie' });
+    claimIdentity(fresh, 'FRAME');
+    expect(readDgId(fresh)).toBe('FRAME');
   });
 });

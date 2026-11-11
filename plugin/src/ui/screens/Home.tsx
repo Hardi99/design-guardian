@@ -1,0 +1,166 @@
+import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import type { MainToUI } from '../../types.js';
+import type { Version } from '../../store.js';
+import { useAppStore } from '../../useAppStore.js';
+import { frameHistory, defaultHomeTab, sinceLastVisit } from '../../frameNav.js';
+import type { FrameEntry } from '../../trackedFrames.js';
+import { api, send, session } from '../api.js';
+import { pageOptions } from '../historyPick.js';
+import { clearDiffCache } from '../diff/DiffScreen.js';
+import { Header, PlanBadge } from '../components/Header.js';
+import { HomeMenu } from '../components/HomeMenu.js';
+import { SummaryCard } from '../components/SummaryCard.js';
+import { SinceVisitCard } from '../components/SinceVisitCard.js';
+import { FramesPanel } from '../components/FramesPanel.js';
+import { VersionRow } from '../components/VersionRow.js';
+import { Spinner } from '../components/common.js';
+import { IconCamera, IconSparkle, IconChevron } from '../components/icons.js';
+
+// Sélecteur de page (un historique par page) : choisir une page y emmène aussi Figma.
+function PageSelect({ pages }: { pages: Array<{ id: string; name: string }> }) {
+  const assets = useAppStore(s => s.assets);
+  if (pages.length < 2) return <>{pages[0]?.name ?? session.pageName}</>;
+  return (
+    <label class="relative flex items-center gap-1 max-w-full hover:text-dg-accent-text transition-colors">
+      <span class="sr-only">Page</span>
+      <select class="appearance-none bg-transparent truncate pr-4 cursor-pointer font-semibold"
+        value={session.pageId} onChange={e => send({ type: 'GO_TO_PAGE', pageId: (e.target as HTMLSelectElement).value })}>
+        {pageOptions(pages, assets).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      <span class="absolute right-0 pointer-events-none rotate-90"><IconChevron /></span>
+    </label>
+  );
+}
+
+// Dernière version vue AVANT cette ouverture, par historique : la carte « Depuis ta dernière
+// visite » reste affichée toute la session, même si la version la plus récente est déjà marquée vue.
+const seenAtOpen = new Map<string, number | null>();
+
+export function HomeScreen({ onUpgrade }: { onUpgrade: () => void }) {
+  const apiKey         = useAppStore(s => s.apiKey)!;
+  const asset          = useAppStore(s => s.asset)!;
+  const plan           = useAppStore(s => s.plan);
+  const branch         = useAppStore(s => s.branch);
+  const setScreen      = useAppStore(s => s.setScreen);
+  const setDiffVersion = useAppStore(s => s.setDiffVersion);
+  const setSiblings    = useAppStore(s => s.setSiblings);
+  const setFrame       = useAppStore(s => s.setFrame);
+
+  const [versions, setVersions] = useState<Version[]>([]);
+  // Onglet choisi par l'utilisateur ; tant qu'il n'a rien choisi, défaut selon l'historique.
+  const [tabChoice, setTab]     = useState<'frames' | 'versions' | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [err,      setErr]      = useState<string | null>(null);
+  const [pages,    setPages]    = useState<Array<{ id: string; name: string }>>([]);
+  const [seen,     setSeen]     = useState<number | null>(null);
+  const [tracked,  setTracked]  = useState<number | null>(null); // null = liste pas encore reçue
+  // Garde anti-course « le frais gagne » : une réponse VERSION_CACHE (stale) arrivée
+  // après le fetch frais ne doit pas écraser l'affichage à jour.
+  const freshLoaded = useRef(false);
+
+  useEffect(() => {
+    setLoading(true);
+    freshLoaded.current = false;
+    setSeen(seenAtOpen.get(asset.id) ?? null);
+    // Rechargement de la timeline : le cache diff peut contenir des entrées d'un autre historique.
+    clearDiffCache();
+    send({ type: 'REQUEST_VERSION_CACHE', assetId: asset.id });
+    api<{ versions: Version[]; branches: string[] }>(apiKey, `/api/versions/tree?asset_id=${asset.id}`)
+      .then(d => {
+        freshLoaded.current = true;
+        setVersions(d.versions ?? []);
+        const top = Math.max(0, ...(d.versions ?? []).map(v => v.version_number));
+        if (top > 0 && !seenAtOpen.has(asset.id)) send({ type: 'SWAP_SEEN', assetId: asset.id, versionNumber: top });
+        send({ type: 'PERSIST_VERSION_CACHE', assetId: asset.id, versions: d.versions ?? [], branches: d.branches ?? ['main'] });
+      })
+      .catch(e => setErr((e as Error).message))
+      .finally(() => setLoading(false));
+  }, [apiKey, asset.id]);
+
+  // Cache stale-while-revalidate (timeline instantanée) + nom de la page courante pour l'en-tête.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const msg = e.data.pluginMessage as MainToUI;
+      if (!msg) return;
+      if (msg.type === 'FRAMES_LIST') { setPages(msg.pages ?? []); setTracked(msg.frames.filter(f => f.tracked).length); return; }
+      if (msg.type === 'SEEN') { if (msg.assetId === asset.id) { seenAtOpen.set(asset.id, msg.versionNumber); setSeen(msg.versionNumber); } return; }
+      if (msg.type !== 'VERSION_CACHE' || msg.assetId !== asset.id || freshLoaded.current) return;
+      setVersions(msg.versions);
+      setLoading(false);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [asset.id]);
+
+  const visible = versions.filter(v => v.branch_name === branch);
+  const latest  = visible.length > 0 ? visible[visible.length - 1] : null;
+  const tab     = tabChoice ?? defaultHomeTab(visible);
+  const since   = sinceLastVisit(visible, seen);
+
+  const openDiff = useCallback((v: Version) => { setFrame(null); setSiblings(visible); setDiffVersion(v); setScreen('diff'); }, [visible]);
+  // Page-centric : clic sur une frame → son historique (versions où elle est apparue ou a changé).
+  const openFrame = useCallback((f: FrameEntry) => {
+    setFrame({ key: f.key, name: f.name });
+    setSiblings(frameHistory(visible, f.key));
+    setScreen('frameHistory');
+  }, [visible]);
+
+  const limitReached = plan === 'free' && versions.length >= 10;
+
+  return (
+    <div class="flex flex-col h-screen bg-dg-bg text-dg-text">
+      <Header title={<PageSelect pages={pages} />}
+        right={<><PlanBadge plan={plan} onUpgrade={onUpgrade} /><HomeMenu /></>} />
+
+      {since
+        ? <SinceVisitCard since={since} apiKey={apiKey} onOpen={() => openDiff(since.to)} />
+        : latest && <SummaryCard version={latest} onOpen={() => openDiff(latest)} />}
+
+      {visible.length > 0 ? (
+        <div role="tablist" aria-label="Affichage" class="mx-3 mt-3 p-0.5 flex gap-0.5 rounded-full bg-dg-raised border border-dg-border flex-shrink-0">
+          {(['frames', 'versions'] as const).map(t => (
+            <button key={t} role="tab" aria-selected={tab === t}
+              class={`flex-1 py-1 rounded-full text-[11px] font-medium transition-colors ${tab === t ? 'bg-dg-bg text-dg-text shadow-sm' : 'text-dg-text-2 hover:text-dg-text'}`}
+              onClick={() => setTab(t)}>{t === 'frames' ? 'Frames' : 'Toutes les versions'}</button>
+          ))}
+        </div>
+      ) : !loading && (
+        // Premier lancement : dire en une phrase ce que fait le plugin et comment démarrer.
+        <div class="mx-3 mt-3 p-3.5 rounded-dg bg-dg-accent-soft border border-dg-accent-line flex-shrink-0">
+          <p class="flex items-center gap-1.5 text-[13px] font-semibold"><span class="text-dg-accent-text"><IconSparkle size={14} /></span> Ton design a maintenant une mémoire</p>
+          <p class="text-[12px] text-dg-text-2 mt-1 leading-snug">
+            Coche les frames à suivre, puis capture un checkpoint. À chaque capture, l'IA résume ce qui a changé.
+          </p>
+        </div>
+      )}
+
+      <div class="flex-1 overflow-y-auto">
+        {err && <p role="alert" class="text-dg-danger text-[11px] p-3">{err}</p>}
+        {tab === 'frames' || visible.length === 0
+          ? <FramesPanel versions={visible} onOpen={openFrame} />
+          : loading
+            ? <Spinner />
+            : (
+              <div class="relative px-3 py-2">
+                <div class="absolute left-[15.5px] top-0 bottom-0 w-px bg-dg-border" />
+                {[...visible].reverse().map(v => <VersionRow key={v.id} v={v} onClick={() => openDiff(v)} />)}
+              </div>
+            )}
+      </div>
+
+      <div class="p-3 border-t border-dg-border flex flex-col gap-2 flex-shrink-0">
+        {limitReached && (
+          <p class="text-[12px] text-dg-warning text-center">
+            Limite Free atteinte (10 checkpoints). <button class="underline font-semibold" onClick={onUpgrade}>Passer à Pro</button>
+          </p>
+        )}
+        {tracked === 0 && !limitReached && (
+          <p class="text-[12px] text-dg-text-2 text-center">Coche au moins une frame à suivre pour capturer.</p>
+        )}
+        <button class="btn-primary w-full flex items-center justify-center gap-2" onClick={() => send({ type: 'REQUEST_SNAPSHOT' })} disabled={limitReached || tracked === 0}>
+          <IconCamera /> Capturer un checkpoint
+        </button>
+      </div>
+    </div>
+  );
+}

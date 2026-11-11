@@ -20,6 +20,8 @@ export interface FigmaFill {
   visible?: boolean;
   gradientStops?: FigmaGradientStop[];
   gradientAngle?: number; // simplified 0-360°
+  imageHash?: string;     // fill IMAGE : référence de l'image
+  scaleMode?: string;     // fill IMAGE : FILL | FIT | CROP | TILE
 }
 
 export interface FigmaStroke {
@@ -40,6 +42,7 @@ export interface FigmaEffect {
   radius: number;
   color?: FigmaColor;
   offset?: { x: number; y: number };
+  spread?: number;
 }
 
 // Snapshot of a single Figma node, extracted in main.ts via native Figma API
@@ -71,6 +74,21 @@ export interface NodeSnapshot {
   // Posé sur la PAGE (hors frame) mais sur une frame suivie : rangé sous elle pour rester capturé,
   // son vrai parent reste la page (cf. plugin assignFloating, diff flatten).
   floating?: boolean;
+  // Auto-layout (présent seulement si layoutMode ≠ NONE) : espacement, marges, alignements.
+  autoLayout?: {
+    itemSpacing: number;
+    paddingTop: number; paddingRight: number; paddingBottom: number; paddingLeft: number;
+    primaryAxisAlignItems: string;
+    counterAxisAlignItems: string;
+    layoutWrap: string;
+  };
+  // Instance de composant : composant principal (identité = key), jeu de variantes, variantes.
+  component?: {
+    key: string;
+    name: string;
+    set?: string; setKey?: string;
+    variant?: Record<string, string | boolean>;
+  };
   effects?: FigmaEffect[];
   // TEXT-specific
   characters?: string;

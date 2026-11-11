@@ -28,6 +28,17 @@ export function hasFrameNav(versions: readonly Version[]): boolean {
   return versions.some(v => (v.frames?.length ?? 0) > 0);
 }
 
+/** Onglet d'accueil par défaut : les frames si l'historique a des résumés par frame, sinon la
+ *  timeline (historique ancien, versions sans `frames` : la liste des frames y serait vide). */
+export function defaultHomeTab(versions: readonly Version[]): 'frames' | 'versions' {
+  return hasFrameNav(versions) ? 'frames' : 'versions';
+}
+
+/** Libellé accessible de la carte « Dernier checkpoint » : le résumé IA est ce que le produit vend. */
+export function summaryCardLabel(v: Pick<Version, 'version_number' | 'ai_summary'>): string {
+  return `Dernier checkpoint, version ${v.version_number}${v.ai_summary ? ` — ${v.ai_summary}` : ''}`;
+}
+
 /** Frames touchées à une version (nouvelles ou modifiées) : entrées du diff « toutes versions ». */
 export function touchedFrames(frames: readonly FrameSummary[] | null | undefined): FrameSummary[] {
   return (frames ?? []).filter(f => f.status !== 'unchanged');
@@ -47,4 +58,22 @@ export function restoreAllowedInDiff(frame: { key: string; name: string } | null
  */
 export function cacheableDiff(data: { render_url: string | null }): boolean {
   return data.render_url !== null;
+}
+
+export interface SinceVisit {
+  from: Version; to: Version; count: number;
+  frames: Array<{ key: string; name: string; author: string | null }>;
+}
+
+/** « Depuis ta dernière visite » : seulement s'il y a PLUSIEURS nouvelles versions (sinon le
+ *  résumé de la dernière suffit). Chaque frame touchée porte l'auteur de son dernier changement. */
+export function sinceLastVisit(versions: readonly Version[], seen: number | null): SinceVisit | null {
+  if (seen === null) return null;
+  const sorted = [...versions].sort((a, b) => a.version_number - b.version_number);
+  const from = sorted.filter(v => v.version_number <= seen).pop();
+  const news = sorted.filter(v => v.version_number > seen);
+  if (!from || news.length < 2) return null;
+  const frames = new Map<string, SinceVisit['frames'][number]>();
+  for (const v of news) for (const f of touchedFrames(v.frames)) frames.set(f.key, { key: f.key, name: f.name, author: v.author_name });
+  return { from, to: news[news.length - 1], count: news.length, frames: [...frames.values()] };
 }

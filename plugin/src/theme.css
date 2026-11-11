@@ -1,0 +1,40 @@
+/* Charte du plugin : SEUL fichier à modifier pour en changer.
+   Fonds et textes suivent le thème clair/sombre de Figma (themeColors: true) pour s'intégrer
+   à l'éditeur ; l'accent reprend la marque de la webapp (magenta → violet) pour lui donner
+   une identité. Figma pose .figma-light / .figma-dark sur <html> ; hors Figma = sombre. */
+:root, .figma-dark {
+  --dg-accent:       #f472b6;
+  --dg-accent-text:  #f9a8d4;
+  --dg-accent-soft:  rgba(236, 72, 153, 0.13);
+  --dg-accent-line:  rgba(244, 114, 182, 0.35);
+}
+.figma-light {
+  --dg-accent:       #db2777;
+  --dg-accent-text:  #be185d;
+  --dg-accent-soft:  #fdf2f8;
+  --dg-accent-line:  rgba(219, 39, 119, 0.25);
+}
+
+@theme inline {
+  --color-dg-bg:          var(--figma-color-bg, #2c2c2c);
+  --color-dg-raised:      var(--figma-color-bg-secondary, #383838);
+  --color-dg-hover:       var(--figma-color-bg-hover, #444444);
+  --color-dg-selected:    var(--dg-accent-soft);
+  --color-dg-text:        var(--figma-color-text, #ffffff);
+  --color-dg-text-2:      var(--figma-color-text-secondary, #b3b3b3);
+  --color-dg-text-3:      var(--figma-color-text-tertiary, #8a8a8a);
+  --color-dg-border:      var(--figma-color-border, #444444);
+  --color-dg-accent:      var(--dg-accent);
+  --color-dg-accent-text: var(--dg-accent-text);
+  --color-dg-accent-soft: var(--dg-accent-soft);
+  --color-dg-accent-line: var(--dg-accent-line);
+  --color-dg-on-accent:   #ffffff;
+  /* Diff : « modifié » reste bleu, distinct du rouge « supprimé ». */
+  --color-dg-info:        var(--figma-color-text-brand, #7cc4f8);
+  --color-dg-success:     var(--figma-color-text-success, #79d297);
+  --color-dg-warning:     var(--figma-color-text-warning, #f7d15f);
+  --color-dg-danger:      var(--figma-color-text-danger, #fca397);
+  --radius-dg-sm: 6px;
+  --radius-dg:    10px;
+  --font-dg: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}

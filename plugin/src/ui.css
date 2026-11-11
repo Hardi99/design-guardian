@@ -1,50 +1,52 @@
 @import "tailwindcss";
-
-@theme {
-  --color-gray-200: oklch(92.8% 0.006 264.531);
-  --color-gray-300: oklch(87.2% 0.01 258.338);
-  --color-gray-400: oklch(70.7% 0.022 261.325);
-  --color-gray-500: oklch(55.1% 0.027 264.364);
-  --color-gray-600: #4b5563;
-  --color-gray-700: #374151;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #111827;
-  --color-gray-950: #030712;
-  --color-purple-500: #a855f7;
-  --color-purple-600: #9333ea;
-  --color-purple-700: #7e22ce;
-}
+@import "./theme.css";
 
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-dg);
+  font-size: 12px;
+  background: var(--color-dg-bg);
+  color: var(--color-dg-text);
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dégradé de la marque (magenta → violet), réservé à l'action principale. */
+@utility bg-dg-gradient { background-image: linear-gradient(135deg, #db2777 0%, #9333ea 100%); }
+
 @layer components {
   .input {
-    @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus-visible:ring-2 focus-visible:ring-purple-500 transition-colors;
+    @apply w-full bg-dg-bg border border-dg-border rounded-dg-sm px-2.5 py-1.5 text-[12px] text-dg-text placeholder-dg-text-3 focus:outline-none focus:border-dg-accent transition-colors;
   }
   .btn-primary {
-    @apply py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2;
+    @apply bg-dg-gradient py-2 px-4 rounded-full text-[12px] font-semibold text-dg-on-accent shadow-sm transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:active:scale-100;
   }
   .btn-secondary {
-    @apply py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2;
+    @apply py-2 px-4 rounded-full bg-dg-raised border border-dg-border text-[12px] text-dg-text transition-[background-color,transform] duration-150 hover:bg-dg-hover active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed;
   }
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .btn-danger {
+    @apply py-2 px-4 rounded-full bg-dg-danger/15 border border-dg-danger/40 text-[12px] font-semibold text-dg-danger transition-colors hover:bg-dg-danger/25;
+  }
+  .icon-btn {
+    @apply w-7 h-7 flex items-center justify-center rounded-full text-dg-text-2 transition-colors hover:bg-dg-hover hover:text-dg-text flex-shrink-0 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium;
   }
 }
 
-/* WCAG 2.4.7 — Focus visible pour tous les éléments interactifs inline */
+/* WCAG 2.4.7 — Focus visible pour tous les éléments interactifs */
 button:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid #a855f7;
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-dg-accent);
   outline-offset: 2px;
+}
+
+/* Réglage système « réduire les animations » : on coupe rotations, pulsations et transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

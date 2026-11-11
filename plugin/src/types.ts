@@ -21,7 +21,7 @@ export interface FigmaFill {
   scaleMode?: string; // 'FILL' | 'FIT' | 'CROP' | 'TILE'
 }
 
-export interface FigmaStroke { type: string; color?: FigmaColor; opacity?: number }
+export interface FigmaStroke { type: string; color?: FigmaColor; opacity?: number; visible?: boolean }
 export interface FigmaVectorPath { windingRule: 'EVENODD' | 'NONZERO'; data: string }
 
 export interface FigmaEffect {
@@ -30,6 +30,7 @@ export interface FigmaEffect {
   radius: number;
   color?: FigmaColor;
   offset?: { x: number; y: number };
+  spread?: number;
 }
 
 export interface NodeSnapshot {
@@ -48,6 +49,16 @@ export interface NodeSnapshot {
   layoutPositioning?: 'AUTO' | 'ABSOLUTE';
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID'; // frames : ≠ NONE = auto-layout
   floating?: boolean; // posé sur la page, rangé sous la frame suivie qu'il recouvre (cf. assignFloating)
+  // Auto-layout (présent seulement si layoutMode ≠ NONE) : espacement, marges, alignements.
+  autoLayout?: {
+    itemSpacing: number;
+    paddingTop: number; paddingRight: number; paddingBottom: number; paddingLeft: number;
+    primaryAxisAlignItems: string;
+    counterAxisAlignItems: string;
+    layoutWrap: string;
+  };
+  // Instance de composant : composant principal (identité = key), jeu de variantes, variantes.
+  component?: { key: string; name: string; set?: string; setKey?: string; variant?: Record<string, string | boolean> };
   vectorPaths?: FigmaVectorPath[];
   effects?: FigmaEffect[];
   // TEXT-specific
@@ -79,21 +90,23 @@ export interface PluginAuthor {
 export type MainToUI =
   | { type: 'SNAPSHOT_READY'; snapshot: FigmaSnapshot; nodeId: string; render_svg_b64?: string; render_kind?: 'svg' | 'png' }
   | { type: 'AUTHOR_INFO'; author: PluginAuthor }
-  | { type: 'FILE_INFO'; fileKey: string; fileName: string }
+  | { type: 'FILE_INFO'; fileKey: string; fileName: string; pageId: string; pageName: string }
+  | { type: 'PAGE_CHANGED'; pageId: string; pageName: string } // l'utilisateur a changé de page dans Figma
   | { type: 'PRESENCE'; here: string[]; elsewhere: string[]; offer: boolean } // tri d'un projet partagé (cf. fileSplit.ts)
   | { type: 'SPLIT_READY'; fileKey: string; previous: string } // nouvel id écrit dans le fichier
   | { type: 'FRAME_RENDERED'; versionId: string; key: string; b64: string; kind: 'svg' | 'png' } // un rendu de frame prêt
   | { type: 'INIT_ERROR'; message: string } // démarrage impossible (ex. fichier en lecture seule sans identifiant)
   | { type: 'BRANCH_CREATED'; branchName: string }
   | { type: 'BRANCH_SWITCHED'; branchName: string }
-  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' }
+  | { type: 'RESTORE_COMPLETE'; applied: number; skipped: number; mode?: 'clone' | 'reapply' | 'frames'; exact?: number; partial?: number; missing?: number }
   | { type: 'ERROR'; message: string }
   | { type: 'LINK_TOKEN'; token: string | null }
   | { type: 'CACHED_STATE'; apiKey: string | null; plan: string | null; assets: Asset[] | null }
   | { type: 'VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
+  | { type: 'SEEN'; assetId: string; versionNumber: number | null }
   // Page-centric : toutes les frames de la page courante, suivies ou non.
   // `capturable` est false sur une page dg/* → l'UI explique AVANT que l'utilisateur clique.
-  | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean };
+  | { type: 'FRAMES_LIST'; frames: FrameEntry[]; pageName: string; capturable: boolean; pages: Array<{ id: string; name: string }> };
 
 // Minimal delta shape for canvas restoration (structural subset of DeltaJSON)
 export interface RestorationDelta {
@@ -115,10 +128,14 @@ export type UIToMain =
   | { type: 'CREATE_BRANCH'; branchName: string }
   | { type: 'SWITCH_BRANCH'; branchName: string }
   | { type: 'STORE_HISTORY_CLONE'; nodeId: string; versionId: string; versionNumber: number }
+  | { type: 'PROTECT_HISTORY'; versionId: string; gold: boolean } // Gold : copies jamais supprimées
   | { type: 'RESTORE_TO_FIGMA'; versionId?: string; snapshot: FigmaSnapshot; render_svg_b64?: string; delta?: RestorationDelta }
   | { type: 'LINK_PERSIST_TOKEN'; token: string }
   | { type: 'PERSIST_STATE'; fileKey: string; apiKey: string; plan: string; assets: Asset[] }
   | { type: 'REQUEST_VERSION_CACHE'; assetId: string }
   | { type: 'PERSIST_VERSION_CACHE'; assetId: string; versions: Version[]; branches: string[] }
   | { type: 'REQUEST_FRAMES' }
-  | { type: 'SET_TRACKED'; nodeId: string; tracked: boolean };
+  | { type: 'GO_TO_PAGE'; pageId: string }
+  | { type: 'SHOW_ON_CANVAS'; key: string } // sélectionne la frame et zoome dessus (change de page si besoin)
+  | { type: 'SET_TRACKED'; nodeIds: string[]; tracked: boolean }
+  | { type: 'SWAP_SEEN'; assetId: string; versionNumber: number };

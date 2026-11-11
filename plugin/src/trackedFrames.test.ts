@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isTracked, setTracked, countNodes, listFrames, estimateMs, assignFloating,
+  isTracked, setTracked, countNodes, listFrames, estimateMs, assignFloating, locateFrame,
   TRACKED_KEY, MS_PER_NODE, type TrackableNode,
 } from './trackedFrames.js';
 
@@ -140,5 +140,24 @@ describe('listFrames — frame dupliquée', () => {
       node('1:9', { el_uid: 'DG-A', el_owner: '1:1' }), // la copie
     ]);
     expect(out.map(f => f.key)).toEqual(['DG-A', '1:9']);
+  });
+});
+
+describe('locateFrame — « Voir sur le canvas »', () => {
+  const page = (id: string, name: string, children: TrackableNode[]) => fake(id, name, children);
+  it('retrouve la frame par son id sur une autre page que la courante', () => {
+    const pages = [page('p1', 'Accueil', [fake('1:1', 'Hero')]), page('p2', 'Panier', [fake('2:1', 'Checkout')])];
+    expect(locateFrame(pages, '2:1')).toMatchObject({ page: { id: 'p2' }, node: { id: '2:1' } });
+  });
+  it('retrouve la frame par son dg_id quand elle le possède', () => {
+    const f = fake('3:1', 'Card', [], { el_uid: 'uid-9', el_owner: '3:1' });
+    expect(locateFrame([page('p1', 'A', [f])], 'uid-9')?.node.id).toBe('3:1');
+  });
+  it("ignore les pages techniques dg/ (clones d'historique portant le même dg_id)", () => {
+    const clone = fake('9:9', 'Card', [], { el_uid: 'uid-9', el_owner: '9:9' });
+    expect(locateFrame([page('h', 'dg/_history', [clone])], 'uid-9')).toBeNull();
+  });
+  it('frame supprimée → null', () => {
+    expect(locateFrame([page('p1', 'A', [fake('1:1', 'Hero')])], 'absente')).toBeNull();
   });
 });

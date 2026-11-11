@@ -114,3 +114,26 @@ describe('planResize', () => {
     expect(planResize({ width: 100, height: 50 }, true)).toEqual({});
   });
 });
+
+// Capture enrichie (visible des contours, spread des ombres) : un snapshot ANCIEN n'a pas ces
+// champs. Leur absence dans la cible ne doit pas marquer le nœud « changé » — sinon la
+// restauration réécrit des contours/ombres inchangés (styles détachés, contours masqués réaffichés).
+describe("changedProps — champs absents d'une capture ancienne", () => {
+  const red = { r: 1, g: 0, b: 0, a: 1 };
+  const shadow = { type: 'DROP_SHADOW' as const, visible: true, radius: 4, color: red, offset: { x: 0, y: 2 } };
+  const C = ['strokes', 'effects'];
+
+  it('contour avec visible (live) vs sans visible (ancien) → inchangé', () => {
+    expect(changedProps(snap({ strokes: [{ type: 'SOLID', color: red, visible: true }] }), snap({ strokes: [{ type: 'SOLID', color: red }] }), C).size).toBe(0);
+  });
+  it('ombre avec spread (live) vs sans spread (ancien) → inchangée', () => {
+    expect(changedProps(snap({ effects: [{ ...shadow, spread: 0 }] }), snap({ effects: [shadow] }), C).size).toBe(0);
+  });
+  it('vrai changement de couleur de contour → toujours détecté', () => {
+    expect([...changedProps(snap({ strokes: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 }, visible: true }] }), snap({ strokes: [{ type: 'SOLID', color: red }] }), C)]).toEqual(['strokes']);
+  });
+  it('champ présent dans la cible et différent → changé', () => {
+    expect([...changedProps(snap({ strokes: [{ type: 'SOLID', color: red, visible: true }] }), snap({ strokes: [{ type: 'SOLID', color: red, visible: false }] }), C)]).toEqual(['strokes']);
+  });
+});
+

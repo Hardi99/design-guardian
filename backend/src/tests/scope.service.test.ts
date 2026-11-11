@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { classifyScopeChanges } from '../services/scope.service.js';
+import { firstCheckpointNote, scopeNote, withScopeNote } from '../services/scope.service.js';
 import type { DeltaJSON, FigmaSnapshot } from '../types/figma.js';
 
 const frame = (id: string, name: string, childId: string) => ({
@@ -29,6 +30,16 @@ describe('classifyScopeChanges', () => {
     const out = classifyScopeChanges(d, cur, prev);
     expect(out.scopeIn).toEqual([{ id: 'b', name: 'Panier' }]);
     expect(out.added).toHaveLength(0);
+  });
+
+  it('le total suit les listes purgées : rien de changé dans le design → 0 (pas de résumé IA inventé)', () => {
+    const prev = page([frame('a', 'Accueil', 'a1')]);
+    const cur  = page([frame('a', 'Accueil', 'a1'), frame('b', 'Panier', 'b1')]);
+    const d = delta({ totalChanges: 2, added: [
+      { nodeId: 'b',  nodeName: 'Panier', nodeType: 'FRAME', changes: [] },
+      { nodeId: 'b1', nodeName: 'b1',     nodeType: 'RECTANGLE', changes: [] },
+    ] });
+    expect(classifyScopeChanges(d, cur, prev).totalChanges).toBe(0);
   });
 
   it('une frame retirée du suivi est scopeOut, pas removed', () => {
@@ -94,5 +105,23 @@ describe('classifyScopeChanges — frame suivie coupée-collée', () => {
     const prev = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A')]);
     const cur  = page([withDg(frame('a', 'Accueil', 'a1'), 'DG-A'), withDg(frame('b', 'Panier', 'b1'), 'DG-B')]);
     expect(classifyScopeChanges(delta({}), cur, prev).scopeIn).toEqual([{ id: 'b', name: 'Panier' }]);
+  });
+});
+
+describe('textes de périmètre — sans IA, jamais « Aucune modification » trompeur', () => {
+  const fr = (...names: string[]) => names.map((name, i) => ({ id: String(i), name }));
+  it('première capture : les frames suivies, nommées', () => {
+    expect(firstCheckpointNote(fr('Accueil', 'Panier', 'Profil'))).toBe('Premier checkpoint · 3 frames suivies : Accueil, Panier, Profil');
+    expect(firstCheckpointNote(fr('Accueil'))).toBe('Premier checkpoint · 1 frame suivie : Accueil');
+  });
+  it('au-delà de 3 noms : « + N autres »', () => {
+    expect(firstCheckpointNote(fr('A', 'B', 'C', 'D', 'E'))).toBe('Premier checkpoint · 5 frames suivies : A, B, C + 2 autres');
+  });
+  it('frames entrées dans le suivi : texte seul, ou ajouté au résumé IA', () => {
+    expect(scopeNote(fr('Panier'))).toBe('Nouvelle frame suivie : Panier');
+    expect(scopeNote(fr('A', 'B'))).toBe('Nouvelles frames suivies : A, B');
+    expect(scopeNote(undefined)).toBeNull();
+    expect(withScopeNote('Couleur du bouton changée.', fr('Panier'))).toBe('Couleur du bouton changée. · + Panier suivie');
+    expect(withScopeNote('Couleur du bouton changée.', [])).toBe('Couleur du bouton changée.');
   });
 });
